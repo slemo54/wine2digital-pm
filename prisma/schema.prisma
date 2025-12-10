@@ -1,0 +1,291 @@
+// Wine2Digital PM - MVP Schema
+generator client {
+    provider = "prisma-client-js"
+    binaryTargets = ["native", "linux-musl-arm64-openssl-3.0.x"]
+    output = "/home/ubuntu/wine2digital_pm/nextjs_space/node_modules/.prisma/client"
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// User model for authentication
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String?   // Optional for OAuth users (Google SSO)
+  firstName     String?
+  lastName      String?
+  name          String?   // Full name for OAuth users
+  image         String?   // Profile image from OAuth
+  role          String    @default("member") // member, manager, admin
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  createdProjects   Project[]        @relation("ProjectCreator")
+  projectMembers    ProjectMember[]
+  assignedTasks     TaskAssignee[]
+  taskComments      TaskComment[]
+  absences          Absence[]
+  messages          Message[]
+  uploadedFiles     FileUpload[]     @relation("FileUploader")
+  notifications     Notification[]
+  
+  // NextAuth
+  accounts      Account[]
+  sessions      Session[]
+}
+
+// Project model
+model Project {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  startDate     DateTime?
+  endDate       DateTime?
+  status        String    @default("active") // active, completed, archived
+  creatorId     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  creator       User              @relation("ProjectCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  members       ProjectMember[]
+  tasks         Task[]
+  messages      Message[]
+  files         FileUpload[]
+  invites       ProjectInvite[]
+}
+
+// Project Members (junction table)
+model ProjectMember {
+  id            String    @id @default(cuid())
+  projectId     String
+  userId        String
+  role          String    @default("member") // owner, member
+  joinedAt      DateTime  @default(now())
+  
+  // Relations
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([projectId, userId])
+}
+
+// Task model for Kanban board
+model Task {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  status        String    @default("todo") // todo, in_progress, done
+  priority      String    @default("medium") // low, medium, high
+  dueDate       DateTime?
+  position      Int       @default(0)
+  projectId     String
+  storyPoints   Int?      // Story points for agile estimation
+  tags          String?   // JSON string array of tags
+  list          String?   // Category/list name (e.g., "MEDIA PARTNERS")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignees     TaskAssignee[]
+  subtasks      Subtask[]
+  comments      TaskComment[]
+  dependencies  TaskDependency[] @relation("TaskDependencies")
+  dependentOn   TaskDependency[] @relation("DependentTasks")
+  attachments   TaskAttachment[]
+}
+
+// Task Assignees (junction table)
+model TaskAssignee {
+  id            String    @id @default(cuid())
+  taskId        String
+  userId        String
+  assignedAt    DateTime  @default(now())
+  
+  // Relations
+  task          Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([taskId, userId])
+}
+
+// Subtasks - Tasks within tasks
+model Subtask {
+  id            String    @id @default(cuid())
+  taskId        String
+  title         String
+  description   String?
+  completed     Boolean   @default(false)
+  position      Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  task          Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+// Task Comments
+model TaskComment {
+  id            String    @id @default(cuid())
+  taskId        String
+  userId        String
+  content       String    @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  task          Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Task Dependencies - Tasks that depend on other tasks
+model TaskDependency {
+  id            String    @id @default(cuid())
+  taskId        String    // The task that has the dependency
+  dependsOnId   String    // The task it depends on
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  task          Task      @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOn     Task      @relation("DependentTasks", fields: [dependsOnId], references: [id], onDelete: Cascade)
+  
+  @@unique([taskId, dependsOnId])
+}
+
+// Task Attachments
+model TaskAttachment {
+  id            String    @id @default(cuid())
+  taskId        String
+  fileName      String
+  fileSize      Int
+  mimeType      String
+  filePath      String    // Path to file storage
+  uploadedBy    String
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  task          Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+// NextAuth required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Calendar - Absence requests
+model Absence {
+  id            String    @id @default(cuid())
+  userId        String
+  type          String    // vacation, sick_leave, personal
+  startDate     DateTime
+  endDate       DateTime
+  startTime     String?   // For partial days (e.g., "09:00")
+  endTime       String?   // For partial days (e.g., "13:00")
+  isFullDay     Boolean   @default(true)
+  reason        String?
+  status        String    @default("pending") // pending, approved, rejected
+  approvedBy    String?
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Chat - Project messages
+model Message {
+  id            String    @id @default(cuid())
+  projectId     String
+  userId        String
+  content       String    @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Files - Uploaded documents
+model FileUpload {
+  id            String    @id @default(cuid())
+  projectId     String
+  uploadedBy    String
+  fileName      String
+  fileSize      Int
+  mimeType      String
+  filePath      String    // Path to file storage
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader      User      @relation("FileUploader", fields: [uploadedBy], references: [id], onDelete: Cascade)
+}
+
+// Notifications
+model Notification {
+  id            String    @id @default(cuid())
+  userId        String
+  type          String    // task_assigned, task_completed, absence_approved, message_received, etc.
+  title         String
+  message       String    @db.Text
+  link          String?   // Link to related resource
+  isRead        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// Project Invites - Sharing via link
+model ProjectInvite {
+  id            String    @id @default(cuid())
+  projectId     String
+  token         String    @unique
+  role          String    @default("member") // member, manager
+  expiresAt     DateTime?
+  maxUses       Int?      // Null = unlimited uses
+  usedCount     Int       @default(0)
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
