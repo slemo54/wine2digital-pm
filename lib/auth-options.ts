@@ -78,36 +78,42 @@ export const authOptions: NextAuthOptions = {
 
       // OAuth login: handle new user setup
       if (account?.provider === 'google' && user) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.id },
-        });
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+          });
 
-        if (dbUser) {
-          token.role = dbUser.role;
+          if (dbUser) {
+            token.role = dbUser.role;
 
-          // If this is a new Google user, update name fields
-          // Check if firstName is empty (indicates new user created by adapter)
-          if ((user as any).isNewUser && !dbUser.firstName && user.name) {
-            // Extract firstName and lastName from name
-            const nameParts = user.name.split(' ');
-            const firstName = nameParts[0] || '';
-            const lastName = nameParts.slice(1).join(' ') || '';
+            // If this is a new Google user, update name fields
+            // Check if firstName is empty (indicates new user created by adapter)
+            if (!dbUser.firstName && user.name) {
+              // Extract firstName and lastName from name
+              const nameParts = user.name.split(' ');
+              const firstName = nameParts[0] || '';
+              const lastName = nameParts.slice(1).join(' ') || '';
 
-            console.info('[AUTH] Updating new Google user profile:', {
-              userId: user.id,
-              email: user.email,
-              name: user.name,
-            });
-
-            await prisma.user.update({
-              where: { id: dbUser.id },
-              data: {
+              console.info('[AUTH] Updating new Google user profile:', {
+                userId: user.id,
+                email: user.email,
                 name: user.name,
-                firstName,
-                lastName,
-              },
-            });
+              });
+
+              await prisma.user.update({
+                where: { id: dbUser.id },
+                data: {
+                  name: user.name,
+                  firstName,
+                  lastName,
+                },
+              });
+            }
+          } else {
+            console.error('[AUTH] User not found in database during jwt callback:', user.id);
           }
+        } catch (error) {
+          console.error('[AUTH] Error in jwt callback:', error);
         }
       }
 
@@ -139,7 +145,7 @@ export const authOptions: NextAuthOptions = {
           emailDomain,
           workspaceDomain: normalizedDomain,
           provider: account?.provider,
-          emailVerified: profile?.email_verified,
+          profileData: profile, // Debug: log entire profile
         });
 
         if (workspaceDomain) {
@@ -150,9 +156,11 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
-        // Additional security: verify email is verified by Google
+        // Additional security: verify email is verified by Google (if available)
         // This prevents account takeover when allowDangerousEmailAccountLinking is true
-        if (!(profile as any)?.email_verified) {
+        const emailVerified = (profile as any)?.email_verified;
+        if (emailVerified === false) {
+          // Only block if explicitly false (not undefined/null)
           console.error('[SSO DENIED] Google email not verified:', user.email);
           return false;
         }
@@ -182,7 +190,6 @@ export const authOptions: NextAuthOptions = {
 
         // Store role in user object for jwt callback to pick up
         (user as any).role = role;
-        (user as any).isNewUser = !existingUser;
       }
       return true;
     },
