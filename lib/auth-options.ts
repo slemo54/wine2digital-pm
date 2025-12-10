@@ -100,6 +100,11 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider === 'google' && user.email) {
         // Check workspace domain restriction
         const workspaceDomain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
+        console.info('[AUTH] Google sign-in attempt', {
+          email: user.email,
+          workspaceDomain,
+          provider: account?.provider,
+        });
         if (workspaceDomain) {
           const emailDomain = user.email.split('@')[1];
           if (emailDomain !== workspaceDomain) {
