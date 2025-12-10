@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     });
 
     await prisma.notification.createMany({
-      data: projectMembers.map(member => ({
+      data: projectMembers.map((member: { userId: string }) => ({
         userId: member.userId,
         type: 'message_received',
         title: 'New message',
