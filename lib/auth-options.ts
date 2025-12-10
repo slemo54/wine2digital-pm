@@ -69,23 +69,48 @@ export const authOptions: NextAuthOptions = {
     error: '/auth/login', // Redirect to login page on error
   },
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, profile }) {
       // First-time login: store user info in token
       if (user) {
         token.id = user.id;
         token.role = (user as any).role;
       }
-      
-      // OAuth login: ensure role is set for new users
+
+      // OAuth login: handle new user setup
       if (account?.provider === 'google' && user) {
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
         });
+
         if (dbUser) {
           token.role = dbUser.role;
+
+          // If this is a new Google user, update name fields
+          // Check if firstName is empty (indicates new user created by adapter)
+          if ((user as any).isNewUser && !dbUser.firstName && user.name) {
+            // Extract firstName and lastName from name
+            const nameParts = user.name.split(' ');
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || '';
+
+            console.info('[AUTH] Updating new Google user profile:', {
+              userId: user.id,
+              email: user.email,
+              name: user.name,
+            });
+
+            await prisma.user.update({
+              where: { id: dbUser.id },
+              data: {
+                name: user.name,
+                firstName,
+                lastName,
+              },
+            });
+          }
         }
       }
-      
+
       return token;
     },
     async session({ session, token }) {
@@ -98,17 +123,25 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account, profile }) {
       // For OAuth providers, ensure user has required fields
       if (account?.provider === 'google' && user.email) {
+        // Validate email format
+        if (!user.email.includes('@')) {
+          console.error('[SSO DENIED] Invalid email format:', user.email);
+          return false;
+        }
+
         // Check workspace domain restriction
         const workspaceDomain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
         const normalizedDomain = workspaceDomain?.toLowerCase();
-        const emailDomain = user.email.split('@')[1]?.toLowerCase();
+        const emailDomain = user.email.split('@')[1].toLowerCase();
 
         console.info('[AUTH] Google sign-in attempt', {
           email: user.email,
           emailDomain,
           workspaceDomain: normalizedDomain,
           provider: account?.provider,
+          emailVerified: profile?.email_verified,
         });
+
         if (workspaceDomain) {
           if (emailDomain !== normalizedDomain) {
             console.error(`[SSO DENIED] Email domain ${emailDomain} does not match workspace domain ${normalizedDomain}`);
@@ -117,58 +150,39 @@ export const authOptions: NextAuthOptions = {
           }
         }
 
+        // Additional security: verify email is verified by Google
+        // This prevents account takeover when allowDangerousEmailAccountLinking is true
+        if (!(profile as any)?.email_verified) {
+          console.error('[SSO DENIED] Google email not verified:', user.email);
+          return false;
+        }
+
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email },
+        });
+
         // Determine role based on email lists (trim whitespace)
         const adminEmails = (process.env.GOOGLE_ADMIN_EMAILS || '').split(',').map(e => e.trim());
         const managerEmails = (process.env.GOOGLE_MANAGER_EMAILS || '').split(',').map(e => e.trim());
-        
+
         let role: 'admin' | 'manager' | 'member' = 'member';
         if (adminEmails.includes(user.email)) {
           role = 'admin';
         } else if (managerEmails.includes(user.email)) {
           role = 'manager';
         }
-        
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email },
-        });
-        
-        // If user exists via email/password, the adapter will link accounts automatically
-        // thanks to allowDangerousEmailAccountLinking: true
-        if (!existingUser) {
-          // New OAuth user - set role and name
-          // Wait for adapter to create the user first
-          const userEmail = user.email; // Store in const for type safety
-          setTimeout(async () => {
-            const createdUser = await prisma.user.findUnique({
-              where: { email: userEmail },
-            });
-            
-            if (createdUser) {
-              // Extract firstName and lastName from name
-              const nameParts = user.name?.split(' ') || [];
-              const firstName = nameParts[0] || '';
-              const lastName = nameParts.slice(1).join(' ') || '';
-              
-              await prisma.user.update({
-                where: { id: createdUser.id },
-                data: {
-                  role,
-                  name: user.name,
-                  firstName,
-                  lastName,
-                },
-              });
-            }
-          }, 100);
-        } else if (existingUser) {
-          // Update existing user's role if it has changed based on email lists
-          if (existingUser.role !== role) {
-            await prisma.user.update({
-              where: { id: existingUser.id },
-              data: { role },
-            });
-          }
+
+        // Update existing user's role if it has changed based on email lists
+        if (existingUser && existingUser.role !== role) {
+          await prisma.user.update({
+            where: { id: existingUser.id },
+            data: { role },
+          });
         }
+
+        // Store role in user object for jwt callback to pick up
+        (user as any).role = role;
+        (user as any).isNewUser = !existingUser;
       }
       return true;
     },
