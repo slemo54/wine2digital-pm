@@ -100,15 +100,18 @@ export const authOptions: NextAuthOptions = {
       if (account?.provider === 'google' && user.email) {
         // Check workspace domain restriction
         const workspaceDomain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
+        const normalizedDomain = workspaceDomain?.toLowerCase();
+        const emailDomain = user.email.split('@')[1]?.toLowerCase();
+
         console.info('[AUTH] Google sign-in attempt', {
           email: user.email,
-          workspaceDomain,
+          emailDomain,
+          workspaceDomain: normalizedDomain,
           provider: account?.provider,
         });
         if (workspaceDomain) {
-          const emailDomain = user.email.split('@')[1];
-          if (emailDomain !== workspaceDomain) {
-            console.error(`[SSO DENIED] Email domain ${emailDomain} does not match workspace domain ${workspaceDomain}`);
+          if (emailDomain !== normalizedDomain) {
+            console.error(`[SSO DENIED] Email domain ${emailDomain} does not match workspace domain ${normalizedDomain}`);
             // Return false to reject sign-in - NextAuth will show error page
             return false;
           }
