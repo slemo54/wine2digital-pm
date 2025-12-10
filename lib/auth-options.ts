@@ -2,10 +2,8 @@ import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-
-const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -101,7 +99,7 @@ export const authOptions: NextAuthOptions = {
       // For OAuth providers, ensure user has required fields
       if (account?.provider === 'google' && user.email) {
         // Check workspace domain restriction
-        const workspaceDomain = process.env.GOOGLE_WORKSPACE_DOMAIN;
+        const workspaceDomain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
         if (workspaceDomain) {
           const emailDomain = user.email.split('@')[1];
           if (emailDomain !== workspaceDomain) {
