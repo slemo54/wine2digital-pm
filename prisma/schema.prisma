@@ -17,6 +17,7 @@ model User {
   firstName     String?
   lastName      String?
   name          String?   // Full name for OAuth users
+  emailVerified DateTime? // Verified email date
   image         String?   // Profile image from OAuth
   role          String    @default("member") // member, manager, admin
   createdAt     DateTime  @default(now())
