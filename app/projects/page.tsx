@@ -131,6 +131,11 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleProjectCreated = async () => {
+    await fetchProjects();
+    setShowCreateDialog(false);
+  };
+
   const updateQuery = (updates: Record<string, string | number | undefined | null>) => {
     const params = new URLSearchParams(searchParams.toString());
     Object.entries(updates).forEach(([key, value]) => {
