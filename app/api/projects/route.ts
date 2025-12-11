@@ -15,6 +15,20 @@ export async function GET(req: NextRequest) {
     }
 
     const userId = (session.user as any)?.id;
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const limit = parseInt(searchParams.get('limit') || '10', 10);
+    const skip = (page - 1) * limit;
+
+    // Get total count for pagination
+    const total = await prisma.project.count({
+      where: {
+        OR: [
+          { creatorId: userId },
+          { members: { some: { userId } } },
+        ],
+      },
+    });
 
     const projects = await prisma.project.findMany({
       where: {
@@ -30,6 +44,7 @@ export async function GET(req: NextRequest) {
             firstName: true,
             lastName: true,
             email: true,
+            name: true,
           },
         },
         members: {
@@ -40,8 +55,15 @@ export async function GET(req: NextRequest) {
                 firstName: true,
                 lastName: true,
                 email: true,
+                name: true,
               },
             },
+          },
+        },
+        tasks: {
+          select: {
+            id: true,
+            status: true,
           },
         },
         _count: {
@@ -53,9 +75,35 @@ export async function GET(req: NextRequest) {
       orderBy: {
         createdAt: 'desc',
       },
+      skip,
+      take: limit,
     });
 
-    return NextResponse.json({ projects });
+    // Calculate completion rate for each project
+    const projectsWithProgress = projects.map((project) => {
+      const totalTasks = project.tasks.length;
+      const completedTasks = project.tasks.filter((task) => task.status === 'done').length;
+      const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+      return {
+        ...project,
+        completionRate,
+        tasksCompleted: completedTasks,
+        tasksTotal: totalTasks,
+      };
+    });
+
+    return NextResponse.json({
+      projects: projectsWithProgress,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1,
+      },
+    });
   } catch (error) {
     console.error('Get projects error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

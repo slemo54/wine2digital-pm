@@ -8,11 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Plus, Folder, Calendar, Users, Loader2, LogOut, CalendarDays, FolderOpen, FileText, Bell, Search, MoreHorizontal, Sun, Moon } from "lucide-react";
+import { Plus, Folder, Calendar, Users, Loader2, LogOut, CalendarDays, FolderOpen, FileText, Bell, Search, MoreHorizontal } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "react-hot-toast";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { Progress } from "@/components/ui/progress";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 interface Project {
   id: string;
@@ -92,7 +93,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-secondary">
       {/* Header */}
-      <header className="border-b bg-white sticky top-0 z-50 shadow-sm">
+      <header className="border-b border-border bg-background text-foreground sticky top-0 z-50 shadow-sm">
         <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <div className="flex items-center gap-2">
@@ -105,22 +106,22 @@ export default function DashboardPage() {
             {/* Navigation Tabs */}
             <nav className="hidden md:flex items-center gap-1 text-sm">
               <Link href="/dashboard" className="px-4 py-2 rounded-md bg-accent font-medium">
-                Overview
+                Dashboard
               </Link>
-              <Link href="/dashboard" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Activity
+              <Link href="/projects" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
+                Progetti
               </Link>
-              <Link href="/dashboard" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Manage
+              <Link href="/tasks" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
+                Task
               </Link>
-              <Link href="/dashboard" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Program
+              <Link href="/calendar" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
+                Calendario
               </Link>
-              <Link href="/dashboard" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Folders
+              <Link href="/files" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
+                File
               </Link>
-              <Link href="/dashboard" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Documents
+              <Link href="/profile" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
+                Profilo
               </Link>
             </nav>
           </div>
@@ -132,9 +133,7 @@ export default function DashboardPage() {
             <Button variant="ghost" size="icon" className="rounded-full">
               <Bell className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Sun className="h-4 w-4" />
-            </Button>
+            <ThemeToggle />
             <div className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary text-white text-xs">
