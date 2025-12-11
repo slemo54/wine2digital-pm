@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { refreshGoogleAccessToken } from "@/lib/auth-options";
 import { mapGoogleEvent } from "@/lib/google-calendar";
@@ -9,7 +9,7 @@ const CALENDAR_ID =
   process.env.GOOGLE_CALENDAR_ID ||
   "c_60cbf2a6c25a790b524153d96ece7f418b4be81b1c54d0274b33b5637e617cc8@group.calendar.google.com";
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   const token = await getToken({ req });
 
   if (!token || !token.accessToken) {
