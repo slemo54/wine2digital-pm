@@ -5,6 +5,26 @@ import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
+// #region agent log
+fetch('http://127.0.0.1:7242/ingest/6090270f-7a3a-4674-9bb8-f9c09b7fe98f', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    sessionId: 'debug-session',
+    runId: 'pre-fix-redirect',
+    hypothesisId: 'H1-H3',
+    location: 'lib/auth-options.ts:init',
+    message: 'Auth options init',
+    data: {
+      nextauthUrl: process.env.NEXTAUTH_URL || null,
+      workspaceDomain: process.env.GOOGLE_WORKSPACE_DOMAIN || null,
+      nodeEnv: process.env.NODE_ENV || null,
+    },
+    timestamp: Date.now(),
+  }),
+}).catch(() => {});
+// #endregion
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -103,19 +123,66 @@ export const authOptions: NextAuthOptions = {
         const normalizedDomain = workspaceDomain?.toLowerCase();
         const emailDomain = user.email.split('@')[1]?.toLowerCase();
 
-        console.info('[AUTH] Google sign-in attempt', {
-          email: user.email,
-          emailDomain,
-          workspaceDomain: normalizedDomain,
-          provider: account?.provider,
-        });
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/6090270f-7a3a-4674-9bb8-f9c09b7fe98f', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: 'debug-session',
+            runId: 'pre-fix-redirect',
+            hypothesisId: 'H1-H3',
+            location: 'lib/auth-options.ts:signIn',
+            message: 'Google sign-in attempt',
+            data: {
+              email: user.email,
+              emailDomain,
+              workspaceDomain: normalizedDomain || null,
+              nextauthUrl: process.env.NEXTAUTH_URL || null,
+              provider: account?.provider || null,
+              googleClientIdSuffix: process.env.GOOGLE_CLIENT_ID ? process.env.GOOGLE_CLIENT_ID.slice(-6) : null,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
+
         if (workspaceDomain) {
           if (emailDomain !== normalizedDomain) {
-            console.error(`[SSO DENIED] Email domain ${emailDomain} does not match workspace domain ${normalizedDomain}`);
+            // #region agent log
+            fetch('http://127.0.0.1:7242/ingest/6090270f-7a3a-4674-9bb8-f9c09b7fe98f', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                sessionId: 'debug-session',
+                runId: 'pre-fix-redirect',
+                hypothesisId: 'H2',
+                location: 'lib/auth-options.ts:signIn',
+                message: 'Domain mismatch - denying sign-in',
+                data: { emailDomain, workspaceDomain: normalizedDomain },
+                timestamp: Date.now(),
+              }),
+            }).catch(() => {});
+            // #endregion
             // Return false to reject sign-in - NextAuth will show error page
             return false;
           }
         }
+
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/6090270f-7a3a-4674-9bb8-f9c09b7fe98f', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sessionId: 'debug-session',
+            runId: 'pre-fix-redirect',
+            hypothesisId: 'H1',
+            location: 'lib/auth-options.ts:signIn',
+            message: 'Domain check passed',
+            data: { email: user.email, emailDomain, workspaceDomain: normalizedDomain },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {});
+        // #endregion
 
         // Determine role based on email lists (trim whitespace)
         const adminEmails = (process.env.GOOGLE_ADMIN_EMAILS || '').split(',').map(e => e.trim());
