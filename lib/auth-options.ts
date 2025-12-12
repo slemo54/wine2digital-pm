@@ -4,6 +4,13 @@ import GoogleProvider from 'next-auth/providers/google';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { JWT } from 'next-auth/jwt';
+import crypto from 'crypto';
+
+function hashPII(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return crypto.createHash('sha256').update(value).digest('hex').slice(0, 12);
+}
 
 // #region agent log
 fetch('http://127.0.0.1:7242/ingest/6090270f-7a3a-4674-9bb8-f9c09b7fe98f', {
@@ -37,6 +44,12 @@ export const authOptions: NextAuthOptions = {
           prompt: 'consent',
           access_type: 'offline',
           response_type: 'code',
+          scope: [
+            'openid',
+            'email',
+            'profile',
+            'https://www.googleapis.com/auth/calendar.readonly',
+          ].join(' '),
           // Force Google to show only accounts from this workspace domain
           hd: process.env.GOOGLE_WORKSPACE_DOMAIN || 'mammajumboshrimp.com',
         },
@@ -90,29 +103,95 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user, account }) {
+      const gToken = token as GoogleToken;
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/6090270f-7a3a-4674-9bb8-f9c09b7fe98f', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix-login-mismatch',
+          hypothesisId: 'H1',
+          location: 'lib/auth-options.ts:jwt:entry',
+          message: 'JWT callback entry',
+          data: {
+            tokenSub: (token as any)?.sub ?? null,
+            tokenId: (token as any)?.id ?? null,
+            userId: user ? (user as any).id : null,
+            accountProvider: account?.provider ?? null,
+            providerAccountIdHash: account?.providerAccountId
+              ? hashPII(account.providerAccountId)
+              : null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
       // First-time login: store user info in token
       if (user) {
-        token.id = user.id;
-        token.role = (user as any).role;
+        gToken.id = user.id;
+        gToken.role = (user as any).role;
       }
-      
-      // OAuth login: ensure role is set for new users
+
+      // OAuth login: ensure role and tokens are set for new users
       if (account?.provider === 'google' && user) {
         const dbUser = await prisma.user.findUnique({
           where: { id: user.id },
         });
         if (dbUser) {
-          token.role = dbUser.role;
+          gToken.role = dbUser.role;
         }
+
+        // Persist Google tokens for API access
+        gToken.accessToken = account.access_token;
+        gToken.refreshToken = account.refresh_token ?? gToken.refreshToken;
+        gToken.accessTokenExpires = account.expires_at
+          ? account.expires_at * 1000
+          : Date.now() + 60 * 60 * 1000;
       }
-      
-      return token;
+
+      // If token expired, refresh using refresh_token
+      if (gToken.accessToken && gToken.accessTokenExpires && Date.now() > gToken.accessTokenExpires) {
+        const refreshed = await refreshGoogleAccessToken(gToken);
+        return refreshed;
+      }
+
+      return gToken;
     },
     async session({ session, token }) {
       if (session?.user) {
-        (session.user as any).id = token.id;
-        (session.user as any).role = token.role;
+        const gToken = token as GoogleToken;
+        (session.user as any).id = gToken.id;
+        (session.user as any).role = gToken.role;
+        (session.user as any).accessToken = gToken.accessToken;
       }
+
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/6090270f-7a3a-4674-9bb8-f9c09b7fe98f', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sessionId: 'debug-session',
+          runId: 'pre-fix-login-mismatch',
+          hypothesisId: 'H1',
+          location: 'lib/auth-options.ts:session',
+          message: 'Session callback',
+          data: {
+            tokenSub: (token as any)?.sub ?? null,
+            tokenId: (token as any)?.id ?? null,
+            sessionUserId: (session?.user as any)?.id ?? null,
+            sessionEmailHash: session?.user?.email ? hashPII(session.user.email) : null,
+            sessionEmailDomain: session?.user?.email
+              ? session.user.email.split('@')[1]?.toLowerCase() ?? null
+              : null,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+
       return session;
     },
     async signIn({ user, account, profile }) {
@@ -129,16 +208,20 @@ export const authOptions: NextAuthOptions = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sessionId: 'debug-session',
-            runId: 'pre-fix-redirect',
-            hypothesisId: 'H1-H3',
+            runId: 'pre-fix-login-mismatch',
+            hypothesisId: 'H2',
             location: 'lib/auth-options.ts:signIn',
             message: 'Google sign-in attempt',
             data: {
-              email: user.email,
+              emailHash: hashPII(user.email),
               emailDomain,
               workspaceDomain: normalizedDomain || null,
               nextauthUrl: process.env.NEXTAUTH_URL || null,
               provider: account?.provider || null,
+              providerAccountIdHash: account?.providerAccountId
+                ? hashPII(account.providerAccountId)
+                : null,
+              profileSubHash: (profile as any)?.sub ? hashPII(String((profile as any).sub)) : null,
               googleClientIdSuffix: process.env.GOOGLE_CLIENT_ID ? process.env.GOOGLE_CLIENT_ID.slice(-6) : null,
             },
             timestamp: Date.now(),
@@ -154,7 +237,7 @@ export const authOptions: NextAuthOptions = {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 sessionId: 'debug-session',
-                runId: 'pre-fix-redirect',
+                runId: 'pre-fix-login-mismatch',
                 hypothesisId: 'H2',
                 location: 'lib/auth-options.ts:signIn',
                 message: 'Domain mismatch - denying sign-in',
@@ -174,11 +257,11 @@ export const authOptions: NextAuthOptions = {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sessionId: 'debug-session',
-            runId: 'pre-fix-redirect',
-            hypothesisId: 'H1',
+            runId: 'pre-fix-login-mismatch',
+            hypothesisId: 'H2',
             location: 'lib/auth-options.ts:signIn',
             message: 'Domain check passed',
-            data: { email: user.email, emailDomain, workspaceDomain: normalizedDomain },
+            data: { emailHash: hashPII(user.email), emailDomain, workspaceDomain: normalizedDomain },
             timestamp: Date.now(),
           }),
         }).catch(() => {});
@@ -241,3 +324,47 @@ export const authOptions: NextAuthOptions = {
     },
   },
 };
+
+type GoogleToken = JWT & {
+  accessToken?: string;
+  refreshToken?: string;
+  accessTokenExpires?: number;
+};
+
+export async function refreshGoogleAccessToken(token: GoogleToken): Promise<GoogleToken> {
+  if (!token.refreshToken) {
+    return token;
+  }
+
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLIENT_ID || '',
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+        grant_type: 'refresh_token',
+        refresh_token: token.refreshToken,
+      }),
+    });
+
+    const refreshedTokens = await response.json();
+
+    if (!response.ok) {
+      throw refreshedTokens;
+    }
+
+    return {
+      ...token,
+      accessToken: refreshedTokens.access_token,
+      accessTokenExpires: Date.now() + (refreshedTokens.expires_in || 3600) * 1000,
+      refreshToken: refreshedTokens.refresh_token ?? token.refreshToken, // fall back to old refresh token
+    };
+  } catch (error) {
+    // In case of error keep the old token; caller can handle unauthenticated state
+    return {
+      ...token,
+      error: 'RefreshAccessTokenError',
+    };
+  }
+}
