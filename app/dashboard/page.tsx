@@ -14,6 +14,7 @@ import { toast } from "react-hot-toast";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { Progress } from "@/components/ui/progress";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 
 interface Project {
   id: string;
@@ -34,6 +35,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -62,6 +64,12 @@ export default function DashboardPage() {
   const handleProjectCreated = () => {
     fetchProjects();
     setShowCreateDialog(false);
+  };
+
+  const handleTaskCreated = () => {
+    // dashboard shows projects summary; refresh projects counts if needed
+    fetchProjects();
+    setShowCreateTaskDialog(false);
   };
 
   if (status === "loading" || isLoading) {
@@ -167,11 +175,11 @@ export default function DashboardPage() {
               </p>
             </div>
             <Button
-              onClick={() => setShowCreateDialog(true)}
+              onClick={() => setShowCreateTaskDialog(true)}
               className="bg-black text-white hover:bg-black/90 rounded-lg px-6"
             >
               <Plus className="mr-2 h-4 w-4" />
-              Create Task
+              Crea Task
             </Button>
           </div>
 
@@ -347,6 +355,12 @@ export default function DashboardPage() {
         open={showCreateDialog}
         onClose={() => setShowCreateDialog(false)}
         onSuccess={handleProjectCreated}
+      />
+
+      <CreateTaskGlobalDialog
+        open={showCreateTaskDialog}
+        onClose={() => setShowCreateTaskDialog(false)}
+        onSuccess={handleTaskCreated}
       />
     </div>
   );

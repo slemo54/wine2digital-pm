@@ -13,7 +13,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { TaskDetailModal } from "@/components/task-detail-modal";
-import { ArrowLeft, Loader2, Search, Calendar, Paperclip, MessageCircle, ListChecks } from "lucide-react";
+import { ArrowLeft, Loader2, Search, Calendar, Paperclip, MessageCircle, ListChecks, Plus } from "lucide-react";
+import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 
 type ProjectLite = { id: string; name: string };
 
@@ -50,6 +51,7 @@ export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [loadingList, setLoadingList] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [showCreateTask, setShowCreateTask] = useState(false);
 
   const [filters, setFilters] = useState<{
     scope: "all" | "assigned" | "projects";
@@ -211,6 +213,10 @@ export default function TasksPage() {
                     Filtra per status, priorità, progetto, scadenza, testo e tag. Clicca una task per aprire i dettagli.
                   </p>
                 </div>
+                <Button onClick={() => setShowCreateTask(true)} className="bg-black text-white hover:bg-black/90">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Crea Task
+                </Button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
@@ -401,6 +407,19 @@ export default function TasksPage() {
             </ScrollArea>
           </CardContent>
         </Card>
+
+        <CreateTaskGlobalDialog
+          open={showCreateTask}
+          onClose={() => setShowCreateTask(false)}
+          onSuccess={() => {
+            // reload tasks after create (queryString already reflects filters)
+            fetch(`/api/tasks?${queryString}`)
+              .then((r) => r.json())
+              .then((d) => setTasks(Array.isArray(d.tasks) ? d.tasks : []))
+              .catch(() => {});
+          }}
+          defaultProjectId={filters.projectId !== "all" ? filters.projectId : undefined}
+        />
 
         {selectedTaskId ? (
           <TaskDetailModal
