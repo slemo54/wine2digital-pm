@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "tsx --test",
     "postinstall": "prisma generate"
   },
   "prisma": {

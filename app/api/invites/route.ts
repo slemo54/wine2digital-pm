@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { randomBytes } from 'crypto';
 
 export const dynamic = 'force-dynamic';
-
-const prisma = new PrismaClient();
 
 // POST - Create project invite link
 export async function POST(req: NextRequest) {
@@ -69,8 +67,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Create invite error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -115,7 +111,5 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('Get invite error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
   }
 }

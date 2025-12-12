@@ -32,6 +32,7 @@ model User {
   messages          Message[]
   uploadedFiles     FileUpload[]     @relation("FileUploader")
   notifications     Notification[]
+  taskActivities    TaskActivity[]
   
   // NextAuth
   accounts      Account[]
@@ -98,6 +99,21 @@ model Task {
   dependencies  TaskDependency[] @relation("TaskDependencies")
   dependentOn   TaskDependency[] @relation("DependentTasks")
   attachments   TaskAttachment[]
+  activities    TaskActivity[]
+}
+
+model TaskActivity {
+  id        String   @id @default(cuid())
+  taskId    String
+  actorId   String?
+  type      String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor     User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([taskId, createdAt])
 }
 
 // Task Assignees (junction table)
@@ -208,11 +224,11 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-// Calendar - Absence requests
+// Calendar - Absence requests and permissions
 model Absence {
   id            String    @id @default(cuid())
   userId        String
-  type          String    // vacation, sick_leave, personal
+  type          String    // vacation, sick_leave, personal, late_entry, early_exit, overtime, transfer, remote, ooo
   startDate     DateTime
   endDate       DateTime
   startTime     String?   // For partial days (e.g., "09:00")

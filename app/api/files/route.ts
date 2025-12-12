@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
 export const dynamic = 'force-dynamic';
-
-const prisma = new PrismaClient();
 
 // GET - List files for a project
 export async function GET(req: NextRequest) {
@@ -45,8 +43,6 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('List files error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -104,7 +100,5 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Upload file error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
   }
 }

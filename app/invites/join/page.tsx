@@ -91,7 +91,7 @@ export default function JoinInvitePage() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Project Invitation</CardTitle>
           <CardDescription>
-            You've been invited to join a project
+            You&apos;ve been invited to join a project
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">

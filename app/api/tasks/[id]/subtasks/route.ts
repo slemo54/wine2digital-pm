@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { PrismaClient } from "@prisma/client";
+import { getTaskAccessFlags } from "@/lib/task-access";
 
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export async function GET(
   request: NextRequest,
@@ -15,6 +15,22 @@ export async function GET(
   }
 
   try {
+    const userId = (session.user as any).id as string | undefined;
+    const role = ((session.user as any).role as string | undefined) || "member";
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const access = await getTaskAccessFlags(prisma, params.id, userId);
+    if (!access) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    const canRead = role === "admin" || access.isAssignee || access.isProjectMember;
+    if (!canRead) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
     const subtasks = await prisma.subtask.findMany({
       where: { taskId: params.id },
       orderBy: { position: "asc" },
@@ -40,6 +56,24 @@ export async function POST(
   }
 
   try {
+    const userId = (session.user as any).id as string | undefined;
+    const role = ((session.user as any).role as string | undefined) || "member";
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const access = await getTaskAccessFlags(prisma, params.id, userId);
+    if (!access) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+    const canWrite =
+      role === "admin" ||
+      (role === "manager" && access.isProjectMember) ||
+      (role === "member" && access.isAssignee);
+    if (!canWrite) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
     const { title, description } = await request.json();
 
     // Get max position
@@ -54,6 +88,15 @@ export async function POST(
         title,
         description,
         position: (maxPosition._max.position || 0) + 1,
+      },
+    });
+
+    await prisma.taskActivity.create({
+      data: {
+        taskId: params.id,
+        actorId: userId,
+        type: "task.subtask_added",
+        metadata: { subtaskId: subtask.id, title: subtask.title },
       },
     });
 

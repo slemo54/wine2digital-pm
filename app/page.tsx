@@ -71,7 +71,9 @@ export default async function HomePage() {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-3">Kanban Board</h3>
             <p className="text-gray-600">
-              Visualizza il tuo workflow con board Kanban drag-and-drop. Sposta i task da "Da Fare" a "Completato" in modo semplice.
+              Visualizza il tuo workflow con board Kanban drag-and-drop. Sposta i task da{" "}
+              <span className="font-medium">Da Fare</span> a{" "}
+              <span className="font-medium">Completato</span> in modo semplice.
             </p>
           </div>
           <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,6 +11,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { 
   CheckCircle2, 
   Circle, 
@@ -29,6 +32,8 @@ import {
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { toast } from "react-hot-toast";
+import { useSession } from "next-auth/react";
+import { formatTaskActivityEvent } from "@/lib/task-activity-format";
 
 interface Subtask {
   id: string;
@@ -65,11 +70,17 @@ interface TaskDetailModalProps {
 }
 
 export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: TaskDetailModalProps) {
+  const { data: session } = useSession();
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [activityEvents, setActivityEvents] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<"activity" | "my_work" | "assigned" | "comments">("activity");
+  const [isSavingMeta, setIsSavingMeta] = useState(false);
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  const [draftAssigneeIds, setDraftAssigneeIds] = useState<string[]>([]);
   const [newSubtask, setNewSubtask] = useState("");
   const [newComment, setNewComment] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -83,29 +94,59 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   const fetchTaskDetails = async () => {
     setLoading(true);
     try {
-      const [taskRes, subtasksRes, commentsRes, attachmentsRes] = await Promise.all([
+      const [taskRes, subtasksRes, commentsRes, attachmentsRes, activityRes] = await Promise.all([
         fetch(`/api/tasks/${taskId}`),
         fetch(`/api/tasks/${taskId}/subtasks`),
         fetch(`/api/tasks/${taskId}/comments`),
         fetch(`/api/tasks/${taskId}/attachments`),
+        fetch(`/api/tasks/${taskId}/activity`),
       ]);
 
-      const [taskData, subtasksData, commentsData, attachmentsData] = await Promise.all([
+      const [taskData, subtasksData, commentsData, attachmentsData, activityData] = await Promise.all([
         taskRes.json(),
         subtasksRes.json(),
         commentsRes.json(),
         attachmentsRes.json(),
+        activityRes.json(),
       ]);
 
       setTask(taskData);
       setSubtasks(subtasksData);
       setComments(commentsData);
       setAttachments(attachmentsData);
+      setActivityEvents(Array.isArray(activityData?.events) ? activityData.events : []);
     } catch (error) {
       console.error("Failed to fetch task details:", error);
       toast.error("Errore durante il caricamento del task");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const canEditMeta = (() => {
+    const role = (session?.user as any)?.role as string | undefined;
+    return role === "admin" || role === "manager";
+  })();
+
+  const updateTaskMeta = async (patch: Record<string, any>) => {
+    setIsSavingMeta(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Update failed");
+      }
+      toast.success("Aggiornato");
+      await fetchTaskDetails();
+      onUpdate?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore aggiornamento");
+    } finally {
+      setIsSavingMeta(false);
     }
   };
 
@@ -196,15 +237,30 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   const completedSubtasks = subtasks.filter(st => st.completed).length;
   const totalSubtasks = subtasks.length;
 
+  const projectMembers: Array<any> = Array.isArray(task?.project?.members) ? task.project.members : [];
+  const memberUsers = projectMembers.map((m: any) => m.user).filter(Boolean);
+  const userNameById = (id: string) => {
+    const u = memberUsers.find((x: any) => x?.id === id);
+    if (!u) return null;
+    return u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
+  };
+  const currentAssigneeIds = Array.isArray(task?.assignees) ? task.assignees.map((a: any) => a.userId) : [];
+  const currentAssigneeKey = currentAssigneeIds.join(",");
+
+  useEffect(() => {
+    if (!task) return;
+    setDraftAssigneeIds(currentAssigneeIds);
+  }, [taskId, task?.updatedAt, currentAssigneeKey, task]);
+
   if (loading) {
     return (
-      <Dialog open={open} onOpenChange={onClose}>
-        <DialogContent className="max-w-5xl max-h-[90vh]">
+      <Sheet open={open} onOpenChange={onClose}>
+        <SheetContent side="right" className="w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-hidden p-0">
           <div className="flex items-center justify-center p-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     );
   }
 
@@ -229,12 +285,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden p-0">
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent side="right" className="w-[95vw] sm:max-w-6xl max-h-[90vh] overflow-hidden p-0">
         <div className="flex h-full">
           {/* Left Panel - Main Content */}
           <div className="flex-1 flex flex-col">
-            <DialogHeader className="p-6 border-b">
+            <div className="p-6 border-b">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
@@ -250,147 +306,234 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                       </Badge>
                     )}
                   </div>
-                  <DialogTitle className="text-2xl font-bold">{task.title}</DialogTitle>
+                  <div className="text-2xl font-bold pr-10">{task.title}</div>
                   {task.description && (
                     <p className="text-sm text-gray-600 mt-2">{task.description}</p>
                   )}
                 </div>
               </div>
-            </DialogHeader>
+              <div className="mt-4">
+                <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+                  <TabsList>
+                    <TabsTrigger value="activity">Activity</TabsTrigger>
+                    <TabsTrigger value="my_work">My Work</TabsTrigger>
+                    <TabsTrigger value="assigned">Assigned</TabsTrigger>
+                    <TabsTrigger value="comments">Comments</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            </div>
 
             <ScrollArea className="flex-1 p-6">
-              {/* Subtasks Section */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Subtasks
-                    <span className="text-gray-500">
-                      {completedSubtasks} / {totalSubtasks}
-                    </span>
-                  </h3>
-                  {totalSubtasks > 0 && (
-                    <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-green-500 transition-all" 
-                        style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
-                      />
-                    </div>
-                  )}
-                </div>
-                
-                <div className="space-y-2">
-                  {subtasks.map((subtask) => (
-                    <div key={subtask.id} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50">
-                      <Checkbox 
-                        checked={subtask.completed}
-                        onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
-                      />
-                      <span className={subtask.completed ? "line-through text-gray-500" : ""}>
-                        {subtask.title}
-                      </span>
-                    </div>
-                  ))}
-                  
-                  <div className="flex items-center gap-2 mt-2">
-                    <Input 
-                      placeholder="Aggiungi un subtask..."
-                      value={newSubtask}
-                      onChange={(e) => setNewSubtask(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addSubtask()}
-                      className="flex-1"
-                    />
-                    <Button onClick={addSubtask} size="sm" variant="outline">
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <Separator className="my-6" />
-
-              {/* Attachments Section */}
-              <div className="mb-6">
-                <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
-                  <Paperclip className="w-4 h-4" />
-                  Allegati
-                  <span className="text-gray-500">({attachments.length})</span>
-                </h3>
-                
-                <div className="space-y-2">
-                  {attachments.map((attachment) => (
-                    <div key={attachment.id} className="flex items-center gap-2 p-2 rounded border">
-                      <Paperclip className="w-4 h-4 text-gray-400" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">{attachment.fileName}</p>
-                        <p className="text-xs text-gray-500">
-                          {(attachment.fileSize / 1024).toFixed(2)} KB
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded cursor-pointer hover:border-orange-500 hover:bg-orange-50 transition-colors">
-                    <Upload className="w-4 h-4" />
-                    <span className="text-sm">
-                      {uploading ? "Caricamento..." : "Trascina file o clicca per caricare"}
-                    </span>
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => e.target.files?.[0] && uploadAttachment(e.target.files[0])}
-                      disabled={uploading}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              <Separator className="my-6" />
-
-              {/* Comments Section */}
-              <div>
-                <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
-                  <MessageSquare className="w-4 h-4" />
-                  Commenti
-                  <span className="text-gray-500">({comments.length})</span>
-                </h3>
-                
+              {activeTab === "activity" || activeTab === "my_work" ? (
                 <div className="space-y-3">
-                  {comments.map((comment) => (
-                    <div key={comment.id} className="flex gap-3">
+                  {(activeTab === "my_work"
+                    ? activityEvents.filter((e) => e?.actor?.id && e.actor.id === (session?.user as any)?.id)
+                    : activityEvents
+                  ).map((e) => (
+                    <div key={e.id} className="flex gap-3">
                       <Avatar className="w-8 h-8">
-                        <AvatarImage src={comment.user.image || undefined} />
+                        <AvatarImage src={e.actor?.image || undefined} />
                         <AvatarFallback>
-                          {comment.user.name?.[0] || comment.user.email[0].toUpperCase()}
+                          {(e.actor?.name?.[0] || e.actor?.email?.[0] || "U").toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
                         <div className="bg-gray-50 rounded-lg p-3">
                           <p className="text-sm font-medium">
-                            {comment.user.name || comment.user.email}
+                            {e.actor?.name || e.actor?.email || "Sistema"}
                           </p>
-                          <p className="text-sm text-gray-700 mt-1">{comment.content}</p>
+                          <p className="text-sm text-gray-700 mt-1">
+                            {formatTaskActivityEvent(e, userNameById).message}
+                          </p>
                         </div>
                         <p className="text-xs text-gray-500 mt-1">
-                          {format(new Date(comment.createdAt), "PPp", { locale: it })}
+                          {format(new Date(e.createdAt), "PPp", { locale: it })}
                         </p>
                       </div>
                     </div>
                   ))}
-                  
-                  <div className="flex gap-2 mt-4">
-                    <Textarea 
-                      placeholder="Scrivi un commento..."
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      className="flex-1 min-h-[80px]"
-                    />
-                  </div>
-                  <Button onClick={addComment} className="w-full">
-                    Aggiungi Commento
-                  </Button>
+                  {(activeTab === "my_work"
+                    ? activityEvents.filter((e) => e?.actor?.id && e.actor.id === (session?.user as any)?.id)
+                    : activityEvents
+                  ).length === 0 ? (
+                    <p className="text-sm text-gray-500">Nessuna attività.</p>
+                  ) : null}
                 </div>
-              </div>
+              ) : null}
+
+              {activeTab === "assigned" ? (
+                <div>
+                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                    <Users className="w-4 h-4" />
+                    Assegnatari
+                  </h3>
+                  <div className="flex flex-wrap gap-2">
+                    {task.assignees?.map((assignee: any) => (
+                      <div key={assignee.user.id} className="flex items-center gap-2 border rounded-lg px-3 py-2">
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage src={assignee.user.image || undefined} />
+                          <AvatarFallback>
+                            {assignee.user.name?.[0] || assignee.user.email[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            {assignee.user.name || `${assignee.user.firstName || ""} ${assignee.user.lastName || ""}`.trim() || assignee.user.email}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">{assignee.user.email}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {(!task.assignees || task.assignees.length === 0) ? (
+                      <p className="text-sm text-gray-500">Nessun assegnatario</p>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === "comments" ? (
+                <>
+                  {/* Subtasks Section */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Subtasks
+                        <span className="text-gray-500">
+                          {completedSubtasks} / {totalSubtasks}
+                        </span>
+                      </h3>
+                      {totalSubtasks > 0 && (
+                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-green-500 transition-all"
+                            style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      {subtasks.map((subtask) => (
+                        <div key={subtask.id} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50">
+                          <Checkbox
+                            checked={subtask.completed}
+                            onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
+                          />
+                          <span className={subtask.completed ? "line-through text-gray-500" : ""}>
+                            {subtask.title}
+                          </span>
+                        </div>
+                      ))}
+
+                      <div className="flex items-center gap-2 mt-2">
+                        <Input
+                          placeholder="Aggiungi un subtask..."
+                          value={newSubtask}
+                          onChange={(e) => setNewSubtask(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && addSubtask()}
+                          className="flex-1"
+                        />
+                        <Button onClick={addSubtask} size="sm" variant="outline">
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Separator className="my-6" />
+
+                  {/* Attachments Section */}
+                  <div className="mb-6">
+                    <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                      <Paperclip className="w-4 h-4" />
+                      Allegati
+                      <span className="text-gray-500">({attachments.length})</span>
+                    </h3>
+
+                    <div className="space-y-2">
+                      {attachments.map((attachment) => (
+                        <a
+                          key={attachment.id}
+                          href={attachment.filePath}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 p-2 rounded border hover:bg-gray-50 transition-colors"
+                        >
+                          <Paperclip className="w-4 h-4 text-gray-400" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                            <p className="text-xs text-gray-500">
+                              {(attachment.fileSize / 1024).toFixed(2)} KB
+                            </p>
+                          </div>
+                        </a>
+                      ))}
+
+                      <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded cursor-pointer hover:border-orange-500 hover:bg-orange-50 transition-colors">
+                        <Upload className="w-4 h-4" />
+                        <span className="text-sm">
+                          {uploading ? "Caricamento..." : "Trascina file o clicca per caricare"}
+                        </span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => e.target.files?.[0] && uploadAttachment(e.target.files[0])}
+                          disabled={uploading}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <Separator className="my-6" />
+
+                  {/* Comments Section */}
+                  <div>
+                    <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                      <MessageSquare className="w-4 h-4" />
+                      Commenti
+                      <span className="text-gray-500">({comments.length})</span>
+                    </h3>
+
+                    <div className="space-y-3">
+                      {comments.map((comment) => (
+                        <div key={comment.id} className="flex gap-3">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={comment.user.image || undefined} />
+                            <AvatarFallback>
+                              {comment.user.name?.[0] || comment.user.email[0].toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <div className="bg-gray-50 rounded-lg p-3">
+                              <p className="text-sm font-medium">
+                                {comment.user.name || comment.user.email}
+                              </p>
+                              <p className="text-sm text-gray-700 mt-1">{comment.content}</p>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {format(new Date(comment.createdAt), "PPp", { locale: it })}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+
+                      <div className="flex gap-2 mt-4">
+                        <Textarea
+                          placeholder="Scrivi un commento..."
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          className="flex-1 min-h-[80px]"
+                        />
+                      </div>
+                      <Button onClick={addComment} className="w-full">
+                        Aggiungi Commento
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </ScrollArea>
           </div>
 
@@ -403,7 +546,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                   <Users className="w-3 h-3" />
                   Assegnatari
                 </Label>
-                <div className="flex gap-1">
+                <div className="flex gap-1 flex-wrap">
                   {task.assignees?.map((assignee: any) => (
                     <Avatar key={assignee.user.id} className="w-8 h-8">
                       <AvatarImage src={assignee.user.image || undefined} />
@@ -416,6 +559,68 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                     <p className="text-sm text-gray-500">Nessun assegnatario</p>
                   )}
                 </div>
+
+                {canEditMeta ? (
+                  <div className="mt-3">
+                    <Popover open={assigneePickerOpen} onOpenChange={setAssigneePickerOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" disabled={isSavingMeta}>
+                          Modifica assegnatari
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-3" align="start">
+                        <div className="text-sm font-medium mb-2">Seleziona assegnatari</div>
+                        <div className="max-h-56 overflow-auto space-y-2">
+                          {memberUsers.map((u: any) => {
+                            const label =
+                              u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
+                            const checked = draftAssigneeIds.includes(u.id);
+                            return (
+                              <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    setDraftAssigneeIds((prev) =>
+                                      e.target.checked
+                                        ? Array.from(new Set([...prev, u.id]))
+                                        : prev.filter((x: string) => x !== u.id)
+                                    );
+                                  }}
+                                />
+                                <span className="truncate">{label}</span>
+                              </label>
+                            );
+                          })}
+                          {memberUsers.length === 0 ? (
+                            <p className="text-sm text-gray-500">Nessun membro progetto disponibile</p>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isSavingMeta}
+                            onClick={() => {
+                              setDraftAssigneeIds(currentAssigneeIds);
+                              setAssigneePickerOpen(false);
+                            }}
+                          >
+                            Annulla
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={isSavingMeta}
+                            onClick={() => updateTaskMeta({ assigneeIds: draftAssigneeIds }).then(() => setAssigneePickerOpen(false))}
+                          >
+                            Salva
+                          </Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                ) : null}
               </div>
 
               {/* Due Date */}
@@ -424,13 +629,31 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                   <Calendar className="w-3 h-3" />
                   Scadenza
                 </Label>
-                {task.dueDate ? (
-                  <Badge variant="outline" className="text-sm">
-                    {format(new Date(task.dueDate), "PPP", { locale: it })}
-                  </Badge>
-                ) : (
-                  <p className="text-sm text-gray-500">Nessuna scadenza</p>
-                )}
+                <div className="space-y-2">
+                  {task.dueDate ? (
+                    <Badge variant="outline" className="text-sm">
+                      {format(new Date(task.dueDate), "PPP", { locale: it })}
+                    </Badge>
+                  ) : (
+                    <p className="text-sm text-gray-500">Nessuna scadenza</p>
+                  )}
+
+                  {canEditMeta ? (
+                    <Input
+                      type="date"
+                      disabled={isSavingMeta}
+                      value={task.dueDate ? format(new Date(task.dueDate), "yyyy-MM-dd") : ""}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (!v) {
+                          updateTaskMeta({ dueDate: null });
+                          return;
+                        }
+                        updateTaskMeta({ dueDate: `${v}T12:00:00Z` });
+                      }}
+                    />
+                  ) : null}
+                </div>
               </div>
 
               {/* Priority */}
@@ -438,11 +661,30 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                 <Label className="text-xs font-semibold text-gray-600 mb-2 block">
                   Priorità
                 </Label>
-                <Badge className={getPriorityColor(task.priority)}>
-                  {task.priority === "high" && "Alta"}
-                  {task.priority === "medium" && "Media"}
-                  {task.priority === "low" && "Bassa"}
-                </Badge>
+                <div className="space-y-2">
+                  <Badge className={getPriorityColor(task.priority)}>
+                    {task.priority === "high" && "Alta"}
+                    {task.priority === "medium" && "Media"}
+                    {task.priority === "low" && "Bassa"}
+                  </Badge>
+
+                  {canEditMeta ? (
+                    <Select
+                      value={task.priority}
+                      onValueChange={(v) => updateTaskMeta({ priority: v })}
+                      disabled={isSavingMeta}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Priorità" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="high">Alta</SelectItem>
+                        <SelectItem value="medium">Media</SelectItem>
+                        <SelectItem value="low">Bassa</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                </div>
               </div>
 
               {/* Story Points */}
@@ -486,7 +728,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -10,10 +10,15 @@ out
 
 # Env & secrets
 .env
+.env.*
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.secrets/
+
+# Allow example env files
+!.env.example
 
 # Logs & coverage
 npm-debug.log*
