@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
 import { randomBytes } from 'crypto';
+import { canManageProjectMembers } from "@/lib/project-permissions";
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = (session.user as any).id;
+    const globalRole = String((session.user as any)?.role || "");
     const body = await req.json();
     const { projectId, role, expiresIn, maxUses } = body;
 
@@ -28,10 +30,17 @@ export async function POST(req: NextRequest) {
         projectId,
         userId,
       },
+      select: {
+        role: true,
+      },
     });
 
     if (!isMember) {
       return NextResponse.json({ error: 'Not a project member' }, { status: 403 });
+    }
+
+    if (!canManageProjectMembers({ globalRole, projectRole: isMember.role })) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     // Generate unique token
