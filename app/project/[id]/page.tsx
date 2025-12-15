@@ -15,6 +15,7 @@ import { KanbanBoard } from "@/components/kanban/kanban-board";
 import { ProjectChat } from "@/components/project-chat";
 import { ProjectFiles } from "@/components/project-files";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProjectMembersPanel } from "@/components/project-members-panel";
 
 interface Project {
   id: string;
@@ -33,6 +34,9 @@ export default function ProjectPage() {
   const router = useRouter();
   const params = useParams();
   const projectId = params?.id as string;
+
+  const sessionUserId = (session?.user as any)?.id as string | undefined;
+  const sessionGlobalRole = (session?.user as any)?.role as string | undefined;
   
   const [project, setProject] = useState<Project | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -167,22 +171,34 @@ export default function ProjectPage() {
               )}
               <div>
                 <h3 className="text-sm font-medium text-gray-500 mb-2">Team</h3>
-                <div className="flex items-center">
-                  <Users className="mr-2 h-4 w-4 text-gray-900" />
-                  <div className="flex -space-x-2">
-                    {project?.members?.slice(0, 5)?.map((member) => (
-                      <Avatar key={member?.id} className="h-8 w-8 border-2 border-white">
-                        <AvatarFallback className="bg-blue-600 text-white text-xs">
-                          {getInitials(`${member?.user?.firstName || ""} ${member?.user?.lastName || ""}`)}
-                        </AvatarFallback>
-                      </Avatar>
-                    ))}
-                    {(project?.members?.length || 0) > 5 && (
-                      <div className="h-8 w-8 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center">
-                        <span className="text-xs font-medium text-gray-600">+{project.members.length - 5}</span>
-                      </div>
-                    )}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center min-w-0">
+                    <Users className="mr-2 h-4 w-4 text-gray-900" />
+                    <div className="flex -space-x-2">
+                      {project?.members?.slice(0, 5)?.map((member) => (
+                        <Avatar key={member?.id} className="h-8 w-8 border-2 border-white">
+                          <AvatarFallback className="bg-blue-600 text-white text-xs">
+                            {getInitials(
+                              `${member?.user?.name || ""} ${member?.user?.firstName || ""} ${member?.user?.lastName || ""}`.trim()
+                            )}
+                          </AvatarFallback>
+                        </Avatar>
+                      ))}
+                      {(project?.members?.length || 0) > 5 && (
+                        <div className="h-8 w-8 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center">
+                          <span className="text-xs font-medium text-gray-600">+{project.members.length - 5}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  <ProjectMembersPanel
+                    projectId={project.id}
+                    members={project.members || []}
+                    sessionUserId={sessionUserId || null}
+                    sessionGlobalRole={sessionGlobalRole || null}
+                    onChanged={fetchProject}
+                  />
                 </div>
               </div>
             </div>
