@@ -1,6 +1,6 @@
 export type Locale = "en" | "it";
 
-type I18nKey =
+export type I18nKey =
   | "theme.switchToDark"
   | "theme.switchToLight"
   | "kanban.empty.todo.title"
