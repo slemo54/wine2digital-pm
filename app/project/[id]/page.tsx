@@ -37,6 +37,15 @@ export default function ProjectPage() {
   const projectId = params?.id as string;
   const searchParams = useSearchParams();
   const taskFromSearch = searchParams?.get("task");
+  const [tabFromHash, setTabFromHash] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => setTabFromHash(window.location.hash.replace("#", ""));
+    update();
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
 
   const sessionUserId = (session?.user as any)?.id as string | undefined;
   const sessionGlobalRole = (session?.user as any)?.role as string | undefined;
@@ -163,7 +172,7 @@ export default function ProjectPage() {
         </Card>
 
         {/* Project Tabs */}
-        <Tabs defaultValue="kanban" className="space-y-4">
+        <Tabs defaultValue={tabFromHash === "files" ? "files" : "kanban"} className="space-y-4">
           <TabsList className="grid w-full grid-cols-4 lg:w-[520px]">
             <TabsTrigger value="kanban">Tasks</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
