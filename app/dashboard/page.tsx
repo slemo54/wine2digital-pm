@@ -46,6 +46,16 @@ type NotificationItem = {
   createdAt: string;
 };
 
+type ActivityEvent = {
+  id: string;
+  type: string;
+  createdAt: string;
+  actor: { id: string; email: string; name: string | null; firstName: string | null; lastName: string | null; image: string | null } | null;
+  message: string;
+  task: { id: string; title: string; projectId: string; projectName: string };
+  href: string;
+};
+
 export default function DashboardPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
@@ -57,6 +67,8 @@ export default function DashboardPage() {
   const [myTasks, setMyTasks] = useState<TaskListItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [isLoadingActivity, setIsLoadingActivity] = useState(true);
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
@@ -72,6 +84,7 @@ export default function DashboardPage() {
       fetchProjects();
       fetchMyTasks();
       fetchNotifications();
+      fetchActivity();
     }
   }, [status]);
 
@@ -113,6 +126,18 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchActivity = async () => {
+    try {
+      const response = await fetch("/api/activity");
+      const data = await response.json();
+      setActivityEvents(Array.isArray(data?.events) ? data.events : []);
+    } catch {
+      setActivityEvents([]);
+    } finally {
+      setIsLoadingActivity(false);
+    }
+  };
+
   const handleProjectCreated = () => {
     fetchProjects();
     setShowCreateDialog(false);
@@ -122,6 +147,7 @@ export default function DashboardPage() {
     fetchMyTasks();
     fetchProjects();
     fetchNotifications();
+    fetchActivity();
     setShowCreateTaskDialog(false);
   };
 
@@ -160,6 +186,12 @@ export default function DashboardPage() {
     const bScore = (isOverdue(b) ? 100 : 0) + (isDueSoon(b) ? 50 : 0) + (b.priority === "high" ? 10 : 0);
     return bScore - aScore;
   });
+
+  const actorLabel = (a: ActivityEvent["actor"]) => {
+    if (!a) return "Qualcuno";
+    const full = (a.name || `${a.firstName || ""} ${a.lastName || ""}`.trim()).trim();
+    return full || a.email;
+  };
 
   return (
     <div className="min-h-screen bg-secondary">
@@ -340,9 +372,36 @@ export default function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent className="pt-0">
-              <div className="text-sm text-muted-foreground py-6">
-                Activity feed will appear here (next step: enable /api/activity).
-              </div>
+              {isLoadingActivity ? (
+                <div className="text-sm text-muted-foreground flex items-center gap-2 py-6">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+                </div>
+              ) : activityEvents.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-6">No recent activity.</div>
+              ) : (
+                <div className="space-y-3">
+                  {activityEvents.slice(0, 10).map((e) => (
+                    <div key={e.id} className="border rounded-lg p-3">
+                      <div className="text-sm">
+                        <span className="font-medium">{actorLabel(e.actor)}</span> {e.message}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground truncate">
+                        {e.task.projectName ? `${e.task.projectName} • ` : ""}{e.task.title}
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(e.createdAt).toLocaleString()}
+                        </div>
+                        <Link href={e.href}>
+                          <Button variant="link" className="h-auto p-0 text-xs">
+                            Open
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
