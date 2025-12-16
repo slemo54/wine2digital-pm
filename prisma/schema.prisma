@@ -33,10 +33,32 @@ model User {
   uploadedFiles     FileUpload[]     @relation("FileUploader")
   notifications     Notification[]
   taskActivities    TaskActivity[]
+  wikiPagesCreated  WikiPage[]        @relation("WikiPageCreator")
+  wikiPagesUpdated  WikiPage[]        @relation("WikiPageUpdater")
+  wikiRevisions     WikiPageRevision[]
+  auditLogs         AuditLog[]
+
+  isActive          Boolean   @default(true)
+  disabledAt        DateTime?
   
   // NextAuth
   accounts      Account[]
   sessions      Session[]
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actionType String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
 }
 
 // Project model
@@ -58,6 +80,41 @@ model Project {
   messages      Message[]
   files         FileUpload[]
   invites       ProjectInvite[]
+  wikiPages     WikiPage[]
+}
+
+model WikiPage {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  slug        String
+  content     String   @db.Text
+  isArchived  Boolean  @default(false)
+  createdById String
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User             @relation("WikiPageCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy   User?            @relation("WikiPageUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  revisions   WikiPageRevision[]
+
+  @@unique([projectId, slug])
+  @@index([projectId, updatedAt])
+}
+
+model WikiPageRevision {
+  id              String   @id @default(cuid())
+  pageId          String
+  contentSnapshot String   @db.Text
+  createdById     String
+  createdAt       DateTime @default(now())
+
+  page            WikiPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  createdBy       User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([pageId, createdAt])
 }
 
 // Project Members (junction table)
