@@ -100,67 +100,6 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-secondary">
-      {/* Header */}
-      <header className="border-b border-border bg-background text-foreground sticky top-0 z-50 shadow-sm">
-        <div className="max-w-[1400px] mx-auto px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <Folder className="w-5 h-5 text-white" />
-              </div>
-              <span className="text-lg font-semibold">Wine2Digital</span>
-            </div>
-            
-            {/* Navigation Tabs */}
-            <nav className="hidden md:flex items-center gap-1 text-sm">
-              <Link href="/dashboard" className="px-4 py-2 rounded-md bg-accent font-medium">
-                Dashboard
-              </Link>
-              <Link href="/projects" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Progetti
-              </Link>
-              <Link href="/tasks" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Task
-              </Link>
-              <Link href="/calendar" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Calendario
-              </Link>
-              <Link href="/files" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                File
-              </Link>
-              <Link href="/profile" className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground">
-                Profilo
-              </Link>
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Search className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="rounded-full">
-              <Bell className="h-4 w-4" />
-            </Button>
-            <ThemeToggle />
-            <div className="flex items-center gap-2">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-white text-xs">
-                  {getInitials(session?.user?.name)}
-                </AvatarFallback>
-              </Avatar>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => signOut({ callbackUrl: "/auth/login" })}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Main Content */}
       <main className="max-w-[1400px] mx-auto px-6 py-8">
         {/* Greeting Section */}

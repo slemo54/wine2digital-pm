@@ -3,6 +3,7 @@
 import { ReactNode, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
+import { CommandPalette } from "@/components/command-palette";
 
 function shouldShowAppShell(pathname: string): boolean {
   if (!pathname) return false;
@@ -23,10 +24,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-secondary text-foreground">
       <div className="flex min-h-screen">
         <AppSidebar />
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="flex-1 min-w-0">
+          {children}
+          <CommandPalette />
+        </main>
       </div>
     </div>
   );
 }
+
 
 

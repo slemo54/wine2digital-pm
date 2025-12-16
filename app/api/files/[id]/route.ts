@@ -35,7 +35,8 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
 
     // Delete physical file
     try {
-      const filePath = path.join(process.cwd(), file.filePath);
+      const relative = String(file.filePath || "").replace(/^\/+/, "");
+      const filePath = path.join(process.cwd(), relative);
       await unlink(filePath);
     } catch (error) {
       console.error('Error deleting physical file:', error);

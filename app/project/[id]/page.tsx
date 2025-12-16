@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,6 +16,7 @@ import { ProjectChat } from "@/components/project-chat";
 import { ProjectFiles } from "@/components/project-files";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProjectMembersPanel } from "@/components/project-members-panel";
+import { TaskDetailModal } from "@/components/task-detail-modal";
 
 interface Project {
   id: string;
@@ -34,6 +35,8 @@ export default function ProjectPage() {
   const router = useRouter();
   const params = useParams();
   const projectId = params?.id as string;
+  const searchParams = useSearchParams();
+  const taskFromSearch = searchParams?.get("task");
 
   const sessionUserId = (session?.user as any)?.id as string | undefined;
   const sessionGlobalRole = (session?.user as any)?.role as string | undefined;
@@ -101,52 +104,6 @@ export default function ProjectPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
-      {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard">
-                <Button variant="ghost" size="sm">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Dashboard
-                </Button>
-              </Link>
-              <div className="h-6 w-px bg-gray-300" />
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
-                  <Briefcase className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-lg font-bold text-gray-900">{project?.name || "Project"}</h1>
-                  <Badge variant={project?.status === "active" ? "default" : "secondary"} className="text-xs">
-                    {project?.status || "unknown"}
-                  </Badge>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-gray-900">{session?.user?.name || "User"}</p>
-                <p className="text-xs text-gray-500">{session?.user?.email || ""}</p>
-              </div>
-              <Avatar>
-                <AvatarFallback className="bg-blue-600 text-white">
-                  {getInitials(session?.user?.name)}
-                </AvatarFallback>
-              </Avatar>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => signOut({ callbackUrl: "/auth/login" })}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
       {/* Project Info */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Card className="mb-6">
@@ -207,10 +164,11 @@ export default function ProjectPage() {
 
         {/* Project Tabs */}
         <Tabs defaultValue="kanban" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+          <TabsList className="grid w-full grid-cols-4 lg:w-[520px]">
             <TabsTrigger value="kanban">Tasks</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
+            <TabsTrigger value="wiki">Wiki</TabsTrigger>
           </TabsList>
           
           <TabsContent value="kanban" className="space-y-4">
@@ -230,7 +188,33 @@ export default function ProjectPage() {
           <TabsContent value="files">
             <ProjectFiles projectId={project?.id} />
           </TabsContent>
+
+          <TabsContent value="wiki" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-900">Wiki</h2>
+              <Link href={`/project/${project?.id}/wiki`}>
+                <Button>Apri Wiki</Button>
+              </Link>
+            </div>
+            <Card>
+              <CardContent className="p-6">
+                <p className="text-sm text-gray-600">
+                  Documentazione del progetto: pagine editabili con storico revisioni.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
+
+        {taskFromSearch ? (
+          <TaskDetailModal
+            open={true}
+            onClose={() => router.replace(`/project/${projectId}`)}
+            taskId={taskFromSearch}
+            projectId={projectId}
+            onUpdate={fetchProject}
+          />
+        ) : null}
       </div>
     </div>
   );

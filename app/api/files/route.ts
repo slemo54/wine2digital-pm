@@ -15,11 +15,28 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const projectId = searchParams.get('projectId');
+    const userId = String((session.user as any).id || '');
+    const globalRole = String((session.user as any).role || '');
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
-    if (!projectId) {
+    const { searchParams } = new URL(req.url);
+    const projectId = (searchParams.get('projectId') || '').trim();
+
+    if (!projectId || projectId === 'undefined' || projectId === 'null') {
       return NextResponse.json({ error: 'Project ID required' }, { status: 400 });
+    }
+
+    // Permissions: only project members (or global admin)
+    if (globalRole !== 'admin') {
+      const membership = await prisma.projectMember.findFirst({
+        where: { projectId, userId },
+        select: { id: true },
+      });
+      if (!membership) {
+        return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+      }
     }
 
     const files = await prisma.fileUpload.findMany({
@@ -54,13 +71,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = String((session.user as any).id || '');
+    const globalRole = String((session.user as any).role || '');
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const formData = await req.formData();
     const file = formData.get('file') as File;
-    const projectId = formData.get('projectId') as string;
+    const projectId = String(formData.get('projectId') || '').trim();
 
-    if (!file || !projectId) {
+    if (!file || !projectId || projectId === 'undefined' || projectId === 'null') {
       return NextResponse.json({ error: 'Missing file or project ID' }, { status: 400 });
+    }
+
+    // Permissions: only project members (or global admin)
+    if (globalRole !== 'admin') {
+      const membership = await prisma.projectMember.findFirst({
+        where: { projectId, userId },
+        select: { id: true },
+      });
+      if (!membership) {
+        return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+      }
     }
 
     // Create uploads directory if it doesn't exist

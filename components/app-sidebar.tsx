@@ -15,6 +15,7 @@ import {
   CalendarDays,
   FileText,
   User,
+  Shield,
   LogOut,
 } from "lucide-react";
 
@@ -44,6 +45,8 @@ export function AppSidebar() {
   const pathname = usePathname() || "";
   const router = useRouter();
   const { data: session } = useSession();
+  const globalRole = (session?.user as any)?.role as string | undefined;
+  const isAdmin = globalRole === "admin";
 
   return (
     <aside className="w-64 shrink-0 border-r border-border bg-background sticky top-0 h-screen">
@@ -78,6 +81,24 @@ export function AppSidebar() {
               </Link>
             );
           })}
+
+          {isAdmin ? (
+            <div className="pt-3">
+              <div className="px-3 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Admin</div>
+              <Link
+                href="/admin/users"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                  pathname.startsWith("/admin")
+                    ? "bg-accent text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                )}
+              >
+                <Shield className="h-4 w-4" />
+                Admin
+              </Link>
+            </div>
+          ) : null}
         </nav>
 
         <div className="mt-auto p-4 border-t border-border">
@@ -112,5 +133,6 @@ export function AppSidebar() {
     </aside>
   );
 }
+
 
 

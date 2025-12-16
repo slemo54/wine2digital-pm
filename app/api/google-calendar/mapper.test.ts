@@ -29,3 +29,4 @@ test("mapGoogleEvent returns normalized event", () => {
   assert.equal(result.location, "HQ");
 });
 
+
