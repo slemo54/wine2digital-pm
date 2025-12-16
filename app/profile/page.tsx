@@ -5,8 +5,11 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { User, ArrowLeft, Loader2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Loader2, LogOut, User } from "lucide-react";
+import { signOut } from "next-auth/react";
 
 export default function ProfilePage() {
   const { data: session, status } = useSession() || {};
@@ -26,6 +29,21 @@ export default function ProfilePage() {
     );
   }
 
+  const user = session?.user as any;
+  const displayName =
+    (user?.name as string | undefined) ||
+    `${user?.firstName || ""} ${user?.lastName || ""}`.trim() ||
+    "Utente";
+  const email = (user?.email as string | undefined) || "";
+  const role = (user?.role as string | undefined) || "member";
+  const initials = displayName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p: string) => p[0])
+    .join("")
+    .toUpperCase();
+
   return (
     <div className="min-h-screen bg-secondary">
       <div className="max-w-[1400px] mx-auto px-6 py-8">
@@ -39,15 +57,56 @@ export default function ProfilePage() {
         </div>
 
         <Card className="bg-white">
-          <CardContent className="flex flex-col items-center justify-center py-16">
-            <User className="h-16 w-16 text-muted-foreground mb-4" />
-            <h2 className="text-2xl font-semibold mb-2">Profilo</h2>
-            <p className="text-muted-foreground text-center mb-6">
-              Questa pagina è in costruzione. La gestione del profilo utente sarà disponibile a breve.
-            </p>
-            <Link href="/dashboard">
-              <Button variant="outline">Torna alla Dashboard</Button>
-            </Link>
+          <CardHeader>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle className="text-2xl">Profilo</CardTitle>
+                <div className="text-sm text-muted-foreground">Dati dell’account e accesso.</div>
+              </div>
+              <Badge variant="secondary" className="capitalize">
+                {role}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center gap-4">
+              <Avatar className="h-14 w-14">
+                <AvatarImage src={user?.image || undefined} />
+                <AvatarFallback className="bg-primary text-white">{initials || "U"}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0">
+                <div className="text-lg font-semibold truncate">{displayName}</div>
+                <div className="text-sm text-muted-foreground truncate">{email}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="bg-secondary/30">
+                <CardContent className="p-4">
+                  <div className="text-xs text-muted-foreground">Email</div>
+                  <div className="font-medium break-all">{email || "—"}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-secondary/30">
+                <CardContent className="p-4">
+                  <div className="text-xs text-muted-foreground">Ruolo</div>
+                  <div className="font-medium capitalize">{role}</div>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <Link href="/dashboard">
+                <Button variant="outline">
+                  <User className="h-4 w-4 mr-2" />
+                  Torna alla Dashboard
+                </Button>
+              </Link>
+              <Button onClick={() => signOut({ callbackUrl: "/auth/login" })} className="bg-black text-white hover:bg-black/90">
+                <LogOut className="h-4 w-4 mr-2" />
+                Esci
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
