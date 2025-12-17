@@ -81,6 +81,14 @@ async function readServiceAccountFromEnv(): Promise<ServiceAccountJson> {
   return json;
 }
 
+export async function getDriveServiceAccountIdentity(): Promise<{
+  clientEmail: string;
+  projectId: string;
+}> {
+  const sa = await readServiceAccountFromEnv();
+  return { clientEmail: sa.client_email, projectId: sa.project_id };
+}
+
 async function getDriveAccessToken(): Promise<string> {
   const sa = await readServiceAccountFromEnv();
 

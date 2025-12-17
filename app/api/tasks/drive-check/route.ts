@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { verifyDriveServiceAccountAccess } from "@/lib/google-drive";
+import { getDriveServiceAccountIdentity, verifyDriveServiceAccountAccess } from "@/lib/google-drive";
 
 export const dynamic = "force-dynamic";
 
@@ -21,13 +21,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing GOOGLE_DRIVE_FOLDER_ID" }, { status: 500 });
   }
 
+  const identity = await getDriveServiceAccountIdentity().catch((e) => ({
+    clientEmail: "unknown",
+    projectId: "unknown",
+    error: e instanceof Error ? e.message : String(e),
+  }));
+
   const result = await verifyDriveServiceAccountAccess({ folderId });
   if (!result.ok) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 502 });
+    return NextResponse.json(
+      { ok: false, folderId, identity, error: result.error },
+      { status: 502 }
+    );
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, folderId, identity });
 }
+
 
 
 
