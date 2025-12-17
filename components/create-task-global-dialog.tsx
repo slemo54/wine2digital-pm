@@ -11,22 +11,27 @@ import { toast } from "react-hot-toast";
 
 type ProjectLite = { id: string; name: string };
 type ProjectMemberLite = { user: { id: string; firstName?: string | null; lastName?: string | null; name?: string | null; email: string } };
+type TaskListLite = { id: string; name: string };
 
 export function CreateTaskGlobalDialog(props: {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
   defaultProjectId?: string;
+  defaultListId?: string;
 }) {
-  const { open, onClose, onSuccess, defaultProjectId } = props;
+  const { open, onClose, onSuccess, defaultProjectId, defaultListId } = props;
   const [loading, setLoading] = useState(false);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [loadingLists, setLoadingLists] = useState(false);
 
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [members, setMembers] = useState<ProjectMemberLite[]>([]);
+  const [lists, setLists] = useState<TaskListLite[]>([]);
 
   const [projectId, setProjectId] = useState<string>(defaultProjectId || "");
+  const [listId, setListId] = useState<string>(defaultListId || "");
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -41,7 +46,8 @@ export function CreateTaskGlobalDialog(props: {
   useEffect(() => {
     if (!open) return;
     setProjectId(defaultProjectId || "");
-  }, [open, defaultProjectId]);
+    setListId(defaultListId || "");
+  }, [open, defaultProjectId, defaultListId]);
 
   useEffect(() => {
     if (!open) return;
@@ -70,6 +76,7 @@ export function CreateTaskGlobalDialog(props: {
     if (!open) return;
     if (!projectId) {
       setMembers([]);
+      setLists([]);
       return;
     }
     let cancelled = false;
@@ -92,6 +99,38 @@ export function CreateTaskGlobalDialog(props: {
     };
   }, [open, projectId]);
 
+  useEffect(() => {
+    if (!open) return;
+    if (!projectId) return;
+    let cancelled = false;
+    setLoadingLists(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}/lists`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          if (!cancelled) setLists([]);
+          return;
+        }
+        const l = Array.isArray(data?.lists) ? (data.lists as any[]) : [];
+        const mapped = l.map((x) => ({ id: String(x.id), name: String(x.name) })).filter((x) => x.id && x.name);
+        if (!cancelled) setLists(mapped);
+        if (!cancelled && mapped.length > 0) {
+          // if defaultListId not provided, pick first list
+          if (!listId) setListId(mapped[0].id);
+        }
+      } catch {
+        if (!cancelled) setLists([]);
+      } finally {
+        if (!cancelled) setLoadingLists(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, projectId]);
+
   const displayUser = (m: ProjectMemberLite) => {
     const u = m.user;
     const name = (u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim()).trim();
@@ -105,6 +144,7 @@ export function CreateTaskGlobalDialog(props: {
     try {
       const payload = {
         projectId,
+        listId: listId || undefined,
         title: formData.title.trim(),
         description: formData.description.trim(),
         priority: formData.priority,
@@ -191,6 +231,27 @@ export function CreateTaskGlobalDialog(props: {
                 placeholder="Breve descrizione…"
                 disabled={loading}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select value={listId} onValueChange={setListId} disabled={loading || !projectId || loadingLists || lists.length === 0}>
+                <SelectTrigger>
+                  <SelectValue placeholder={!projectId ? "Seleziona prima un progetto" : loadingLists ? "Caricamento..." : lists.length === 0 ? "Nessuna categoria" : "Seleziona"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {lists.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {projectId && !loadingLists && lists.length === 0 ? (
+                <div className="text-xs text-muted-foreground">
+                  Nessuna categoria disponibile (applica migrazioni o crea una categoria nel progetto).
+                </div>
+              ) : null}
             </div>
 
             <div className="grid grid-cols-2 gap-4">

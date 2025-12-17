@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ArrowLeft, Calendar, Users, Loader2, Settings, LogOut, Briefcase } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { toast } from "react-hot-toast";
-import { KanbanBoard } from "@/components/kanban/kanban-board";
+import { ProjectTaskLists } from "@/components/project-task-lists";
 import { ProjectChat } from "@/components/project-chat";
 import { ProjectFiles } from "@/components/project-files";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -172,22 +172,17 @@ export default function ProjectPage() {
         </Card>
 
         {/* Project Tabs */}
-        <Tabs defaultValue={tabFromHash === "files" ? "files" : "kanban"} className="space-y-4">
+        <Tabs defaultValue={tabFromHash === "files" ? "files" : "tasks"} className="space-y-4">
           <TabsList className="grid w-full grid-cols-4 lg:w-[520px]">
-            <TabsTrigger value="kanban">Tasks</TabsTrigger>
+            <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
             <TabsTrigger value="wiki">Wiki</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="kanban" className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900">Task Board</h2>
-            <KanbanBoard
-              tasks={project?.tasks || []}
-              onTaskUpdate={fetchProject}
-              projectId={project?.id}
-              members={project?.members || []}
-            />
+          <TabsContent value="tasks" className="space-y-4">
+            <h2 className="text-2xl font-bold text-gray-900">Tasks</h2>
+            <ProjectTaskLists projectId={project?.id} />
           </TabsContent>
           
           <TabsContent value="chat">
