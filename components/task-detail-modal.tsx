@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,7 +28,8 @@ import {
   Upload,
   Users,
   Hash,
-  Clock
+  Clock,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -38,6 +40,7 @@ import { formatTaskActivityEvent } from "@/lib/task-activity-format";
 interface Subtask {
   id: string;
   title: string;
+  description?: string | null;
   completed: boolean;
   position: number;
 }
@@ -58,6 +61,25 @@ interface Attachment {
   fileName: string;
   fileSize: number;
   filePath: string;
+  createdAt: string;
+}
+
+interface SubtaskAttachment {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  filePath: string;
+  createdAt: string;
+}
+
+interface SubtaskComment {
+  id: string;
+  content: string;
+  user: {
+    name: string | null;
+    email: string;
+    image: string | null;
+  };
   createdAt: string;
 }
 
@@ -85,12 +107,26 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   const [newComment, setNewComment] = useState("");
   const [uploading, setUploading] = useState(false);
   const [projectLists, setProjectLists] = useState<Array<{ id: string; name: string }>>([]);
+  const [subtaskDetailOpen, setSubtaskDetailOpen] = useState(false);
+  const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null);
+  const [subtaskAttachments, setSubtaskAttachments] = useState<SubtaskAttachment[]>([]);
+  const [subtaskComments, setSubtaskComments] = useState<SubtaskComment[]>([]);
+  const [subtaskUploading, setSubtaskUploading] = useState(false);
+  const [subtaskDraftDescription, setSubtaskDraftDescription] = useState("");
+  const [subtaskNewComment, setSubtaskNewComment] = useState("");
 
   useEffect(() => {
     if (open && taskId) {
       fetchTaskDetails();
     }
   }, [open, taskId]);
+
+  useEffect(() => {
+    if (!subtaskDetailOpen || !selectedSubtask) return;
+    setSubtaskDraftDescription(selectedSubtask.description || "");
+    void fetchSubtaskDetails(selectedSubtask.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtaskDetailOpen, selectedSubtask?.id]);
 
   const fetchTaskDetails = async () => {
     setLoading(true);
@@ -239,6 +275,82 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
       toast.error("Errore durante il caricamento del file");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const fetchSubtaskDetails = async (subtaskId: string) => {
+    try {
+      const [aRes, cRes] = await Promise.all([
+        fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}/attachments`, { cache: "no-store" }),
+        fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}/comments`, { cache: "no-store" }),
+      ]);
+      const [aData, cData] = await Promise.all([aRes.json(), cRes.json()]);
+      setSubtaskAttachments(Array.isArray(aData) ? aData : []);
+      setSubtaskComments(Array.isArray(cData) ? cData : []);
+    } catch {
+      setSubtaskAttachments([]);
+      setSubtaskComments([]);
+    }
+  };
+
+  const saveSubtaskDescription = async () => {
+    if (!selectedSubtask) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: subtaskDraftDescription }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Salvataggio fallito");
+      }
+      toast.success("Descrizione subtask salvata");
+      setSelectedSubtask((prev) => (prev ? { ...prev, description: subtaskDraftDescription } : prev));
+      setSubtasks((prev) => prev.map((s) => (s.id === selectedSubtask.id ? { ...s, description: subtaskDraftDescription } : s)));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Salvataggio fallito");
+    }
+  };
+
+  const uploadSubtaskAttachment = async (file: File) => {
+    if (!selectedSubtask) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    setSubtaskUploading(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/attachments`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Upload fallito");
+      setSubtaskAttachments((prev) => [data, ...prev]);
+      toast.success("File caricato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload fallito");
+    } finally {
+      setSubtaskUploading(false);
+    }
+  };
+
+  const addSubtaskComment = async () => {
+    if (!selectedSubtask) return;
+    const content = subtaskNewComment.trim();
+    if (!content) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Commento fallito");
+      setSubtaskComments((prev) => [...prev, data]);
+      setSubtaskNewComment("");
+      toast.success("Commento aggiunto");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Commento fallito");
     }
   };
 
@@ -424,15 +536,25 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
 
                     <div className="space-y-2">
                       {subtasks.map((subtask) => (
-                        <div key={subtask.id} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50">
-                          <Checkbox
-                            checked={subtask.completed}
-                            onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
-                          />
+                        <button
+                          key={subtask.id}
+                          type="button"
+                          className="w-full flex items-center gap-2 p-2 rounded hover:bg-gray-50"
+                          onClick={() => {
+                            setSelectedSubtask(subtask);
+                            setSubtaskDetailOpen(true);
+                          }}
+                        >
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={subtask.completed}
+                              onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
+                            />
+                          </div>
                           <span className={subtask.completed ? "line-through text-gray-500" : ""}>
                             {subtask.title}
                           </span>
-                        </div>
+                        </button>
                       ))}
 
                       <div className="flex items-center gap-2 mt-2">
@@ -773,6 +895,106 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
           </div>
         </div>
       </SheetContent>
+
+      <Dialog open={subtaskDetailOpen} onOpenChange={setSubtaskDetailOpen}>
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>Subtask</DialogTitle>
+          </DialogHeader>
+
+          {selectedSubtask ? (
+            <div className="space-y-4">
+              <div className="text-lg font-semibold">{selectedSubtask.title}</div>
+
+              <div className="space-y-2">
+                <Label>Descrizione</Label>
+                <Textarea
+                  value={subtaskDraftDescription}
+                  onChange={(e) => setSubtaskDraftDescription(e.target.value)}
+                  placeholder="Aggiungi una descrizione..."
+                />
+                <div className="flex justify-end">
+                  <Button variant="outline" onClick={saveSubtaskDescription}>
+                    Salva descrizione
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">Allegati</div>
+                  <label className="inline-flex items-center gap-2">
+                    <Input
+                      type="file"
+                      disabled={subtaskUploading}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadSubtaskAttachment(f);
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                </div>
+                {subtaskUploading ? (
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Upload…
+                  </div>
+                ) : null}
+                {subtaskAttachments.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Nessun allegato.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {subtaskAttachments.map((a) => (
+                      <a
+                        key={a.id}
+                        href={a.filePath}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block border rounded-lg p-2 hover:bg-muted/30"
+                      >
+                        <div className="text-sm font-medium">{a.fileName}</div>
+                        <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="font-semibold">Commenti</div>
+                {subtaskComments.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Nessun commento.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {subtaskComments.map((c) => (
+                      <div key={c.id} className="border rounded-lg p-3">
+                        <div className="text-xs text-muted-foreground">
+                          {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
+                        </div>
+                        <div className="text-sm mt-1 whitespace-pre-wrap">{c.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    value={subtaskNewComment}
+                    onChange={(e) => setSubtaskNewComment(e.target.value)}
+                    placeholder="Scrivi un commento…"
+                  />
+                  <Button onClick={addSubtaskComment} disabled={!subtaskNewComment.trim()}>
+                    Invia
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

@@ -31,13 +31,16 @@ export async function PUT(
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const { completed, title } = await request.json();
+    const { completed, title, description } = await request.json();
 
     const subtask = await prisma.subtask.update({
       where: { id: params.subtaskId },
       data: {
         ...(typeof completed === "boolean" && { completed }),
         ...(title && { title }),
+        ...(typeof description === "string" || description === null
+          ? { description: description === null ? null : String(description) }
+          : {}),
       },
     });
 
@@ -50,6 +53,7 @@ export async function PUT(
           subtaskId: subtask.id,
           ...(typeof completed === "boolean" ? { completed } : {}),
           ...(title ? { title } : {}),
+          ...(typeof description === "string" || description === null ? { descriptionUpdated: true } : {}),
         },
       },
     });
