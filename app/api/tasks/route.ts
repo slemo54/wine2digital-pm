@@ -5,6 +5,13 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+const DEFAULT_LIST_NAME = "Untitled list";
+
+function isMissingTableError(err: unknown, table: string): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes(table) && msg.toLowerCase().includes("does not exist");
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -83,6 +90,7 @@ export async function GET(req: NextRequest) {
         take: pageSize,
         include: {
           project: { select: { id: true, name: true } },
+          taskList: { select: { id: true, name: true } },
           assignees: {
             include: {
               user: {
@@ -120,7 +128,7 @@ export async function POST(req: NextRequest) {
     const role = ((session.user as any).role as string | undefined) || 'member';
 
     const body = await req.json();
-    const { title, description, projectId, priority, dueDate, assigneeIds, status } = body;
+    const { title, description, projectId, priority, dueDate, assigneeIds, status, listId } = body;
 
     if (!title || !projectId) {
       return NextResponse.json(
@@ -139,6 +147,37 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Resolve listId (best-effort; keep app functional even if migration not applied yet)
+    let resolvedListId: string | null = null;
+    if (typeof listId === "string" && listId.trim()) {
+      try {
+        const list = await prisma.taskList.findFirst({
+          where: { id: String(listId), projectId },
+          select: { id: true },
+        });
+        if (!list) {
+          return NextResponse.json({ error: "Invalid listId for project" }, { status: 400 });
+        }
+        resolvedListId = list.id;
+      } catch (e) {
+        if (!isMissingTableError(e, "TaskList")) throw e;
+        resolvedListId = null;
+      }
+    } else {
+      try {
+        const defaultList = await prisma.taskList.upsert({
+          where: { projectId_name: { projectId, name: DEFAULT_LIST_NAME } },
+          create: { projectId, name: DEFAULT_LIST_NAME },
+          update: {},
+          select: { id: true },
+        });
+        resolvedListId = defaultList.id;
+      } catch (e) {
+        if (!isMissingTableError(e, "TaskList")) throw e;
+        resolvedListId = null;
+      }
+    }
+
     const task = await prisma.task.create({
       data: {
         title,
@@ -147,6 +186,7 @@ export async function POST(req: NextRequest) {
         priority: priority || 'medium',
         status: status || 'todo',
         dueDate: dueDate ? new Date(dueDate) : null,
+        ...(resolvedListId ? { listId: resolvedListId } : {}),
         assignees: assigneeIds && Array.isArray(assigneeIds) && assigneeIds.length > 0
           ? {
               create: assigneeIds.map((userId: string) => ({
@@ -156,6 +196,7 @@ export async function POST(req: NextRequest) {
           : undefined,
       },
       include: {
+        taskList: { select: { id: true, name: true } },
         assignees: {
           include: {
             user: {

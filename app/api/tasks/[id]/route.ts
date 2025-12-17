@@ -3,6 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 
+const DEFAULT_LIST_NAME = "Untitled list";
+
+function isMissingTableError(err: unknown, table: string): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.includes(table) && msg.toLowerCase().includes("does not exist");
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -58,6 +65,7 @@ export async function GET(
             },
           },
         },
+        taskList: { select: { id: true, name: true } },
         _count: { select: { comments: true, attachments: true, subtasks: true } },
       },
     });
@@ -131,6 +139,7 @@ export async function PUT(
       tags,
       storyPoints,
       list,
+      listId,
       assigneeIds,
     } = body || {};
 
@@ -154,6 +163,46 @@ export async function PUT(
     const normalizedTags =
       Array.isArray(tags) ? JSON.stringify(tags.map(String)) : typeof tags === "string" ? tags : undefined;
 
+    // Resolve listId (admin/manager only). Best-effort: if TaskList table missing, ignore.
+    let resolvedListId: string | null | undefined = undefined;
+    if (typeof listId === "string" || listId === null) {
+      if (role !== "admin" && role !== "manager") {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+      }
+      if (listId === null) {
+        // move to default list if possible; otherwise null
+        try {
+          const defaultList = await prisma.taskList.upsert({
+            where: { projectId_name: { projectId: existing.projectId, name: DEFAULT_LIST_NAME } },
+            create: { projectId: existing.projectId, name: DEFAULT_LIST_NAME },
+            update: {},
+            select: { id: true },
+          });
+          resolvedListId = defaultList.id;
+        } catch (e) {
+          if (!isMissingTableError(e, "TaskList")) throw e;
+          resolvedListId = null;
+        }
+      } else {
+        const candidate = String(listId).trim();
+        if (!candidate) {
+          resolvedListId = null;
+        } else {
+          try {
+            const found = await prisma.taskList.findFirst({
+              where: { id: candidate, projectId: existing.projectId },
+              select: { id: true },
+            });
+            if (!found) return NextResponse.json({ error: "Invalid listId for project" }, { status: 400 });
+            resolvedListId = found.id;
+          } catch (e) {
+            if (!isMissingTableError(e, "TaskList")) throw e;
+            resolvedListId = null;
+          }
+        }
+      }
+    }
+
     const updated = await prisma.task.update({
       where: { id: params.id },
       data: {
@@ -162,6 +211,7 @@ export async function PUT(
         ...(typeof title === "string" ? { title } : {}),
         ...(typeof description === "string" ? { description } : {}),
         ...(typeof list === "string" ? { list } : {}),
+        ...(resolvedListId !== undefined ? { listId: resolvedListId } : {}),
         ...(typeof storyPoints === "number" ? { storyPoints } : {}),
         ...(typeof dueDate === "string" || dueDate === null
           ? { dueDate: dueDate ? new Date(dueDate) : null }
@@ -180,6 +230,7 @@ export async function PUT(
       },
       include: {
         project: { select: { id: true, name: true } },
+        taskList: { select: { id: true, name: true } },
         assignees: {
           include: {
             user: {
@@ -219,6 +270,9 @@ export async function PUT(
     }
     if (typeof list === "string" && list !== existing.list) {
       changes.push({ type: "task.list_changed", metadata: { from: existing.list, to: list } });
+    }
+    if (resolvedListId !== undefined && resolvedListId !== existing.listId) {
+      changes.push({ type: "task.list_changed", metadata: { fromListId: existing.listId || null, toListId: resolvedListId } });
     }
     if (typeof storyPoints === "number" && storyPoints !== existing.storyPoints) {
       changes.push({ type: "task.story_points_changed", metadata: { from: existing.storyPoints, to: storyPoints } });
