@@ -54,7 +54,18 @@ async function readServiceAccountFromEnv(): Promise<ServiceAccountJson> {
   } else if (jsonBase64 && jsonBase64.trim()) {
     raw = Buffer.from(jsonBase64, "base64").toString("utf8");
   } else if (keyPath && keyPath.trim()) {
-    raw = await readFile(keyPath, "utf8");
+    try {
+      raw = await readFile(keyPath, "utf8");
+    } catch (e: any) {
+      const code = String(e?.code || "");
+      if (code === "ENOENT" || code === "EACCES") {
+        throw new Error(
+          `Drive service account key file not readable at GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_PATH. ` +
+            `On Vercel, prefer GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_BASE64 (or GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON) instead.`
+        );
+      }
+      throw e;
+    }
   }
 
   if (!raw) {

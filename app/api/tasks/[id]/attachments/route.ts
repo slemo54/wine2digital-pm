@@ -89,12 +89,22 @@ export async function POST(
     }
 
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const uploaded = await uploadFileToDrive({
-      folderId,
-      fileName,
-      mimeType: mimeType || "application/octet-stream",
-      bytes,
-    });
+    let uploaded: { id: string; webViewLink?: string; webContentLink?: string };
+    try {
+      uploaded = await uploadFileToDrive({
+        folderId,
+        fileName,
+        mimeType: mimeType || "application/octet-stream",
+        bytes,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Most common: service account creds misconfigured on Vercel (KEY_PATH points to a local file)
+      if (msg.toLowerCase().includes("service account") || msg.toLowerCase().includes("drive")) {
+        return NextResponse.json({ error: msg }, { status: 502 });
+      }
+      throw e;
+    }
 
     const filePath = uploaded.webViewLink || uploaded.webContentLink || `gdrive:${uploaded.id}`;
 
