@@ -87,7 +87,8 @@ async function getDriveAccessToken(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const payload = {
     iss: sa.client_email,
-    scope: "https://www.googleapis.com/auth/drive.file",
+    // drive.file limits access to files created/opened by the app; for a shared target folder we need broader scope
+    scope: "https://www.googleapis.com/auth/drive",
     aud: sa.token_uri,
     iat: now,
     exp: now + 60 * 60,
