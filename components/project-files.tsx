@@ -68,10 +68,13 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
         toast.success("File uploaded successfully");
         fetchFiles();
       } else {
-        throw new Error();
+        const data = await response.json().catch(() => ({}));
+        const message = String((data as any)?.error || "Failed to upload file");
+        throw new Error(message);
       }
     } catch (error) {
-      toast.error("Failed to upload file");
+      const message = error instanceof Error ? error.message : "Failed to upload file";
+      toast.error(message);
     } finally {
       setIsUploading(false);
       e.target.value = "";

@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
-import { writeFile, mkdir } from 'fs/promises';
-import path from 'path';
+import { uploadFileToDrive } from "@/lib/google-drive";
 
 export const dynamic = 'force-dynamic';
 
@@ -96,16 +95,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create uploads directory if it doesn't exist
-    const uploadsDir = path.join(process.cwd(), 'uploads', projectId);
-    await mkdir(uploadsDir, { recursive: true });
+    const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+    if (!folderId) {
+      return NextResponse.json({ error: "Missing GOOGLE_DRIVE_FOLDER_ID" }, { status: 500 });
+    }
 
-    // Save file
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = path.join(uploadsDir, fileName);
-    await writeFile(filePath, buffer);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let uploaded: { id: string; webViewLink?: string; webContentLink?: string };
+    try {
+      uploaded = await uploadFileToDrive({
+        folderId,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        bytes,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return NextResponse.json({ error: msg }, { status: 502 });
+    }
+
+    const storedPath =
+      uploaded.webViewLink || uploaded.webContentLink || `gdrive:${uploaded.id}`;
 
     // Save to database
     const fileRecord = await prisma.fileUpload.create({
@@ -115,7 +125,7 @@ export async function POST(req: NextRequest) {
         fileName: file.name,
         fileSize: file.size,
         mimeType: file.type,
-        filePath: `/uploads/${projectId}/${fileName}`,
+        filePath: storedPath,
       },
       include: {
         uploader: {

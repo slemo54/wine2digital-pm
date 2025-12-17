@@ -187,4 +187,22 @@ export async function uploadFileToDrive(args: {
   return data;
 }
 
+export async function deleteDriveFile(args: { fileId: string }): Promise<void> {
+  const token = await getDriveAccessToken();
+  const url =
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(args.fileId) +
+    "?supportsAllDrives=true";
+
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || "Drive delete failed");
+  }
+}
+
 
