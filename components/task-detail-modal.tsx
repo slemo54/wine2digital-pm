@@ -84,6 +84,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   const [newSubtask, setNewSubtask] = useState("");
   const [newComment, setNewComment] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [projectLists, setProjectLists] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     if (open && taskId) {
@@ -94,20 +95,22 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   const fetchTaskDetails = async () => {
     setLoading(true);
     try {
-      const [taskRes, subtasksRes, commentsRes, attachmentsRes, activityRes] = await Promise.all([
+      const [taskRes, subtasksRes, commentsRes, attachmentsRes, activityRes, listsRes] = await Promise.all([
         fetch(`/api/tasks/${taskId}`),
         fetch(`/api/tasks/${taskId}/subtasks`),
         fetch(`/api/tasks/${taskId}/comments`),
         fetch(`/api/tasks/${taskId}/attachments`),
         fetch(`/api/tasks/${taskId}/activity`),
+        fetch(`/api/projects/${projectId}/lists`, { cache: "no-store" }),
       ]);
 
-      const [taskData, subtasksData, commentsData, attachmentsData, activityData] = await Promise.all([
+      const [taskData, subtasksData, commentsData, attachmentsData, activityData, listsData] = await Promise.all([
         taskRes.json(),
         subtasksRes.json(),
         commentsRes.json(),
         attachmentsRes.json(),
         activityRes.json(),
+        listsRes.json().catch(() => ({})),
       ]);
 
       setTask(taskData);
@@ -115,6 +118,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
       setComments(commentsData);
       setAttachments(attachmentsData);
       setActivityEvents(Array.isArray(activityData?.events) ? activityData.events : []);
+      if (listsRes.ok && Array.isArray((listsData as any)?.lists)) {
+        setProjectLists((listsData as any).lists.map((l: any) => ({ id: String(l.id), name: String(l.name) })));
+      } else {
+        setProjectLists([]);
+      }
     } catch (error) {
       console.error("Failed to fetch task details:", error);
       toast.error("Errore durante il caricamento del task");
@@ -299,12 +307,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                       {task.status === "in_progress" && "In Corso"}
                       {task.status === "done" && "Completato"}
                     </Badge>
-                    {task.list && (
+                    {task.taskList?.name || task.list ? (
                       <Badge variant="outline" className="flex items-center gap-1">
                         <List className="w-3 h-3" />
-                        {task.list}
+                        {task.taskList?.name || task.list}
                       </Badge>
-                    )}
+                    ) : null}
                   </div>
                   <div className="text-2xl font-bold pr-10">{task.title}</div>
                   {task.description && (
@@ -621,6 +629,42 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                     </Popover>
                   </div>
                 ) : null}
+              </div>
+
+              {/* Category */}
+              <div>
+                <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1 mb-2">
+                  <List className="w-3 h-3" />
+                  Categoria
+                </Label>
+                <div className="space-y-2">
+                  {task.taskList?.name || task.list ? (
+                    <Badge variant="outline" className="text-sm">
+                      {task.taskList?.name || task.list}
+                    </Badge>
+                  ) : (
+                    <p className="text-sm text-gray-500">Nessuna categoria</p>
+                  )}
+
+                  {canEditMeta ? (
+                    <Select
+                      value={task.listId || ""}
+                      onValueChange={(v) => updateTaskMeta({ listId: v || null })}
+                      disabled={isSavingMeta || projectLists.length === 0}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder={projectLists.length === 0 ? "Categorie non disponibili" : "Seleziona"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {projectLists.map((l) => (
+                          <SelectItem key={l.id} value={l.id}>
+                            {l.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                </div>
               </div>
 
               {/* Due Date */}
