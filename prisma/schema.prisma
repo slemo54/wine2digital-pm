@@ -28,6 +28,7 @@ model User {
   projectMembers    ProjectMember[]
   assignedTasks     TaskAssignee[]
   taskComments      TaskComment[]
+  subtaskComments   SubtaskComment[]
   absences          Absence[]
   messages          Message[]
   uploadedFiles     FileUpload[]     @relation("FileUploader")
@@ -81,6 +82,21 @@ model Project {
   files         FileUpload[]
   invites       ProjectInvite[]
   wikiPages     WikiPage[]
+  taskLists     TaskList[]
+}
+
+model TaskList {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+
+  @@unique([projectId, name])
+  @@index([projectId, updatedAt])
 }
 
 model WikiPage {
@@ -142,6 +158,7 @@ model Task {
   dueDate       DateTime?
   position      Int       @default(0)
   projectId     String
+  listId        String?
   storyPoints   Int?      // Story points for agile estimation
   tags          String?   // JSON string array of tags
   list          String?   // Category/list name (e.g., "MEDIA PARTNERS")
@@ -150,6 +167,7 @@ model Task {
   
   // Relations
   project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskList      TaskList?       @relation(fields: [listId], references: [id], onDelete: SetNull)
   assignees     TaskAssignee[]
   subtasks      Subtask[]
   comments      TaskComment[]
@@ -200,6 +218,37 @@ model Subtask {
   
   // Relations
   task          Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  comments      SubtaskComment[]
+  attachments   SubtaskAttachment[]
+}
+
+model SubtaskComment {
+  id        String   @id @default(cuid())
+  subtaskId String
+  userId    String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subtask   Subtask  @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([subtaskId, createdAt])
+}
+
+model SubtaskAttachment {
+  id         String   @id @default(cuid())
+  subtaskId  String
+  fileName   String
+  fileSize   Int
+  mimeType   String
+  filePath   String
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  subtask    Subtask  @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+
+  @@index([subtaskId, createdAt])
 }
 
 // Task Comments
