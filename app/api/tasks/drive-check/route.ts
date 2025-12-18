@@ -35,9 +35,5 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, folderId, identity });
+  return NextResponse.json({ ok: true, folderId, identity, metadata: result.metadata });
 }
-
-
-
-

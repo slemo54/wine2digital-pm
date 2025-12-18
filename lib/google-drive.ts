@@ -20,6 +20,13 @@ type DriveUploadResult = {
   webContentLink?: string;
 };
 
+export type GoogleDriveFolderMetadata = {
+  id: string;
+  name: string;
+  driveId?: string;
+  capabilities?: { canAddChildren: boolean };
+};
+
 function base64UrlEncode(input: Buffer | string): string {
   const buf = typeof input === "string" ? Buffer.from(input, "utf8") : input;
   return buf
@@ -121,7 +128,7 @@ async function getDriveAccessToken(): Promise<string> {
 
 export async function verifyDriveServiceAccountAccess(args: {
   folderId: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+}): Promise<{ ok: true; metadata: GoogleDriveFolderMetadata } | { ok: false; error: string }> {
   try {
     const token = await getDriveAccessToken();
     const url =
@@ -137,7 +144,8 @@ export async function verifyDriveServiceAccountAccess(args: {
       const text = await res.text();
       return { ok: false, error: text };
     }
-    return { ok: true };
+    const data = (await res.json()) as GoogleDriveFolderMetadata;
+    return { ok: true, metadata: data };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
@@ -213,5 +221,3 @@ export async function deleteDriveFile(args: { fileId: string }): Promise<void> {
     throw new Error(text || "Drive delete failed");
   }
 }
-
-
