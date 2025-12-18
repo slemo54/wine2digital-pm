@@ -51,6 +51,7 @@ export default function CalendarPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newAbsence, setNewAbsence] = useState({
     type: "vacation",
@@ -265,6 +266,20 @@ export default function CalendarPage() {
             <h2 className="text-3xl font-bold text-foreground mb-1">Absence Management</h2>
             <p className="text-muted-foreground">Review and manage team absence requests</p>
           </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === "calendar" ? "default" : "outline"}
+              onClick={() => setViewMode("calendar")}
+            >
+              Calendar view
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "default" : "outline"}
+              onClick={() => setViewMode("list")}
+            >
+              List view
+            </Button>
+          </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button className="bg-primary hover:bg-primary/90">
@@ -386,91 +401,92 @@ export default function CalendarPage() {
           </Card>
         </div>
 
-        {/* Calendar View */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-white lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Calendar</CardTitle>
-              <CardDescription>
-                Days with <span className="font-medium">approved</span> or{" "}
-                <span className="font-medium">pending</span> absences are highlighted.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-center gap-3 mb-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-3 w-3 rounded-sm bg-success/30 border border-success/30" />
-                  <span>Approved</span>
+        {viewMode === "calendar" ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <Card className="bg-white lg:col-span-2">
+              <CardHeader>
+                <CardTitle>Calendar</CardTitle>
+                <CardDescription>
+                  Days with <span className="font-medium">approved</span> or{" "}
+                  <span className="font-medium">pending</span> absences are highlighted.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap items-center gap-3 mb-4 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-3 rounded-sm bg-success/30 border border-success/30" />
+                    <span>Approved</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-3 rounded-sm bg-warning/30 border border-warning/30" />
+                    <span>Pending</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-block h-3 w-3 rounded-sm bg-warning/30 border border-warning/30" />
-                  <span>Pending</span>
-                </div>
-              </div>
 
-              <Calendar
-                mode="single"
-                selected={selectedDay}
-                onSelect={(d) => setSelectedDay(d)}
-                modifiers={{
-                  approved: (date) => approvedDayKeys.has(toDayKey(date)),
-                  pending: (date) => pendingDayKeys.has(toDayKey(date)),
-                }}
-                modifiersClassNames={{
-                  approved: "bg-success/20",
-                  pending: "bg-warning/20",
-                }}
-              />
-            </CardContent>
-          </Card>
+                <Calendar
+                  mode="single"
+                  selected={selectedDay}
+                  onSelect={(d) => setSelectedDay(d)}
+                  modifiers={{
+                    approved: (date) => approvedDayKeys.has(toDayKey(date)),
+                    pending: (date) => pendingDayKeys.has(toDayKey(date)),
+                  }}
+                  modifiersClassNames={{
+                    approved: "bg-success/20",
+                    pending: "bg-warning/20",
+                  }}
+                />
+              </CardContent>
+            </Card>
 
-          <Card className="bg-white">
-            <CardHeader>
-              <CardTitle>
-                {selectedDay ? `Details for ${format(selectedDay, "MMM d, yyyy")}` : "Details"}
-              </CardTitle>
-              <CardDescription>
-                {selectedDay ? `${absencesForSelectedDay.length} absence(s) on this day` : "Select a day"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {selectedDay && absencesForSelectedDay.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No absences on this day.</div>
-              ) : null}
+            <Card className="bg-white">
+              <CardHeader>
+                <CardTitle>
+                  {selectedDay ? `Details for ${format(selectedDay, "MMM d, yyyy")}` : "Details"}
+                </CardTitle>
+                <CardDescription>
+                  {selectedDay ? `${absencesForSelectedDay.length} absence(s) on this day` : "Select a day"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {selectedDay && absencesForSelectedDay.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No absences on this day.</div>
+                ) : null}
 
-              {selectedDay
-                ? absencesForSelectedDay.map((a) => (
-                    <div key={a.id} className="rounded-md border p-3">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-foreground truncate">
-                            {a.user.name || `${a.user.firstName} ${a.user.lastName}`}
+                {selectedDay
+                  ? absencesForSelectedDay.map((a) => (
+                      <div key={a.id} className="rounded-md border p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-foreground truncate">
+                              {a.user.name || `${a.user.firstName} ${a.user.lastName}`}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {getTypeLabel(a.type)} • {formatDate(a.startDate)} → {formatDate(a.endDate)}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {getTypeLabel(a.type)} • {formatDate(a.startDate)} → {formatDate(a.endDate)}
-                          </div>
+                          <Badge
+                            variant={
+                              a.status === "approved"
+                                ? "default"
+                                : a.status === "pending"
+                                  ? "secondary"
+                                  : "destructive"
+                            }
+                          >
+                            {a.status}
+                          </Badge>
                         </div>
-                        <Badge
-                          variant={
-                            a.status === "approved"
-                              ? "default"
-                              : a.status === "pending"
-                                ? "secondary"
-                                : "destructive"
-                          }
-                        >
-                          {a.status}
-                        </Badge>
                       </div>
-                    </div>
-                  ))
-                : null}
-            </CardContent>
-          </Card>
-        </div>
+                    ))
+                  : null}
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
 
         {/* Absence Requests Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className={viewMode === "list" ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : "hidden"}>
           {/* Pending Column */}
           <div>
             <div className="flex items-center gap-2 mb-4">
