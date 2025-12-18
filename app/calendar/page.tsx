@@ -51,7 +51,6 @@ export default function CalendarPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
-  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newAbsence, setNewAbsence] = useState({
     type: "vacation",
@@ -219,15 +218,15 @@ export default function CalendarPage() {
 
   const approvedDayKeys = new Set<string>();
   const pendingDayKeys = new Set<string>();
+  const rejectedDayKeys = new Set<string>();
   for (const absence of absences) {
     const start = new Date(absence.startDate);
     const end = new Date(absence.endDate);
-    // cheap inclusive range: iterate days for the month view highlighting
-    // (absences are short in practice; keeps code simple)
     for (let d = startOfDay(start); !isAfter(d, startOfDay(end)); d = new Date(d.getTime() + 86400000)) {
       const key = toDayKey(d);
       if (absence.status === "approved") approvedDayKeys.add(key);
       if (absence.status === "pending") pendingDayKeys.add(key);
+      if (absence.status === "rejected") rejectedDayKeys.add(key);
     }
   }
 
@@ -265,20 +264,6 @@ export default function CalendarPage() {
           <div>
             <h2 className="text-3xl font-bold text-foreground mb-1">Absence Management</h2>
             <p className="text-muted-foreground">Review and manage team absence requests</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={viewMode === "calendar" ? "default" : "outline"}
-              onClick={() => setViewMode("calendar")}
-            >
-              Calendar view
-            </Button>
-            <Button
-              variant={viewMode === "list" ? "default" : "outline"}
-              onClick={() => setViewMode("list")}
-            >
-              List view
-            </Button>
           </div>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
@@ -357,330 +342,364 @@ export default function CalendarPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <Card className="bg-white border-l-4 border-l-warning">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <Card className="bg-white border-l-4 border-l-warning shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Pending</p>
-                  <p className="text-3xl font-bold text-foreground mt-1">{pendingAbsences.length}</p>
+                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Pending</p>
+                  <p className="text-4xl font-bold text-foreground mt-1">{pendingAbsences.length}</p>
                 </div>
-                <div className="w-12 h-12 rounded-full bg-warning/10 flex items-center justify-center">
-                  <Clock className="h-6 w-6 text-warning" />
+                <div className="w-14 h-14 rounded-full bg-warning/10 flex items-center justify-center">
+                  <Clock className="h-7 w-7 text-warning" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white border-l-4 border-l-success">
+          <Card className="bg-white border-l-4 border-l-success shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Approved</p>
-                  <p className="text-3xl font-bold text-foreground mt-1">{approvedAbsences.length}</p>
+                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Approved</p>
+                  <p className="text-4xl font-bold text-foreground mt-1">{approvedAbsences.length}</p>
                 </div>
-                <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center">
-                  <Check className="h-6 w-6 text-success" />
+                <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center">
+                  <Check className="h-7 w-7 text-success" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="bg-white border-l-4 border-l-destructive">
+          <Card className="bg-white border-l-4 border-l-destructive shadow-sm">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Rejected</p>
-                  <p className="text-3xl font-bold text-foreground mt-1">{rejectedAbsences.length}</p>
+                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Rejected</p>
+                  <p className="text-4xl font-bold text-foreground mt-1">{rejectedAbsences.length}</p>
                 </div>
-                <div className="w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
-                  <X className="h-6 w-6 text-destructive" />
+                <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center">
+                  <X className="h-7 w-7 text-destructive" />
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {viewMode === "calendar" ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <Card className="bg-white lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Calendar</CardTitle>
-                <CardDescription>
-                  Days with <span className="font-medium">approved</span> or{" "}
-                  <span className="font-medium">pending</span> absences are highlighted.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap items-center gap-3 mb-4 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-3 rounded-sm bg-success/30 border border-success/30" />
-                    <span>Approved</span>
+        {/* Calendar and Details View */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+          {/* Calendar Card */}
+          <Card className="bg-white lg:col-span-8 shadow-md border-none overflow-hidden">
+            <CardHeader className="bg-white/50 border-b">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl">Team Calendar</CardTitle>
+                  <CardDescription>
+                    Overview of all absence requests
+                  </CardDescription>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-xs font-medium uppercase tracking-wider">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded-full bg-success shadow-sm shadow-success/20" />
+                    <span className="text-muted-foreground">Approved</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-3 rounded-sm bg-warning/30 border border-warning/30" />
-                    <span>Pending</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded-full bg-warning shadow-sm shadow-warning/20" />
+                    <span className="text-muted-foreground">Pending</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-3 w-3 rounded-full bg-destructive shadow-sm shadow-destructive/20" />
+                    <span className="text-muted-foreground">Rejected</span>
                   </div>
                 </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-8">
+              <Calendar
+                mode="single"
+                selected={selectedDay}
+                onSelect={(d) => setSelectedDay(d)}
+                className="w-full flex justify-center scale-110 origin-center"
+                modifiers={{
+                  approved: (date) => approvedDayKeys.has(toDayKey(date)),
+                  pending: (date) => pendingDayKeys.has(toDayKey(date)),
+                  rejected: (date) => rejectedDayKeys.has(toDayKey(date)),
+                }}
+                modifiersClassNames={{
+                  approved: "bg-success/20 text-success font-bold hover:bg-success/30",
+                  pending: "bg-warning/20 text-warning font-bold hover:bg-warning/30",
+                  rejected: "bg-destructive/20 text-destructive font-bold hover:bg-destructive/30",
+                }}
+              />
+            </CardContent>
+          </Card>
 
-                <Calendar
-                  mode="single"
-                  selected={selectedDay}
-                  onSelect={(d) => setSelectedDay(d)}
-                  modifiers={{
-                    approved: (date) => approvedDayKeys.has(toDayKey(date)),
-                    pending: (date) => pendingDayKeys.has(toDayKey(date)),
-                  }}
-                  modifiersClassNames={{
-                    approved: "bg-success/20",
-                    pending: "bg-warning/20",
-                  }}
-                />
-              </CardContent>
-            </Card>
+          {/* Details Card */}
+          <Card className="bg-white lg:col-span-4 shadow-md border-none flex flex-col">
+            <CardHeader className="bg-white/50 border-b">
+              <CardTitle className="text-xl">
+                {selectedDay ? format(selectedDay, "MMMM d, yyyy") : "Details"}
+              </CardTitle>
+              <CardDescription>
+                {selectedDay ? `${absencesForSelectedDay.length} requests on this day` : "Select a day to view details"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 flex-1 overflow-auto max-h-[500px] space-y-4">
+              {selectedDay && absencesForSelectedDay.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
+                  <CalendarIcon className="h-12 w-14 mb-4 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground italic">No absences scheduled for this date.</p>
+                </div>
+              ) : null}
 
-            <Card className="bg-white">
-              <CardHeader>
-                <CardTitle>
-                  {selectedDay ? `Details for ${format(selectedDay, "MMM d, yyyy")}` : "Details"}
-                </CardTitle>
-                <CardDescription>
-                  {selectedDay ? `${absencesForSelectedDay.length} absence(s) on this day` : "Select a day"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {selectedDay && absencesForSelectedDay.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">No absences on this day.</div>
-                ) : null}
-
-                {selectedDay
-                  ? absencesForSelectedDay.map((a) => (
-                      <div key={a.id} className="rounded-md border p-3">
-                        <div className="flex items-start justify-between gap-2">
+              {selectedDay
+                ? absencesForSelectedDay.map((a) => (
+                    <div key={a.id} className="group relative rounded-xl border p-4 hover:border-primary/30 transition-colors bg-secondary/5 shadow-sm">
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
+                            <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+                              {getInitials(a.user.name || `${a.user.firstName} ${a.user.lastName}`)}
+                            </AvatarFallback>
+                          </Avatar>
                           <div className="min-w-0">
-                            <div className="text-sm font-medium text-foreground truncate">
+                            <div className="text-sm font-semibold text-foreground truncate max-w-[140px]">
                               {a.user.name || `${a.user.firstName} ${a.user.lastName}`}
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              {getTypeLabel(a.type)} • {formatDate(a.startDate)} → {formatDate(a.endDate)}
+                            <div className="text-[10px] text-muted-foreground uppercase tracking-tight">
+                              {getTypeLabel(a.type)}
                             </div>
                           </div>
-                          <Badge
-                            variant={
-                              a.status === "approved"
-                                ? "default"
-                                : a.status === "pending"
-                                  ? "secondary"
-                                  : "destructive"
-                            }
-                          >
-                            {a.status}
+                        </div>
+                        <Badge
+                          className="capitalize text-[10px] px-2 py-0 h-5"
+                          variant={
+                            a.status === "approved"
+                              ? "success"
+                              : a.status === "pending"
+                                ? "warning"
+                                : "destructive"
+                          }
+                        >
+                          {a.status}
+                        </Badge>
+                      </div>
+                      <div className="pl-12 flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>{formatDate(a.startDate)}</span>
+                        <ChevronRight className="h-2 w-2" />
+                        <span>{formatDate(a.endDate)}</span>
+                      </div>
+                    </div>
+                  ))
+                : null}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Requests Management Grid */}
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 mb-2">
+            <h3 className="text-xl font-bold text-foreground">Requests Management</h3>
+            <div className="h-px flex-1 bg-border/60" />
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Pending Column */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-warning shadow-sm shadow-warning/20"></div>
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Pending</h3>
+                </div>
+                <span className="text-xs font-bold bg-warning/10 text-warning px-2 py-0.5 rounded-full">{pendingAbsences.length}</span>
+              </div>
+              <div className="space-y-4">
+                {pendingAbsences.length === 0 ? (
+                  <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
+                    <CardContent className="p-10 text-center text-muted-foreground text-xs font-medium">
+                      No pending requests to review.
+                    </CardContent>
+                  </Card>
+                ) : (
+                  pendingAbsences.map((absence) => (
+                    <Card key={absence.id} className="bg-white hover:shadow-lg transition-all duration-300 border-none shadow-sm">
+                      <CardContent className="p-5">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10 border-2 border-secondary">
+                              <AvatarFallback className="bg-warning/10 text-warning text-xs font-bold">
+                                {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-sm font-bold text-foreground leading-tight">
+                                {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] bg-warning/5 text-warning border-warning/30 font-bold px-2">
+                            {getTypeLabel(absence.type)}
                           </Badge>
                         </div>
-                      </div>
-                    ))
-                  : null}
-              </CardContent>
-            </Card>
-          </div>
-        ) : null}
-
-        {/* Absence Requests Grid */}
-        <div className={viewMode === "list" ? "grid grid-cols-1 lg:grid-cols-3 gap-6" : "hidden"}>
-          {/* Pending Column */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-warning"></div>
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Pending</h3>
-              <span className="text-sm text-muted-foreground">({pendingAbsences.length})</span>
-            </div>
-            <div className="space-y-3">
-              {pendingAbsences.length === 0 ? (
-                <Card className="bg-white border-dashed">
-                  <CardContent className="p-6 text-center text-muted-foreground text-sm">
-                    No pending requests
-                  </CardContent>
-                </Card>
-              ) : (
-                pendingAbsences.map((absence) => (
-                  <Card key={absence.id} className="bg-white hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-accent text-foreground text-xs">
-                              {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{absence.user.email}</p>
+                        
+                        <div className="space-y-3 mb-5 pl-1">
+                          <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                            <CalendarIcon className="h-4 w-4 text-warning/60" />
+                            <span>{formatDate(absence.startDate)}</span>
+                            <ChevronRight className="h-3 w-3 opacity-40" />
+                            <span>{formatDate(absence.endDate)}</span>
                           </div>
+                          {absence.reason && (
+                            <p className="text-xs text-muted-foreground italic bg-secondary/30 p-2.5 rounded-lg border-l-2 border-warning/20">
+                              "{absence.reason}"
+                            </p>
+                          )}
                         </div>
-                        <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning">
-                          {getTypeLabel(absence.type)}
-                        </Badge>
-                      </div>
-                      
-                      <div className="space-y-2 mb-3">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <CalendarIcon className="h-4 w-4" />
-                          <span>{formatDate(absence.startDate)}</span>
-                          <ChevronRight className="h-3 w-3" />
-                          <span>{formatDate(absence.endDate)}</span>
-                        </div>
-                        {absence.reason && (
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {absence.reason}
-                          </p>
-                        )}
-                      </div>
 
-                      {isManagerOrAdmin && (
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1 text-success border-success hover:bg-success hover:text-white"
-                            onClick={() => handleApprove(absence.id)}
-                          >
-                            <Check className="h-4 w-4 mr-1" />
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="flex-1 text-destructive border-destructive hover:bg-destructive hover:text-white"
-                            onClick={() => handleReject(absence.id)}
-                          >
-                            <X className="h-4 w-4 mr-1" />
-                            Reject
-                          </Button>
-                        </div>
-                      )}
+                        {isManagerOrAdmin && (
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              className="flex-1 bg-success hover:bg-success/90 text-white shadow-sm shadow-success/20 font-bold"
+                              onClick={() => handleApprove(absence.id)}
+                            >
+                              <Check className="h-4 w-4 mr-1.5" />
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 text-destructive border-destructive/30 hover:bg-destructive hover:text-white font-bold"
+                              onClick={() => handleReject(absence.id)}
+                            >
+                              <X className="h-4 w-4 mr-1.5" />
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Approved Column */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-success shadow-sm shadow-success/20"></div>
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Approved</h3>
+                </div>
+                <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full">{approvedAbsences.length}</span>
+              </div>
+              <div className="space-y-4 opacity-90">
+                {approvedAbsences.length === 0 ? (
+                  <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
+                    <CardContent className="p-10 text-center text-muted-foreground text-xs font-medium">
+                      No approved requests.
                     </CardContent>
                   </Card>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Approved Column */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-success"></div>
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Approved</h3>
-              <span className="text-sm text-muted-foreground">({approvedAbsences.length})</span>
-            </div>
-            <div className="space-y-3">
-              {approvedAbsences.length === 0 ? (
-                <Card className="bg-white border-dashed">
-                  <CardContent className="p-6 text-center text-muted-foreground text-sm">
-                    No approved requests
-                  </CardContent>
-                </Card>
-              ) : (
-                approvedAbsences.map((absence) => (
-                  <Card key={absence.id} className="bg-white hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-accent text-foreground text-xs">
-                              {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{absence.user.email}</p>
+                ) : (
+                  approvedAbsences.map((absence) => (
+                    <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm group">
+                      <CardContent className="p-5">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarFallback className="bg-success/10 text-success text-xs font-bold">
+                                {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-sm font-bold text-foreground">
+                                {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] bg-success/5 text-success border-success/30 font-bold px-2">
+                            {getTypeLabel(absence.type)}
+                          </Badge>
+                        </div>
+                        
+                        <div className="pl-1">
+                          <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                            <CalendarIcon className="h-4 w-4 text-success/60" />
+                            <span>{formatDate(absence.startDate)}</span>
+                            <ChevronRight className="h-3 w-3 opacity-40" />
+                            <span>{formatDate(absence.endDate)}</span>
                           </div>
                         </div>
-                        <Badge variant="outline" className="text-xs bg-success/10 text-success border-success">
-                          {getTypeLabel(absence.type)}
-                        </Badge>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <CalendarIcon className="h-4 w-4" />
-                          <span>{formatDate(absence.startDate)}</span>
-                          <ChevronRight className="h-3 w-3" />
-                          <span>{formatDate(absence.endDate)}</span>
-                        </div>
-                        {absence.reason && (
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {absence.reason}
-                          </p>
-                        )}
-                      </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Rejected Column */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full bg-destructive shadow-sm shadow-destructive/20"></div>
+                  <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Rejected</h3>
+                </div>
+                <span className="text-xs font-bold bg-destructive/10 text-destructive px-2 py-0.5 rounded-full">{rejectedAbsences.length}</span>
+              </div>
+              <div className="space-y-4 opacity-80">
+                {rejectedAbsences.length === 0 ? (
+                  <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
+                    <CardContent className="p-10 text-center text-muted-foreground text-xs font-medium">
+                      No rejected requests.
                     </CardContent>
                   </Card>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Rejected Column */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-destructive"></div>
-              <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Rejected</h3>
-              <span className="text-sm text-muted-foreground">({rejectedAbsences.length})</span>
-            </div>
-            <div className="space-y-3">
-              {rejectedAbsences.length === 0 ? (
-                <Card className="bg-white border-dashed">
-                  <CardContent className="p-6 text-center text-muted-foreground text-sm">
-                    No rejected requests
-                  </CardContent>
-                </Card>
-              ) : (
-                rejectedAbsences.map((absence) => (
-                  <Card key={absence.id} className="bg-white hover:shadow-md transition-shadow">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="bg-accent text-foreground text-xs">
-                              {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{absence.user.email}</p>
+                ) : (
+                  rejectedAbsences.map((absence) => (
+                    <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm">
+                      <CardContent className="p-5">
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarFallback className="bg-destructive/10 text-destructive text-xs font-bold">
+                                {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="text-sm font-bold text-foreground">
+                                {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] bg-destructive/5 text-destructive border-destructive/30 font-bold px-2">
+                            {getTypeLabel(absence.type)}
+                          </Badge>
+                        </div>
+                        
+                        <div className="pl-1">
+                          <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                            <CalendarIcon className="h-4 w-4 text-destructive/60" />
+                            <span>{formatDate(absence.startDate)}</span>
+                            <ChevronRight className="h-3 w-3 opacity-40" />
+                            <span>{formatDate(absence.endDate)}</span>
                           </div>
                         </div>
-                        <Badge variant="outline" className="text-xs bg-destructive/10 text-destructive border-destructive">
-                          {getTypeLabel(absence.type)}
-                        </Badge>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <CalendarIcon className="h-4 w-4" />
-                          <span>{formatDate(absence.startDate)}</span>
-                          <ChevronRight className="h-3 w-3" />
-                          <span>{formatDate(absence.endDate)}</span>
-                        </div>
-                        {absence.reason && (
-                          <p className="text-xs text-muted-foreground line-clamp-2">
-                            {absence.reason}
-                          </p>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              )}
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
       </div>
     </div>
   );
