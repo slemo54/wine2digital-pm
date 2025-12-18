@@ -43,10 +43,11 @@ interface Absence {
 }
 
 export default function CalendarPage() {
-  const { data: session, status } = useSession() || {};
+  const { data: session, status } = useSession();
   const router = useRouter();
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newAbsence, setNewAbsence] = useState({
     type: "vacation",
@@ -60,7 +61,7 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/auth/login");
+      router.replace("/auth/login");
     }
   }, [status, router]);
 
@@ -73,11 +74,29 @@ export default function CalendarPage() {
   const fetchAbsences = async () => {
     try {
       const response = await fetch("/api/absences");
-      const data = await response.json();
-      if (response.ok) {
-        setAbsences(data.absences || []);
+      if (response.status === 401) {
+        router.replace("/auth/login");
+        return;
       }
+
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch {
+        // ignore
+      }
+
+      if (!response.ok) {
+        const msg = String(data?.error || "Failed to load absences");
+        setLoadError(msg);
+        toast.error(msg);
+        return;
+      }
+
+      setAbsences(data?.absences || []);
+      setLoadError(null);
     } catch (error) {
+      setLoadError("Failed to load absences");
       toast.error("Failed to load absences");
     } finally {
       setIsLoading(false);
@@ -200,6 +219,19 @@ export default function CalendarPage() {
     <div className="min-h-screen bg-secondary">
       {/* Main Content */}
       <div className="max-w-[1400px] mx-auto px-6 py-8">
+        {loadError ? (
+          <Card className="bg-white border-l-4 border-l-destructive mb-6">
+            <CardHeader>
+              <CardTitle>Calendar temporarily unavailable</CardTitle>
+              <CardDescription>{loadError}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex gap-2">
+              <Button variant="outline" onClick={() => fetchAbsences()}>
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null}
         {/* Page Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
