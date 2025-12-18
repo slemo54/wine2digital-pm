@@ -66,10 +66,8 @@ export default function CalendarPage() {
   }, [status, router]);
 
   useEffect(() => {
-    if (status === "authenticated") {
-      fetchAbsences();
-    }
-  }, [status]);
+    fetchAbsences();
+  }, []);
 
   const fetchAbsences = async () => {
     try {
@@ -207,7 +205,7 @@ export default function CalendarPage() {
   const approvedAbsences = absences.filter(a => a.status === "approved");
   const rejectedAbsences = absences.filter(a => a.status === "rejected");
 
-  if (status === "loading" || isLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
