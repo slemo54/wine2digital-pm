@@ -128,7 +128,7 @@ async function getDriveAccessToken(): Promise<string> {
 
 export async function verifyDriveServiceAccountAccess(args: {
   folderId: string;
-}): Promise<{ ok: true; metadata: GoogleDriveFolderMetadata } | { ok: false; error: string }> {
+}): Promise<{ ok: true; metadata: GoogleDriveFolderMetadata } | { ok: false; error: string; isSharedDrive?: boolean }> {
   try {
     const token = await getDriveAccessToken();
     const url =
@@ -145,6 +145,7 @@ export async function verifyDriveServiceAccountAccess(args: {
       return { ok: false, error: text };
     }
     const data = (await res.json()) as GoogleDriveFolderMetadata;
+    const isSharedDrive = !!data.driveId; // If driveId exists, it's in a Shared Drive
     return { ok: true, metadata: data };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -198,7 +199,14 @@ export async function uploadFileToDrive(args: {
 
   const data = (await res.json()) as DriveUploadResult & { error?: any };
   if (!res.ok || !data.id) {
-    const msg = data?.error?.message ? String(data.error.message) : "Drive upload failed";
+    let msg = data?.error?.message ? String(data.error.message) : "Drive upload failed";
+    
+    // Specific error handling for storage quota issues
+    if (msg.includes("storage quota") || msg.includes("Service Accounts do not have storage quota")) {
+      msg = "Service Accounts cannot use personal Drive storage quota. Please use a Shared Drive (Drive condiviso) instead. " +
+            "Create a Shared Drive in Google Workspace, add the service account as a member, and update GOOGLE_DRIVE_FOLDER_ID to point to a folder inside that Shared Drive.";
+    }
+    
     throw new Error(msg);
   }
   return data;

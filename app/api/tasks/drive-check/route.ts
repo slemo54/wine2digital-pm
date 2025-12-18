@@ -35,5 +35,17 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, folderId, identity, metadata: result.metadata });
+  const isSharedDrive = !!result.metadata.driveId;
+  const warning = !isSharedDrive
+    ? "This folder is NOT in a Shared Drive. Service Accounts cannot use personal Drive storage quota. Consider moving to a Shared Drive to avoid upload errors."
+    : null;
+
+  return NextResponse.json({
+    ok: true,
+    folderId,
+    identity,
+    metadata: result.metadata,
+    isSharedDrive,
+    warning,
+  });
 }
