@@ -421,14 +421,16 @@ export default function CalendarPage() {
                 onSelect={(d) => setSelectedDay(d)}
                 className="w-full border rounded-md p-4 shadow-sm"
                 classNames={{
-                  months: "w-full space-y-4",
-                  month: "w-full space-y-4",
-                  table: "w-full border-collapse space-y-1",
-                  head_row: "flex w-full justify-between",
-                  head_cell: "text-muted-foreground rounded-md w-10 font-normal text-[0.8rem] flex-1 text-center",
-                  row: "flex w-full mt-2 justify-between",
-                  cell: "relative h-14 w-14 text-center text-sm p-0 focus-within:relative focus-within:z-20 flex-1 flex justify-center items-center",
-                  day: "h-12 w-12 p-0 font-normal aria-selected:opacity-100 flex items-center justify-center rounded-lg transition-all",
+                  months: "w-full flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 justify-center",
+                  month: "w-full space-y-6",
+                  table: "w-full border-collapse",
+                  head_row: "flex w-full justify-between mb-2",
+                  head_cell: "text-muted-foreground rounded-md w-full font-semibold text-[0.85rem] flex-1 text-center py-2",
+                  row: "flex w-full mt-1 justify-between",
+                  cell: "relative h-16 w-full text-center text-sm p-0 focus-within:relative focus-within:z-20 flex-1 flex justify-center items-center rounded-xl transition-all duration-200",
+                  day: "h-14 w-14 p-0 font-medium aria-selected:opacity-100 flex items-center justify-center rounded-2xl hover:bg-secondary/50 transition-all text-base",
+                  day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                  day_today: "bg-accent text-accent-foreground border-2 border-primary/20",
                 }}
                 modifiers={{
                   approved: (date) => approvedDayKeys.has(toDayKey(date)),
