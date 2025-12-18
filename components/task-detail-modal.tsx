@@ -15,6 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { SideDrawer } from "@/components/side-drawer";
+import { SubtaskChecklists } from "@/components/subtask-checklists";
 import { 
   CheckCircle2, 
   Circle, 
@@ -972,105 +974,124 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
         </div>
       </SheetContent>
 
-      <Dialog open={subtaskDetailOpen} onOpenChange={setSubtaskDetailOpen}>
-        <DialogContent className="sm:max-w-[720px]">
-          <DialogHeader>
-            <DialogTitle>Subtask</DialogTitle>
-          </DialogHeader>
-
-          {selectedSubtask ? (
-            <div className="space-y-4">
-              <div className="text-lg font-semibold">{selectedSubtask.title}</div>
-
-              <div className="space-y-2">
-                <Label>Descrizione</Label>
-                <Textarea
-                  value={subtaskDraftDescription}
-                  onChange={(e) => setSubtaskDraftDescription(e.target.value)}
-                  placeholder="Aggiungi una descrizione..."
-                />
-                <div className="flex justify-end">
-                  <Button variant="outline" onClick={saveSubtaskDescription}>
-                    Salva descrizione
-                  </Button>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold">Allegati</div>
-                  <label className="inline-flex items-center gap-2">
-                    <Input
-                      type="file"
-                      disabled={subtaskUploading}
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) void uploadSubtaskAttachment(f);
-                        e.currentTarget.value = "";
-                      }}
-                    />
-                  </label>
-                </div>
-                {subtaskUploading ? (
-                  <div className="text-sm text-muted-foreground flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Upload…
-                  </div>
-                ) : null}
-                {subtaskAttachments.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">Nessun allegato.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {subtaskAttachments.map((a) => (
-                      <a
-                        key={a.id}
-                        href={a.filePath}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block border rounded-lg p-2 hover:bg-muted/30"
-                      >
-                        <div className="text-sm font-medium">{a.fileName}</div>
-                        <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="font-semibold">Commenti</div>
-                {subtaskComments.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">Nessun commento.</div>
-                ) : (
-                  <div className="space-y-3">
-                    {subtaskComments.map((c) => (
-                      <div key={c.id} className="border rounded-lg p-3">
-                        <div className="text-xs text-muted-foreground">
-                          {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
-                        </div>
-                        <div className="text-sm mt-1 whitespace-pre-wrap">{c.content}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <Input
-                    value={subtaskNewComment}
-                    onChange={(e) => setSubtaskNewComment(e.target.value)}
-                    placeholder="Scrivi un commento…"
-                  />
-                  <Button onClick={addSubtaskComment} disabled={!subtaskNewComment.trim()}>
-                    Invia
-                  </Button>
-                </div>
-              </div>
+      <SideDrawer
+        open={subtaskDetailOpen && Boolean(selectedSubtask)}
+        onOpenChange={(o) => {
+          setSubtaskDetailOpen(o);
+          if (!o) setSelectedSubtask(null);
+        }}
+        overlayClassName="z-[60] bg-black/40"
+        contentClassName="z-[60] w-[95vw] sm:max-w-3xl h-full overflow-hidden p-0"
+      >
+        {selectedSubtask ? (
+          <div className="flex h-full flex-col">
+            <div className="border-b bg-background p-6">
+              <div className="text-lg font-semibold truncate pr-10">{selectedSubtask.title}</div>
+              <div className="text-xs text-muted-foreground mt-1">Subtask</div>
             </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
+
+            <ScrollArea className="flex-1">
+              <div className="p-6 space-y-6">
+                <div className="space-y-2">
+                  <Label>Descrizione</Label>
+                  <Textarea
+                    value={subtaskDraftDescription}
+                    onChange={(e) => setSubtaskDraftDescription(e.target.value)}
+                    placeholder="Aggiungi una descrizione..."
+                  />
+                  <div className="flex justify-end">
+                    <Button variant="outline" onClick={saveSubtaskDescription} disabled={!canEditStatus}>
+                      Salva descrizione
+                    </Button>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <SubtaskChecklists
+                  taskId={taskId}
+                  subtaskId={selectedSubtask.id}
+                  open={subtaskDetailOpen}
+                  disabled={!canEditStatus}
+                />
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold">Allegati</div>
+                    <label className="inline-flex items-center gap-2">
+                      <Input
+                        type="file"
+                        disabled={!canEditStatus || subtaskUploading}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadSubtaskAttachment(f);
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {subtaskUploading ? (
+                    <div className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Upload…
+                    </div>
+                  ) : null}
+                  {subtaskAttachments.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Nessun allegato.</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {subtaskAttachments.map((a) => (
+                        <a
+                          key={a.id}
+                          href={a.filePath}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block border rounded-lg p-2 hover:bg-muted/30"
+                        >
+                          <div className="text-sm font-medium">{a.fileName}</div>
+                          <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <div className="font-semibold">Commenti</div>
+                  {subtaskComments.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Nessun commento.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {subtaskComments.map((c) => (
+                        <div key={c.id} className="border rounded-lg p-3">
+                          <div className="text-xs text-muted-foreground">
+                            {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
+                          </div>
+                          <div className="text-sm mt-1 whitespace-pre-wrap">{c.content}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Input
+                      value={subtaskNewComment}
+                      onChange={(e) => setSubtaskNewComment(e.target.value)}
+                      placeholder="Scrivi un commento…"
+                      disabled={!canEditStatus}
+                    />
+                    <Button onClick={addSubtaskComment} disabled={!canEditStatus || !subtaskNewComment.trim()}>
+                      Invia
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          </div>
+        ) : null}
+      </SideDrawer>
     </Sheet>
   );
 }
