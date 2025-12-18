@@ -23,8 +23,10 @@ export async function PUT(
     if (!access) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
+    const isProjectManager = access.projectRole === "owner" || access.projectRole === "manager";
     const canWrite =
       role === "admin" ||
+      isProjectManager ||
       (role === "manager" && access.isProjectMember) ||
       (role === "member" && access.isAssignee);
     if (!canWrite) {
@@ -87,8 +89,10 @@ export async function DELETE(
     if (!access) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
+    const isProjectManager = access.projectRole === "owner" || access.projectRole === "manager";
     const canWrite =
       role === "admin" ||
+      isProjectManager ||
       (role === "manager" && access.isProjectMember) ||
       (role === "member" && access.isAssignee);
     if (!canWrite) {

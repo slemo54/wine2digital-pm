@@ -5,11 +5,45 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+async function getMe(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return null;
+  const user = session.user as any;
+  const id = String(user.id || '');
+  const role = String(user.role || '');
+  if (!id) return null;
+  return { id, role };
+}
+
+async function getProjectAccess(input: { projectId: string; userId: string }) {
+  const res = await prisma.project.findUnique({
+    where: { id: input.projectId },
+    select: {
+      id: true,
+      creatorId: true,
+      members: { where: { userId: input.userId }, select: { role: true } },
+    },
+  });
+  if (!res) return null;
+  const projectRole = String(res.members?.[0]?.role || '');
+  return { projectId: res.id, creatorId: res.creatorId, projectRole };
+}
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const me = await getMe(req);
+    if (!me) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const access = await getProjectAccess({ projectId: params.id, userId: me.id });
+    if (!access) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    const isProjectMember = Boolean(access.projectRole);
+    const canRead = me.role === 'admin' || access.creatorId === me.id || isProjectMember;
+    if (!canRead) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
     const project = await prisma.project.findUnique({
@@ -73,9 +107,20 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const me = await getMe(req);
+    if (!me) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const access = await getProjectAccess({ projectId: params.id, userId: me.id });
+    if (!access) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    const isProjectOwner = access.projectRole === 'owner';
+    const isProjectManager = access.projectRole === 'manager';
+    const canWrite = me.role === 'admin' || access.creatorId === me.id || isProjectOwner || isProjectManager;
+    if (!canWrite) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
     const body = await req.json();
@@ -125,9 +170,19 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    const me = await getMe(req);
+    if (!me) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const access = await getProjectAccess({ projectId: params.id, userId: me.id });
+    if (!access) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+    const isProjectOwner = access.projectRole === 'owner';
+    const canDelete = me.role === 'admin' || access.creatorId === me.id || isProjectOwner;
+    if (!canDelete) {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
     await prisma.project.delete({

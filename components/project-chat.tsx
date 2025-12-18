@@ -31,34 +31,93 @@ export function ProjectChat({ projectId }: ProjectChatProps) {
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreBefore, setHasMoreBefore] = useState(false);
+  const [oldestCursor, setOldestCursor] = useState<string | null>(null);
+  const lastMessageAtRef = useRef<string | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchMessages();
-    // Auto-refresh every 10 seconds
-    const interval = setInterval(fetchMessages, 10000);
-    return () => clearInterval(interval);
-  }, [projectId]);
+    lastMessageAtRef.current = messages[messages.length - 1]?.createdAt || null;
+  }, [messages]);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+    void fetchInitialMessages();
+    // Auto-refresh every 10 seconds
+    const interval = setInterval(fetchNewMessages, 10000);
+    return () => clearInterval(interval);
+  }, [projectId]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const fetchMessages = async () => {
+  const fetchInitialMessages = async () => {
+    setIsLoading(true);
     try {
-      const response = await fetch(`/api/messages?projectId=${projectId}`);
+      const response = await fetch(`/api/messages?projectId=${projectId}&take=50`);
       const data = await response.json();
       if (response.ok) {
         setMessages(data.messages || []);
+        setHasMoreBefore(Boolean(data?.pageInfo?.hasMoreBefore));
+        setOldestCursor(typeof data?.pageInfo?.oldest === "string" ? data.pageInfo.oldest : null);
+        setTimeout(scrollToBottom, 50);
+      } else {
+        throw new Error(String(data?.error || "Failed to load messages"));
       }
     } catch (error) {
-      // Silent error for auto-refresh
+      toast.error(error instanceof Error ? error.message : "Failed to load messages");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchNewMessages = async () => {
+    const last = lastMessageAtRef.current;
+    if (!last) return;
+    try {
+      const response = await fetch(
+        `/api/messages?projectId=${projectId}&after=${encodeURIComponent(last)}&take=200`
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return;
+      const next = Array.isArray(data?.messages) ? (data.messages as Message[]) : [];
+      if (next.length === 0) return;
+      setMessages((prev) => [...prev, ...next]);
+      setTimeout(scrollToBottom, 50);
+    } catch {
+      // silent for auto-refresh
+    }
+  };
+
+  const loadOlderMessages = async () => {
+    if (!oldestCursor || !hasMoreBefore) return;
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+    const container = messagesContainerRef.current;
+    const prevScrollHeight = container?.scrollHeight || 0;
+    const prevScrollTop = container?.scrollTop || 0;
+    try {
+      const response = await fetch(
+        `/api/messages?projectId=${projectId}&before=${encodeURIComponent(oldestCursor)}&take=50`
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(String(data?.error || "Failed to load older messages"));
+      const older = Array.isArray(data?.messages) ? (data.messages as Message[]) : [];
+      setMessages((prev) => [...older, ...prev]);
+      setHasMoreBefore(Boolean(data?.pageInfo?.hasMoreBefore));
+      setOldestCursor(typeof data?.pageInfo?.oldest === "string" ? data.pageInfo.oldest : oldestCursor);
+      setTimeout(() => {
+        const nextContainer = messagesContainerRef.current;
+        if (!nextContainer) return;
+        const nextScrollHeight = nextContainer.scrollHeight;
+        nextContainer.scrollTop = nextScrollHeight - prevScrollHeight + prevScrollTop;
+      }, 0);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to load older messages");
+    } finally {
+      setIsLoadingMore(false);
     }
   };
 
@@ -79,12 +138,19 @@ export function ProjectChat({ projectId }: ProjectChatProps) {
 
       if (response.ok) {
         setNewMessage("");
-        fetchMessages();
+        if (lastMessageAtRef.current) {
+          await fetchNewMessages();
+          setTimeout(scrollToBottom, 50);
+        } else {
+          await fetchInitialMessages();
+        }
       } else {
-        throw new Error();
+        const data = await response.json().catch(() => ({}));
+        const message = String((data as any)?.error || "Failed to send message");
+        throw new Error(message);
       }
     } catch (error) {
-      toast.error("Failed to send message");
+      toast.error(error instanceof Error ? error.message : "Failed to send message");
     } finally {
       setIsSending(false);
     }
@@ -98,14 +164,14 @@ export function ProjectChat({ projectId }: ProjectChatProps) {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <CardTitle>Project Chat</CardTitle>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => {
             setIsLoading(true);
-            fetchMessages();
+            fetchInitialMessages();
           }}
           disabled={isLoading}
         >
@@ -115,7 +181,14 @@ export function ProjectChat({ projectId }: ProjectChatProps) {
       <CardContent>
         <div className="space-y-4">
           {/* Messages Area */}
-          <div className="h-[400px] overflow-y-auto border rounded-lg p-4 space-y-3 bg-gray-50">
+          <div ref={messagesContainerRef} className="h-[400px] overflow-y-auto border rounded-lg p-4 space-y-3 bg-gray-50">
+            {hasMoreBefore ? (
+              <div className="flex justify-center pb-2">
+                <Button variant="outline" size="sm" onClick={loadOlderMessages} disabled={isLoadingMore}>
+                  {isLoadingMore ? <Loader2 className="h-4 w-4 animate-spin" /> : "Carica messaggi precedenti"}
+                </Button>
+              </div>
+            ) : null}
             {messages.map((message) => {
               const isOwnMessage = message.user.id === currentUserId;
               return (
@@ -152,7 +225,7 @@ export function ProjectChat({ projectId }: ProjectChatProps) {
             })}
             {messages.length === 0 && (
               <div className="flex items-center justify-center h-full text-gray-500">
-                No messages yet. Start the conversation!
+                {isLoading ? "Caricamento…" : "Nessun messaggio. Inizia la conversazione!"}
               </div>
             )}
             <div ref={messagesEndRef} />

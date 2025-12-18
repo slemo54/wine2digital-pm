@@ -50,6 +50,10 @@ export default function TasksPage() {
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
   const [loadingList, setLoadingList] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 100;
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
 
@@ -85,7 +89,7 @@ export default function TasksPage() {
 
     (async () => {
       try {
-        const res = await fetch("/api/projects");
+        const res = await fetch("/api/projects?page=1&limit=200");
         if (!res.ok) return;
         const data = await res.json();
         const list = Array.isArray(data.projects) ? (data.projects as any[]) : [];
@@ -103,7 +107,7 @@ export default function TasksPage() {
     };
   }, [status]);
 
-  const queryString = useMemo(() => {
+  const baseQueryString = useMemo(() => {
     const sp = new URLSearchParams();
     sp.set("scope", filters.scope);
     if (filters.status && filters.status !== "all") sp.set("status", filters.status);
@@ -113,24 +117,37 @@ export default function TasksPage() {
     if (filters.dueTo) sp.set("dueTo", filters.dueTo);
     if (filters.q.trim()) sp.set("q", filters.q.trim());
     if (filters.tag.trim()) sp.set("tag", filters.tag.trim());
-    sp.set("page", "1");
-    sp.set("pageSize", "100");
     return sp.toString();
   }, [filters]);
+
+  const fetchTasksPage = async (opts: { page: number; append: boolean }) => {
+    const sp = new URLSearchParams(baseQueryString);
+    sp.set("page", String(opts.page));
+    sp.set("pageSize", String(pageSize));
+    const res = await fetch(`/api/tasks?${sp.toString()}`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((data as any)?.error || "Failed to load tasks");
+    const list = Array.isArray((data as any)?.tasks) ? ((data as any).tasks as TaskListItem[]) : [];
+    const nextTotal = Number.isFinite((data as any)?.total) ? Number((data as any).total) : list.length;
+    setTotal(nextTotal);
+    setTasks((prev) => (opts.append ? [...prev, ...list] : list));
+    setPage(opts.page);
+  };
 
   useEffect(() => {
     if (status !== "authenticated") return;
     let cancelled = false;
     setLoadingList(true);
+    setPage(1);
 
     const t = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/tasks?${queryString}`);
-        const data = await res.json();
-        const list = Array.isArray(data.tasks) ? (data.tasks as TaskListItem[]) : [];
-        if (!cancelled) setTasks(list);
+        await fetchTasksPage({ page: 1, append: false });
       } catch {
-        if (!cancelled) setTasks([]);
+        if (!cancelled) {
+          setTasks([]);
+          setTotal(0);
+        }
       } finally {
         if (!cancelled) setLoadingList(false);
       }
@@ -140,7 +157,7 @@ export default function TasksPage() {
       cancelled = true;
       clearTimeout(t);
     };
-  }, [status, queryString]);
+  }, [status, baseQueryString]);
 
   if (status === "loading") {
     return (
@@ -193,7 +210,7 @@ export default function TasksPage() {
 
   return (
     <div className="min-h-screen bg-secondary">
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="mb-6">
           <Link href="/dashboard">
             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
@@ -332,76 +349,98 @@ export default function TasksPage() {
                 ) : tasks.length === 0 ? (
                   <div className="p-6 text-sm text-muted-foreground">Nessuna task trovata con i filtri correnti.</div>
                 ) : (
-                  tasks.map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setSelectedTaskId(t.id)}
-                      className="w-full text-left p-4 hover:bg-muted/40 transition-colors"
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="outline" className={getStatusBadge(t.status)}>
-                              {t.status === "todo" && "Da fare"}
-                              {t.status === "in_progress" && "In corso"}
-                              {t.status === "done" && "Done"}
-                              {!["todo", "in_progress", "done"].includes(t.status) && t.status}
-                            </Badge>
-                            <Badge variant="outline" className={getPriorityBadge(t.priority)}>
-                              {t.priority}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">• {t.project?.name}</span>
-                          </div>
-
-                          <div className="mt-1 font-semibold truncate">{t.title}</div>
-                          {t.description ? (
-                            <div className="mt-1 text-sm text-muted-foreground line-clamp-2">{t.description}</div>
-                          ) : null}
-
-                          <div className="mt-3 flex items-center justify-between gap-4">
+                  <>
+                    {tasks.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setSelectedTaskId(t.id)}
+                        className="w-full text-left p-4 hover:bg-muted/40 transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              {t.dueDate ? (
-                                <span className="text-xs text-muted-foreground">
-                                  Scadenza: {new Date(t.dueDate).toLocaleDateString()}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">Senza scadenza</span>
-                              )}
-                              {parseTags(t.tags).slice(0, 4).map((tag) => (
-                                <Badge key={tag} variant="secondary" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
+                              <Badge variant="outline" className={getStatusBadge(t.status)}>
+                                {t.status === "todo" && "Da fare"}
+                                {t.status === "in_progress" && "In corso"}
+                                {t.status === "done" && "Done"}
+                                {!["todo", "in_progress", "done"].includes(t.status) && t.status}
+                              </Badge>
+                              <Badge variant="outline" className={getPriorityBadge(t.priority)}>
+                                {t.priority}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">• {t.project?.name}</span>
                             </div>
 
-                            <div className="flex items-center gap-3 text-muted-foreground">
-                              <div className="flex items-center gap-1 text-xs">
-                                <ListChecks className="h-3.5 w-3.5" />
-                                <span>{t._count?.subtasks ?? 0}</span>
-                              </div>
-                              <div className="flex items-center gap-1 text-xs">
-                                <Paperclip className="h-3.5 w-3.5" />
-                                <span>{t._count?.attachments ?? 0}</span>
-                              </div>
-                              <div className="flex items-center gap-1 text-xs">
-                                <MessageCircle className="h-3.5 w-3.5" />
-                                <span>{t._count?.comments ?? 0}</span>
-                              </div>
-                              <div className="flex -space-x-2">
-                                {t.assignees.slice(0, 4).map((a) => (
-                                  <Avatar key={a.user.id} className="h-7 w-7 border">
-                                    <AvatarImage src={a.user.image || undefined} />
-                                    <AvatarFallback className="text-[10px]">{initials(a.user)}</AvatarFallback>
-                                  </Avatar>
+                            <div className="mt-1 font-semibold truncate">{t.title}</div>
+                            {t.description ? (
+                              <div className="mt-1 text-sm text-muted-foreground line-clamp-2">{t.description}</div>
+                            ) : null}
+
+                            <div className="mt-3 flex items-center justify-between gap-4">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {t.dueDate ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    Scadenza: {new Date(t.dueDate).toLocaleDateString()}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Senza scadenza</span>
+                                )}
+                                {parseTags(t.tags).slice(0, 4).map((tag) => (
+                                  <Badge key={tag} variant="secondary" className="text-xs">
+                                    {tag}
+                                  </Badge>
                                 ))}
+                              </div>
+
+                              <div className="flex items-center gap-3 text-muted-foreground">
+                                <div className="flex items-center gap-1 text-xs">
+                                  <ListChecks className="h-3.5 w-3.5" />
+                                  <span>{t._count?.subtasks ?? 0}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-xs">
+                                  <Paperclip className="h-3.5 w-3.5" />
+                                  <span>{t._count?.attachments ?? 0}</span>
+                                </div>
+                                <div className="flex items-center gap-1 text-xs">
+                                  <MessageCircle className="h-3.5 w-3.5" />
+                                  <span>{t._count?.comments ?? 0}</span>
+                                </div>
+                                <div className="flex -space-x-2">
+                                  {t.assignees.slice(0, 4).map((a) => (
+                                    <Avatar key={a.user.id} className="h-7 w-7 border">
+                                      <AvatarImage src={a.user.image || undefined} />
+                                      <AvatarFallback className="text-[10px]">{initials(a.user)}</AvatarFallback>
+                                    </Avatar>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
+                      </button>
+                    ))}
+
+                    {tasks.length > 0 && tasks.length < total ? (
+                      <div className="p-4 flex justify-center">
+                        <Button
+                          variant="outline"
+                          disabled={loadingMore}
+                          onClick={async () => {
+                            setLoadingMore(true);
+                            try {
+                              await fetchTasksPage({ page: page + 1, append: true });
+                            } finally {
+                              setLoadingMore(false);
+                            }
+                          }}
+                        >
+                          {loadingMore ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                          Carica altre ({total - tasks.length})
+                        </Button>
                       </div>
-                    </button>
-                  ))
+                    ) : null}
+                  </>
                 )}
               </div>
             </ScrollArea>
@@ -413,10 +452,7 @@ export default function TasksPage() {
           onClose={() => setShowCreateTask(false)}
           onSuccess={() => {
             // reload tasks after create (queryString already reflects filters)
-            fetch(`/api/tasks?${queryString}`)
-              .then((r) => r.json())
-              .then((d) => setTasks(Array.isArray(d.tasks) ? d.tasks : []))
-              .catch(() => {});
+            fetchTasksPage({ page: 1, append: false }).catch(() => {});
           }}
           defaultProjectId={filters.projectId !== "all" ? filters.projectId : undefined}
         />
@@ -429,10 +465,7 @@ export default function TasksPage() {
             projectId={"_global"}
             onUpdate={() => {
               // refresh list after edits
-              fetch(`/api/tasks?${queryString}`)
-                .then((r) => r.json())
-                .then((d) => setTasks(Array.isArray(d.tasks) ? d.tasks : tasks))
-                .catch(() => {});
+              fetchTasksPage({ page: 1, append: false }).catch(() => {});
             }}
           />
         ) : null}

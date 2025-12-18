@@ -195,10 +195,10 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-secondary">
-      <main className="max-w-[1400px] mx-auto px-6 py-8">
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="mb-8 flex items-start justify-between gap-6">
           <div>
-            <h1 className="text-4xl font-bold text-foreground mb-2">
+            <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2">
               {getGreeting()}, {getFirstName()}
             </h1>
             <p className="text-muted-foreground">Your workspace: focus on what needs attention now.</p>

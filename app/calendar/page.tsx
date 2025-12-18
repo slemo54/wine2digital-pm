@@ -44,14 +44,30 @@ interface Absence {
   createdAt: string;
 }
 
+type AbsenceCounts = {
+  pending: number;
+  approved: number;
+  rejected: number;
+  total: number;
+};
+
 export default function CalendarPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [absences, setAbsences] = useState<Absence[]>([]);
+  const [pendingAbsences, setPendingAbsences] = useState<Absence[]>([]);
+  const [approvedAbsences, setApprovedAbsences] = useState<Absence[]>([]);
+  const [rejectedAbsences, setRejectedAbsences] = useState<Absence[]>([]);
+  const [calendarAbsences, setCalendarAbsences] = useState<Absence[]>([]);
+  const [counts, setCounts] = useState<AbsenceCounts>({ pending: 0, approved: 0, rejected: 0, total: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingManagement, setIsLoadingManagement] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
+  const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [pendingTake, setPendingTake] = useState(500);
+  const [approvedTake, setApprovedTake] = useState(25);
+  const [rejectedTake, setRejectedTake] = useState(25);
   const [newAbsence, setNewAbsence] = useState({
     type: "vacation",
     startDate: "",
@@ -72,9 +88,14 @@ export default function CalendarPage() {
     fetchAbsences();
   }, []);
 
-  const fetchAbsences = async () => {
+  useEffect(() => {
+    void fetchCalendarAbsences(visibleMonth);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleMonth]);
+
+  const fetchCounts = async () => {
     try {
-      const response = await fetch("/api/absences");
+      const response = await fetch("/api/absences?includeCounts=true&take=0");
       if (response.status === 401) {
         router.replace("/auth/login");
         return;
@@ -94,11 +115,79 @@ export default function CalendarPage() {
         return;
       }
 
-      setAbsences(data?.absences || []);
+      const c = data?.counts;
+      if (c && typeof c === "object") {
+        setCounts({
+          pending: Number(c.pending || 0),
+          approved: Number(c.approved || 0),
+          rejected: Number(c.rejected || 0),
+          total: Number(c.total || 0),
+        });
+      }
       setLoadError(null);
     } catch (error) {
       setLoadError("Failed to load absences");
       toast.error("Failed to load absences");
+    }
+  };
+
+  const fetchManagementLists = async (opts?: { pendingTake?: number; approvedTake?: number; rejectedTake?: number }) => {
+    const nextPendingTake = typeof opts?.pendingTake === "number" ? opts.pendingTake : pendingTake;
+    const nextApprovedTake = typeof opts?.approvedTake === "number" ? opts.approvedTake : approvedTake;
+    const nextRejectedTake = typeof opts?.rejectedTake === "number" ? opts.rejectedTake : rejectedTake;
+    try {
+      setIsLoadingManagement(true);
+      const [pendingRes, approvedRes, rejectedRes] = await Promise.all([
+        fetch(`/api/absences?status=pending&take=${nextPendingTake}`),
+        fetch(`/api/absences?status=approved&take=${nextApprovedTake}`),
+        fetch(`/api/absences?status=rejected&take=${nextRejectedTake}`),
+      ]);
+
+      const [pendingData, approvedData, rejectedData] = await Promise.all([
+        pendingRes.json().catch(() => ({})),
+        approvedRes.json().catch(() => ({})),
+        rejectedRes.json().catch(() => ({})),
+      ]);
+
+      if (!pendingRes.ok) throw new Error(pendingData?.error || "Failed to load pending");
+      if (!approvedRes.ok) throw new Error(approvedData?.error || "Failed to load approved");
+      if (!rejectedRes.ok) throw new Error(rejectedData?.error || "Failed to load rejected");
+
+      setPendingAbsences(Array.isArray(pendingData?.absences) ? pendingData.absences : []);
+      setApprovedAbsences(Array.isArray(approvedData?.absences) ? approvedData.absences : []);
+      setRejectedAbsences(Array.isArray(rejectedData?.absences) ? rejectedData.absences : []);
+      setLoadError(null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to load absences";
+      setLoadError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoadingManagement(false);
+    }
+  };
+
+  const fetchCalendarAbsences = async (month: Date) => {
+    const from = new Date(month.getFullYear(), month.getMonth(), 1, 0, 0, 0, 0);
+    const to = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999);
+    const qs = new URLSearchParams({
+      from: from.toISOString(),
+      to: to.toISOString(),
+      take: "2000",
+    });
+    try {
+      const res = await fetch(`/api/absences?${qs.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Failed to load calendar absences");
+      setCalendarAbsences(Array.isArray(data?.absences) ? data.absences : []);
+    } catch {
+      setCalendarAbsences([]);
+    }
+  };
+
+  const fetchAbsences = async () => {
+    setIsLoading(true);
+    try {
+      await Promise.all([fetchCounts(), fetchManagementLists(), fetchCalendarAbsences(visibleMonth)]);
     } finally {
       setIsLoading(false);
     }
@@ -204,9 +293,8 @@ export default function CalendarPage() {
   const userRole = (session?.user as any)?.role || "member";
   const isManagerOrAdmin = userRole === "admin" || userRole === "manager";
 
-  const pendingAbsences = absences.filter(a => a.status === "pending");
-  const approvedAbsences = absences.filter(a => a.status === "approved");
-  const rejectedAbsences = absences.filter(a => a.status === "rejected");
+  const approvedVisible = approvedAbsences;
+  const rejectedVisible = rejectedAbsences;
 
   const toDayKey = (d: Date) => format(d, "yyyy-MM-dd");
   const isBetweenInclusive = (day: Date, start: Date, end: Date) => {
@@ -219,7 +307,7 @@ export default function CalendarPage() {
   const approvedDayKeys = new Set<string>();
   const pendingDayKeys = new Set<string>();
   const rejectedDayKeys = new Set<string>();
-  for (const absence of absences) {
+  for (const absence of calendarAbsences) {
     const start = new Date(absence.startDate);
     const end = new Date(absence.endDate);
     for (let d = startOfDay(start); !isAfter(d, startOfDay(end)); d = new Date(d.getTime() + 86400000)) {
@@ -231,7 +319,7 @@ export default function CalendarPage() {
   }
 
   const absencesForSelectedDay = selectedDay
-    ? absences.filter((a) => isBetweenInclusive(selectedDay, new Date(a.startDate), new Date(a.endDate)))
+    ? calendarAbsences.filter((a) => isBetweenInclusive(selectedDay, new Date(a.startDate), new Date(a.endDate)))
     : [];
 
   if (isLoading) {
@@ -245,7 +333,7 @@ export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-secondary">
       {/* Main Content */}
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {loadError ? (
           <Card className="bg-white border-l-4 border-l-destructive mb-6">
             <CardHeader>
@@ -348,7 +436,7 @@ export default function CalendarPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Pending</p>
-                  <p className="text-4xl font-bold text-foreground mt-1">{pendingAbsences.length}</p>
+                  <p className="text-4xl font-bold text-foreground mt-1">{counts.pending}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-warning/10 flex items-center justify-center">
                   <Clock className="h-7 w-7 text-warning" />
@@ -362,7 +450,7 @@ export default function CalendarPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Approved</p>
-                  <p className="text-4xl font-bold text-foreground mt-1">{approvedAbsences.length}</p>
+                  <p className="text-4xl font-bold text-foreground mt-1">{counts.approved}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center">
                   <Check className="h-7 w-7 text-success" />
@@ -376,7 +464,7 @@ export default function CalendarPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Rejected</p>
-                  <p className="text-4xl font-bold text-foreground mt-1">{rejectedAbsences.length}</p>
+                  <p className="text-4xl font-bold text-foreground mt-1">{counts.rejected}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center">
                   <X className="h-7 w-7 text-destructive" />
@@ -414,9 +502,11 @@ export default function CalendarPage() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="p-8">
+            <CardContent className="p-4 sm:p-8">
               <Calendar
                 mode="single"
+                month={visibleMonth}
+                onMonthChange={(m) => setVisibleMonth(m)}
                 selected={selectedDay}
                 onSelect={(d) => setSelectedDay(d)}
                 className="w-full border rounded-md p-4 shadow-sm"
@@ -458,7 +548,7 @@ export default function CalendarPage() {
             </CardHeader>
             <CardContent className="p-6 flex-1 overflow-auto max-h-[500px] space-y-4">
               {selectedDay && absencesForSelectedDay.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-8 opacity-60">
+                <div className="h-full flex flex-col items-center justify-center text-center p-6 sm:p-8 opacity-60">
                   <CalendarIcon className="h-12 w-14 mb-4 text-muted-foreground/30" />
                   <p className="text-sm text-muted-foreground italic">No absences scheduled for this date.</p>
                 </div>
@@ -524,12 +614,12 @@ export default function CalendarPage() {
                   <div className="w-2.5 h-2.5 rounded-full bg-warning shadow-sm shadow-warning/20"></div>
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Pending</h3>
                 </div>
-                <span className="text-xs font-bold bg-warning/10 text-warning px-2 py-0.5 rounded-full">{pendingAbsences.length}</span>
+                <span className="text-xs font-bold bg-warning/10 text-warning px-2 py-0.5 rounded-full">{counts.pending}</span>
               </div>
               <div className="space-y-4">
                 {pendingAbsences.length === 0 ? (
                   <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
-                    <CardContent className="p-10 text-center text-muted-foreground text-xs font-medium">
+                    <CardContent className="p-6 sm:p-10 text-center text-muted-foreground text-xs font-medium">
                       No pending requests to review.
                     </CardContent>
                   </Card>
@@ -565,7 +655,7 @@ export default function CalendarPage() {
                           </div>
                           {absence.reason && (
                             <p className="text-xs text-muted-foreground italic bg-secondary/30 p-2.5 rounded-lg border-l-2 border-warning/20">
-                              "{absence.reason}"
+                              &quot;{absence.reason}&quot;
                             </p>
                           )}
                         </div>
@@ -595,6 +685,21 @@ export default function CalendarPage() {
                     </Card>
                   ))
                 )}
+
+                {pendingAbsences.length > 0 && pendingAbsences.length < counts.pending ? (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    disabled={isLoadingManagement}
+                    onClick={() => {
+                      const next = pendingTake + 200;
+                      setPendingTake(next);
+                      void fetchManagementLists({ pendingTake: next });
+                    }}
+                  >
+                    Carica altre ({counts.pending - pendingAbsences.length})
+                  </Button>
+                ) : null}
               </div>
             </div>
 
@@ -605,49 +710,68 @@ export default function CalendarPage() {
                   <div className="w-2.5 h-2.5 rounded-full bg-success shadow-sm shadow-success/20"></div>
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Approved</h3>
                 </div>
-                <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full">{approvedAbsences.length}</span>
+                <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full">{counts.approved}</span>
               </div>
               <div className="space-y-4 opacity-90">
                 {approvedAbsences.length === 0 ? (
                   <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
-                    <CardContent className="p-10 text-center text-muted-foreground text-xs font-medium">
+                    <CardContent className="p-6 sm:p-10 text-center text-muted-foreground text-xs font-medium">
                       No approved requests.
                     </CardContent>
                   </Card>
                 ) : (
-                  approvedAbsences.map((absence) => (
-                    <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm group">
-                      <CardContent className="p-5">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              <AvatarFallback className="bg-success/10 text-success text-xs font-bold">
-                                {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="text-sm font-bold text-foreground">
-                                {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                  <>
+                    {approvedVisible.map((absence) => (
+                      <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm group">
+                        <CardContent className="p-5">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-10 w-10">
+                                <AvatarFallback className="bg-success/10 text-success text-xs font-bold">
+                                  {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="text-sm font-bold text-foreground">
+                                  {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                              </div>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-success/5 text-success border-success/30 font-bold px-2"
+                            >
+                              {getTypeLabel(absence.type)}
+                            </Badge>
+                          </div>
+
+                          <div className="pl-1">
+                            <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                              <CalendarIcon className="h-4 w-4 text-success/60" />
+                              <span>{formatDate(absence.startDate)}</span>
+                              <ChevronRight className="h-3 w-3 opacity-40" />
+                              <span>{formatDate(absence.endDate)}</span>
                             </div>
                           </div>
-                          <Badge variant="outline" className="text-[10px] bg-success/5 text-success border-success/30 font-bold px-2">
-                            {getTypeLabel(absence.type)}
-                          </Badge>
-                        </div>
-                        
-                        <div className="pl-1">
-                          <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
-                            <CalendarIcon className="h-4 w-4 text-success/60" />
-                            <span>{formatDate(absence.startDate)}</span>
-                            <ChevronRight className="h-3 w-3 opacity-40" />
-                            <span>{formatDate(absence.endDate)}</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {approvedAbsences.length < counts.approved ? (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        disabled={isLoadingManagement}
+                        onClick={() => {
+                          const next = approvedTake + 25;
+                          setApprovedTake(next);
+                          void fetchManagementLists({ approvedTake: next });
+                        }}
+                      >
+                        Carica altre ({counts.approved - approvedAbsences.length})
+                      </Button>
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>
@@ -659,49 +783,68 @@ export default function CalendarPage() {
                   <div className="w-2.5 h-2.5 rounded-full bg-destructive shadow-sm shadow-destructive/20"></div>
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Rejected</h3>
                 </div>
-                <span className="text-xs font-bold bg-destructive/10 text-destructive px-2 py-0.5 rounded-full">{rejectedAbsences.length}</span>
+                <span className="text-xs font-bold bg-destructive/10 text-destructive px-2 py-0.5 rounded-full">{counts.rejected}</span>
               </div>
               <div className="space-y-4 opacity-80">
                 {rejectedAbsences.length === 0 ? (
                   <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
-                    <CardContent className="p-10 text-center text-muted-foreground text-xs font-medium">
+                    <CardContent className="p-6 sm:p-10 text-center text-muted-foreground text-xs font-medium">
                       No rejected requests.
                     </CardContent>
                   </Card>
                 ) : (
-                  rejectedAbsences.map((absence) => (
-                    <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm">
-                      <CardContent className="p-5">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10">
-                              <AvatarFallback className="bg-destructive/10 text-destructive text-xs font-bold">
-                                {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
-                              <p className="text-sm font-bold text-foreground">
-                                {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                  <>
+                    {rejectedVisible.map((absence) => (
+                      <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm">
+                        <CardContent className="p-5">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-10 w-10">
+                                <AvatarFallback className="bg-destructive/10 text-destructive text-xs font-bold">
+                                  {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <p className="text-sm font-bold text-foreground">
+                                  {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                              </div>
+                            </div>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-destructive/5 text-destructive border-destructive/30 font-bold px-2"
+                            >
+                              {getTypeLabel(absence.type)}
+                            </Badge>
+                          </div>
+
+                          <div className="pl-1">
+                            <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                              <CalendarIcon className="h-4 w-4 text-destructive/60" />
+                              <span>{formatDate(absence.startDate)}</span>
+                              <ChevronRight className="h-3 w-3 opacity-40" />
+                              <span>{formatDate(absence.endDate)}</span>
                             </div>
                           </div>
-                          <Badge variant="outline" className="text-[10px] bg-destructive/5 text-destructive border-destructive/30 font-bold px-2">
-                            {getTypeLabel(absence.type)}
-                          </Badge>
-                        </div>
-                        
-                        <div className="pl-1">
-                          <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
-                            <CalendarIcon className="h-4 w-4 text-destructive/60" />
-                            <span>{formatDate(absence.startDate)}</span>
-                            <ChevronRight className="h-3 w-3 opacity-40" />
-                            <span>{formatDate(absence.endDate)}</span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
+                        </CardContent>
+                      </Card>
+                    ))}
+                    {rejectedAbsences.length < counts.rejected ? (
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        disabled={isLoadingManagement}
+                        onClick={() => {
+                          const next = rejectedTake + 25;
+                          setRejectedTake(next);
+                          void fetchManagementLists({ rejectedTake: next });
+                        }}
+                      >
+                        Carica altre ({counts.rejected - rejectedAbsences.length})
+                      </Button>
+                    ) : null}
+                  </>
                 )}
               </div>
             </div>

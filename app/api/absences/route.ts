@@ -5,6 +5,22 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+type AbsenceStatus = 'pending' | 'approved' | 'rejected';
+
+function parseOptionalInt(input: string | null): number | null {
+  if (input === null) return null;
+  const n = Number(input);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
+
+function parseOptionalDate(input: string | null): Date | null {
+  if (!input) return null;
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return null;
+  return d;
+}
+
 // GET - List all absences (user's own + all if admin/manager)
 export async function GET(req: NextRequest) {
   try {
@@ -18,27 +34,81 @@ export async function GET(req: NextRequest) {
       where: { id: userId },
     });
 
-    // If user is admin or manager, get all absences; otherwise only user's own
-    const absences = await prisma.absence.findMany({
-      where: user?.role === 'admin' || user?.role === 'manager' 
-        ? {} 
-        : { userId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+    const { searchParams } = new URL(req.url);
+    const statusParam = (searchParams.get('status') || '').trim();
+    const includeCounts = (searchParams.get('includeCounts') || '').trim() === 'true';
+    const takeRaw = parseOptionalInt(searchParams.get('take'));
+    const skipRaw = parseOptionalInt(searchParams.get('skip'));
+
+    const from = parseOptionalDate(searchParams.get('from'));
+    const to = parseOptionalDate(searchParams.get('to'));
+    if ((searchParams.get('from') && !from) || (searchParams.get('to') && !to)) {
+      return NextResponse.json({ error: 'Invalid date range' }, { status: 400 });
+    }
+
+    const take = takeRaw === null ? undefined : Math.max(0, Math.min(2000, takeRaw));
+    const skip = skipRaw === null ? undefined : Math.max(0, skipRaw);
+
+    const canSeeAll = user?.role === 'admin' || user?.role === 'manager';
+    const baseWhere = canSeeAll ? {} : { userId };
+
+    const statusFilter: Partial<{ status: AbsenceStatus }> =
+      statusParam === 'pending' || statusParam === 'approved' || statusParam === 'rejected'
+        ? { status: statusParam as AbsenceStatus }
+        : {};
+
+    const dateFilter =
+      from || to
+        ? {
+            // overlap filter: [startDate,endDate] intersects [from,to]
+            ...(to ? { startDate: { lte: to } } : {}),
+            ...(from ? { endDate: { gte: from } } : {}),
+          }
+        : {};
+
+    const where = {
+      ...baseWhere,
+      ...statusFilter,
+      ...dateFilter,
+    } as const;
+
+    const [absences, counts] = await Promise.all([
+      prisma.absence.findMany({
+        where: where as any,
+        include: {
+          user: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: { createdAt: 'desc' },
+        ...(typeof skip === 'number' ? { skip } : {}),
+        ...(typeof take === 'number' ? { take } : {}),
+      }),
+      includeCounts
+        ? prisma.absence.groupBy({
+            by: ['status'],
+            where: baseWhere as any,
+            _count: { _all: true },
+          })
+        : Promise.resolve([] as Array<{ status: string; _count: { _all: number } }>),
+    ]);
 
-    return NextResponse.json({ absences });
+    const countsByStatus = (() => {
+      if (!includeCounts) return undefined;
+      const map = new Map<string, number>();
+      for (const row of counts) map.set(String(row.status), Number(row._count?._all || 0));
+      const pending = map.get('pending') || 0;
+      const approved = map.get('approved') || 0;
+      const rejected = map.get('rejected') || 0;
+      return { pending, approved, rejected, total: pending + approved + rejected };
+    })();
+
+    return NextResponse.json({ absences, ...(countsByStatus ? { counts: countsByStatus } : {}) });
   } catch (error) {
     console.error('List absences error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

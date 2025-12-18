@@ -215,6 +215,7 @@ export async function PATCH(req: NextRequest) {
     }
 
     const userId = (session.user as any)?.id;
+    const globalRole = String((session.user as any)?.role || "");
     const body = await req.json();
     const { ids, action } = body as { ids?: string[]; action?: 'archive' | 'delete' };
 
@@ -222,33 +223,58 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'No project ids provided' }, { status: 400 });
     }
 
-    // Verify ownership or membership
-    const ownedOrMember = await prisma.project.findMany({
+    if (globalRole === "admin") {
+      if (action === 'delete') {
+        await prisma.project.deleteMany({ where: { id: { in: ids } } });
+        return NextResponse.json({ success: true, deleted: ids.length });
+      }
+      await prisma.project.updateMany({ where: { id: { in: ids } }, data: { status: 'archived' } });
+      return NextResponse.json({ success: true, archived: ids.length });
+    }
+
+    // Permissions:
+    // - archive: project owner/manager (or creator)
+    // - delete: project owner (or creator)
+    const archivable = await prisma.project.findMany({
       where: {
         id: { in: ids },
-        OR: [{ creatorId: userId }, { members: { some: { userId } } }],
+        OR: [
+          { creatorId: userId },
+          { members: { some: { userId, role: { in: ["owner", "manager"] } } } },
+        ],
       },
       select: { id: true },
     });
-    const allowedIds = ownedOrMember.map((p) => p.id);
-    if (allowedIds.length === 0) {
+    const archivableIds = archivable.map((p) => p.id);
+    if (archivableIds.length === 0) {
       return NextResponse.json({ error: 'Not authorized for selected projects' }, { status: 403 });
     }
 
     if (action === 'delete') {
-      await prisma.project.deleteMany({
-        where: { id: { in: allowedIds } },
+      const deletable = await prisma.project.findMany({
+        where: {
+          id: { in: ids },
+          OR: [{ creatorId: userId }, { members: { some: { userId, role: "owner" } } }],
+        },
+        select: { id: true },
       });
-      return NextResponse.json({ success: true, deleted: allowedIds.length });
+      const deletableIds = deletable.map((p) => p.id);
+      if (deletableIds.length === 0) {
+        return NextResponse.json({ error: 'Not authorized for selected projects' }, { status: 403 });
+      }
+      await prisma.project.deleteMany({
+        where: { id: { in: deletableIds } },
+      });
+      return NextResponse.json({ success: true, deleted: deletableIds.length });
     }
 
     // Default: archive (soft)
     await prisma.project.updateMany({
-      where: { id: { in: allowedIds } },
+      where: { id: { in: archivableIds } },
       data: { status: 'archived' },
     });
 
-    return NextResponse.json({ success: true, archived: allowedIds.length });
+    return NextResponse.json({ success: true, archived: archivableIds.length });
   } catch (error) {
     console.error('Bulk project patch error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

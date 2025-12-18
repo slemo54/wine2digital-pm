@@ -111,7 +111,7 @@ export async function PUT(
     const existing = await prisma.task.findUnique({
       where: { id: params.id },
       include: {
-        project: { select: { members: { select: { userId: true } } } },
+        project: { select: { members: { select: { userId: true, role: true } } } },
         assignees: { select: { userId: true } },
       },
     });
@@ -121,10 +121,16 @@ export async function PUT(
     }
 
     const isAssignee = existing.assignees.some((a) => a.userId === userId);
-    const isProjectMember = existing.project?.members?.some((m) => m.userId === userId) || false;
+    const membership = existing.project?.members?.find((m) => m.userId === userId) || null;
+    const isProjectMember = Boolean(membership);
+    const projectRole = membership?.role ? String(membership.role) : "";
+    const isProjectManager = projectRole === "owner" || projectRole === "manager";
 
     const canWrite =
-      role === "admin" || (role === "manager" && isProjectMember) || (role === "member" && isAssignee);
+      role === "admin" ||
+      isProjectManager ||
+      (role === "manager" && isProjectMember) ||
+      (role === "member" && isAssignee);
     if (!canWrite) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
@@ -143,8 +149,8 @@ export async function PUT(
       assigneeIds,
     } = body || {};
 
-    // Member can only update status (classic: assignee updates progress/status)
-    if (role === "member") {
+    // Only plain members (non project-managers) can update status only
+    if (role === "member" && !isProjectManager) {
       const keys = Object.keys(body || {});
       const allowed = new Set(["status"]);
       const invalid = keys.filter((k) => !allowed.has(k));
@@ -156,7 +162,7 @@ export async function PUT(
       }
     }
 
-    if (assigneeIds && role !== "admin" && role !== "manager") {
+    if (assigneeIds && role !== "admin" && role !== "manager" && !isProjectManager) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
@@ -166,7 +172,7 @@ export async function PUT(
     // Resolve listId (admin/manager only). Best-effort: if TaskList table missing, ignore.
     let resolvedListId: string | null | undefined = undefined;
     if (typeof listId === "string" || listId === null) {
-      if (role !== "admin" && role !== "manager") {
+      if (role !== "admin" && role !== "manager" && !isProjectManager) {
         return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
       }
       if (listId === null) {
@@ -330,7 +336,7 @@ export async function DELETE(
     const existing = await prisma.task.findUnique({
       where: { id: params.id },
       include: {
-        project: { select: { members: { select: { userId: true } } } },
+        project: { select: { members: { select: { userId: true, role: true } } } },
       },
     });
 
@@ -338,10 +344,13 @@ export async function DELETE(
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    const isProjectMember = existing.project?.members?.some((m) => m.userId === userId) || false;
+    const membership = existing.project?.members?.find((m) => m.userId === userId) || null;
+    const isProjectMember = Boolean(membership);
+    const projectRole = membership?.role ? String(membership.role) : "";
+    const isProjectManager = projectRole === "owner" || projectRole === "manager";
 
     // Delete: admin always; manager if project member
-    const canDelete = role === "admin" || (role === "manager" && isProjectMember);
+    const canDelete = role === "admin" || isProjectManager || (role === "manager" && isProjectMember);
     if (!canDelete) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }

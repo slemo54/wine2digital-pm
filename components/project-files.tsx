@@ -30,17 +30,26 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
   const [files, setFiles] = useState<FileUpload[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
-    fetchFiles();
+    void fetchFiles({ page: 1, replace: true });
   }, [projectId]);
 
-  const fetchFiles = async () => {
+  const fetchFiles = async (opts: { page: number; replace: boolean }) => {
     try {
-      const response = await fetch(`/api/files?projectId=${projectId}`);
+      const response = await fetch(
+        `/api/files?projectId=${projectId}&page=${opts.page}&pageSize=${pageSize}`
+      );
       const data = await response.json();
       if (response.ok) {
-        setFiles(data.files || []);
+        const nextFiles = Array.isArray(data.files) ? (data.files as FileUpload[]) : [];
+        setTotal(Number.isFinite(data?.total) ? Number(data.total) : nextFiles.length);
+        setFiles((prev) => (opts.replace ? nextFiles : [...prev, ...nextFiles]));
+        setPage(opts.page);
       }
     } catch (error) {
       toast.error("Failed to load files");
@@ -66,7 +75,7 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
 
       if (response.ok) {
         toast.success("File uploaded successfully");
-        fetchFiles();
+        await fetchFiles({ page: 1, replace: true });
       } else {
         const data = await response.json().catch(() => ({}));
         const message = String((data as any)?.error || "Failed to upload file");
@@ -91,7 +100,7 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
 
       if (response.ok) {
         toast.success("File deleted successfully");
-        fetchFiles();
+        await fetchFiles({ page: 1, replace: true });
       } else {
         throw new Error();
       }
@@ -118,9 +127,11 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
     );
   }
 
+  const hasMore = files.length < total;
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <CardTitle>Project Files</CardTitle>
         <div>
           <Input
@@ -188,6 +199,26 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
               No files uploaded yet. Upload your first file!
             </div>
           )}
+
+          {hasMore ? (
+            <div className="pt-2 flex justify-center">
+              <Button
+                variant="outline"
+                disabled={isLoadingMore}
+                onClick={async () => {
+                  setIsLoadingMore(true);
+                  try {
+                    await fetchFiles({ page: page + 1, replace: false });
+                  } finally {
+                    setIsLoadingMore(false);
+                  }
+                }}
+              >
+                {isLoadingMore ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Carica altri ({total - files.length})
+              </Button>
+            </div>
+          ) : null}
         </div>
       </CardContent>
     </Card>

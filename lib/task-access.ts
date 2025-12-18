@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 export type TaskAccessFlags = {
   isAssignee: boolean;
   isProjectMember: boolean;
+  projectRole: string | null;
 };
 
 export async function getTaskAccessFlags(
@@ -15,16 +16,18 @@ export async function getTaskAccessFlags(
     select: {
       id: true,
       assignees: { select: { userId: true } },
-      project: { select: { members: { select: { userId: true } } } },
+      project: { select: { members: { select: { userId: true, role: true } } } },
     },
   });
 
   if (!task) return null;
 
   const isAssignee = task.assignees.some((a) => a.userId === userId);
-  const isProjectMember = task.project.members.some((m) => m.userId === userId);
+  const membership = task.project.members.find((m) => m.userId === userId) || null;
+  const isProjectMember = Boolean(membership);
+  const projectRole = membership?.role ? String(membership.role) : null;
 
-  return { isAssignee, isProjectMember };
+  return { isAssignee, isProjectMember, projectRole };
 }
 
 

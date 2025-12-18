@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { JWT } from 'next-auth/jwt';
 
+type GlobalRole = 'admin' | 'manager' | 'member';
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -46,6 +48,10 @@ export const authOptions: NextAuthOptions = {
 
         if (!user) {
           throw new Error('Invalid email or password');
+        }
+
+        if (user.isActive === false) {
+          throw new Error('Account disabled');
         }
 
         if (!user.password) {
@@ -129,6 +135,22 @@ export const authOptions: NextAuthOptions = {
         console.log(`[AUTH] JWT updated for ${user.email} (role=${gToken.role})`);
       }
 
+      // Keep role/isActive synced with DB (avoid stale sessions after admin changes)
+      if (gToken.id) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: gToken.id },
+            select: { role: true, isActive: true },
+          });
+          if (dbUser) {
+            gToken.role = dbUser.role;
+            gToken.isActive = dbUser.isActive;
+          }
+        } catch {
+          // Best-effort: keep previous token values
+        }
+      }
+
       // If token expired, refresh using refresh_token
       if (gToken.accessToken && gToken.accessTokenExpires && Date.now() > gToken.accessTokenExpires) {
         const refreshed = await refreshGoogleAccessToken(gToken);
@@ -171,16 +193,29 @@ export const authOptions: NextAuthOptions = {
         if (existingUser) {
            const adminEmails = (process.env.GOOGLE_ADMIN_EMAILS || '').split(',').map(e => e.trim());
            const managerEmails = (process.env.GOOGLE_MANAGER_EMAILS || '').split(',').map(e => e.trim());
-           let role: 'admin' | 'manager' | 'member' = 'member';
-           if (adminEmails.includes(user.email)) role = 'admin';
-           else if (managerEmails.includes(user.email)) role = 'manager';
-           
-           if (existingUser.role !== role) {
+
+           if (existingUser.isActive === false) {
+             console.warn(`[AUTH] Disabled user attempted sign-in: ${user.email}`);
+             return false;
+           }
+
+           // Env lists can promote (never demote) returning users.
+           // Admin panel remains the source of truth for manual role changes.
+           const desired: GlobalRole | null = adminEmails.includes(user.email)
+             ? "admin"
+             : managerEmails.includes(user.email)
+               ? "manager"
+               : null;
+
+           const shouldPromoteToAdmin = desired === "admin" && existingUser.role !== "admin";
+           const shouldPromoteToManager = desired === "manager" && existingUser.role === "member";
+           if (shouldPromoteToAdmin || shouldPromoteToManager) {
+             const nextRole: GlobalRole = shouldPromoteToAdmin ? "admin" : "manager";
              await prisma.user.update({
                where: { id: existingUser.id },
-               data: { role },
+               data: { role: nextRole },
              });
-             console.log(`[AUTH] User role updated on signin: ${user.email} -> ${role}`);
+             console.log(`[AUTH] User role promoted on signin: ${user.email} -> ${nextRole}`);
            }
         }
       }
@@ -193,6 +228,9 @@ type GoogleToken = JWT & {
   accessToken?: string;
   refreshToken?: string;
   accessTokenExpires?: number;
+  id?: string;
+  role?: string;
+  isActive?: boolean;
 };
 
 export async function refreshGoogleAccessToken(token: GoogleToken): Promise<GoogleToken> {

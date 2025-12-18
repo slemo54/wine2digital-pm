@@ -19,6 +19,7 @@ import { SideDrawer } from "@/components/side-drawer";
 import { SubtaskChecklists } from "@/components/subtask-checklists";
 import { 
   CheckCircle2, 
+  Check,
   Circle, 
   Calendar,
   Tag,
@@ -26,6 +27,8 @@ import {
   Paperclip,
   MessageSquare,
   Plus,
+  Pencil,
+  Trash2,
   X,
   Upload,
   Users,
@@ -51,6 +54,7 @@ interface Comment {
   id: string;
   content: string;
   user: {
+    id: string;
     name: string | null;
     email: string;
     image: string | null;
@@ -63,6 +67,7 @@ interface Attachment {
   fileName: string;
   fileSize: number;
   filePath: string;
+  uploadedBy?: string;
   createdAt: string;
 }
 
@@ -71,6 +76,7 @@ interface SubtaskAttachment {
   fileName: string;
   fileSize: number;
   filePath: string;
+  uploadedBy?: string;
   createdAt: string;
 }
 
@@ -78,6 +84,7 @@ interface SubtaskComment {
   id: string;
   content: string;
   user: {
+    id: string;
     name: string | null;
     email: string;
     image: string | null;
@@ -110,6 +117,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   const [draftTagInput, setDraftTagInput] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
   const [newComment, setNewComment] = useState("");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [draftDescription, setDraftDescription] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentDraft, setEditingCommentDraft] = useState("");
+  const [isSavingCommentEdit, setIsSavingCommentEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [projectLists, setProjectLists] = useState<Array<{ id: string; name: string }>>([]);
   const [subtaskDetailOpen, setSubtaskDetailOpen] = useState(false);
@@ -119,11 +133,26 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   const [subtaskUploading, setSubtaskUploading] = useState(false);
   const [subtaskDraftDescription, setSubtaskDraftDescription] = useState("");
   const [subtaskNewComment, setSubtaskNewComment] = useState("");
+  const [editingSubtaskCommentId, setEditingSubtaskCommentId] = useState<string | null>(null);
+  const [editingSubtaskCommentDraft, setEditingSubtaskCommentDraft] = useState("");
+  const [isSavingSubtaskCommentEdit, setIsSavingSubtaskCommentEdit] = useState(false);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
+  const [deletingSubtaskAttachmentId, setDeletingSubtaskAttachmentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && taskId) {
       fetchTaskDetails();
     }
+  }, [open, taskId]);
+
+  useEffect(() => {
+    if (!open) return;
+    setIsEditingTitle(false);
+    setIsEditingDescription(false);
+    setEditingCommentId(null);
+    setEditingCommentDraft("");
+    setEditingSubtaskCommentId(null);
+    setEditingSubtaskCommentDraft("");
   }, [open, taskId]);
 
   useEffect(() => {
@@ -171,11 +200,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
       setLoading(false);
     }
   };
-
-  const canEditMeta = (() => {
-    const role = (session?.user as any)?.role as string | undefined;
-    return role === "admin" || role === "manager";
-  })();
 
   const updateTaskMeta = async (patch: Record<string, any>) => {
     setIsSavingMeta(true);
@@ -239,23 +263,66 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   };
 
   const addComment = async () => {
-    if (!newComment.trim()) return;
+    const content = newComment.trim();
+    if (!content) return;
 
     try {
       const res = await fetch(`/api/tasks/${taskId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newComment }),
+        body: JSON.stringify({ content }),
       });
 
-      if (res.ok) {
-        const comment = await res.json();
-        setComments([...comments, comment]);
-        setNewComment("");
-        toast.success("Commento aggiunto");
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Commento fallito");
+      setComments((prev) => [...prev, data as Comment]);
+      setNewComment("");
+      toast.success("Commento aggiunto");
     } catch (error) {
-      toast.error("Errore durante l'aggiunta del commento");
+      toast.error(error instanceof Error ? error.message : "Errore durante l'aggiunta del commento");
+    }
+  };
+
+  const saveCommentEdit = async (commentId: string) => {
+    const content = editingCommentDraft.trim();
+    if (!content) return;
+    setIsSavingCommentEdit(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/comments/${commentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Update fallito");
+      setComments((prev) => prev.map((c) => (c.id === commentId ? (data as Comment) : c)));
+      setEditingCommentId(null);
+      setEditingCommentDraft("");
+      toast.success("Commento aggiornato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Update fallito");
+    } finally {
+      setIsSavingCommentEdit(false);
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!confirm("Eliminare questo commento?")) return;
+    setIsSavingCommentEdit(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Eliminazione fallita");
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      if (editingCommentId === commentId) {
+        setEditingCommentId(null);
+        setEditingCommentDraft("");
+      }
+      toast.success("Commento eliminato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Eliminazione fallita");
+    } finally {
+      setIsSavingCommentEdit(false);
     }
   };
 
@@ -359,6 +426,53 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
     }
   };
 
+  const saveSubtaskCommentEdit = async (commentId: string) => {
+    if (!selectedSubtask) return;
+    const content = editingSubtaskCommentDraft.trim();
+    if (!content) return;
+    setIsSavingSubtaskCommentEdit(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/comments/${commentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Update fallito");
+      setSubtaskComments((prev) => prev.map((c) => (c.id === commentId ? (data as SubtaskComment) : c)));
+      setEditingSubtaskCommentId(null);
+      setEditingSubtaskCommentDraft("");
+      toast.success("Commento aggiornato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Update fallito");
+    } finally {
+      setIsSavingSubtaskCommentEdit(false);
+    }
+  };
+
+  const deleteSubtaskComment = async (commentId: string) => {
+    if (!selectedSubtask) return;
+    if (!confirm("Eliminare questo commento?")) return;
+    setIsSavingSubtaskCommentEdit(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/comments/${commentId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Eliminazione fallita");
+      setSubtaskComments((prev) => prev.filter((c) => c.id !== commentId));
+      if (editingSubtaskCommentId === commentId) {
+        setEditingSubtaskCommentId(null);
+        setEditingSubtaskCommentDraft("");
+      }
+      toast.success("Commento eliminato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Eliminazione fallita");
+    } finally {
+      setIsSavingSubtaskCommentEdit(false);
+    }
+  };
+
   const completedSubtasks = subtasks.filter(st => st.completed).length;
   const totalSubtasks = subtasks.length;
 
@@ -375,13 +489,15 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   useEffect(() => {
     if (!task) return;
     setDraftAssigneeIds(currentAssigneeIds);
+    if (!isEditingTitle) setDraftTitle(task.title || "");
+    if (!isEditingDescription) setDraftDescription(task.description || "");
     try {
       const parsed = typeof task?.tags === "string" ? JSON.parse(task.tags) : [];
       setDraftTags(Array.isArray(parsed) ? parsed.map(String) : []);
     } catch {
       setDraftTags([]);
     }
-  }, [taskId, task?.updatedAt, currentAssigneeKey, task]);
+  }, [taskId, task?.updatedAt, currentAssigneeKey, task, isEditingTitle, isEditingDescription]);
 
   if (loading) {
     return (
@@ -403,7 +519,22 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
     Boolean(meId) &&
     Array.isArray(task?.assignees) &&
     task.assignees.some((a: any) => a?.user?.id === meId || a?.userId === meId);
+  const myProjectMembership =
+    Boolean(meId) && Array.isArray(task?.project?.members)
+      ? task.project.members.find((m: any) => m?.userId === meId) || null
+      : null;
+  const isMeProjectMember = Boolean(myProjectMembership);
+  const myProjectRole = myProjectMembership?.role ? String(myProjectMembership.role) : "";
+  const isMeProjectManager = myProjectRole === "owner" || myProjectRole === "manager";
+  const canEditMeta =
+    globalRole === "admin" || (globalRole === "manager" && isMeProjectMember) || isMeProjectManager;
   const canEditStatus = canEditMeta || (globalRole === "member" && isMeAssignee);
+  const canWriteTaskComment =
+    globalRole === "admin" ||
+    (globalRole === "manager" && isMeProjectMember) ||
+    isMeProjectManager ||
+    (globalRole === "member" && isMeAssignee);
+  const canUploadTaskAttachment = canWriteTaskComment;
 
   const tags: string[] = (() => {
     try {
@@ -437,7 +568,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
       <SheetContent side="right" className="w-[95vw] sm:max-w-6xl h-full overflow-hidden p-0">
         <div className="flex h-full flex-col">
           <div className="border-b bg-background">
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -458,10 +589,112 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                       {task.priority === "low" && "Bassa"}
                     </Badge>
                   </div>
-                  <div className="text-2xl font-bold pr-10 truncate">{task.title}</div>
-                  {task.description ? (
-                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{task.description}</p>
-                  ) : null}
+                  {isEditingTitle ? (
+                    <div className="mt-1 space-y-2 max-w-3xl">
+                      <Input
+                        value={draftTitle}
+                        onChange={(e) => setDraftTitle(e.target.value)}
+                        disabled={isSavingMeta}
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          disabled={isSavingMeta || !draftTitle.trim()}
+                          onClick={() => updateTaskMeta({ title: draftTitle }).then(() => setIsEditingTitle(false))}
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Salva
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={isSavingMeta}
+                          onClick={() => {
+                            setDraftTitle(task.title || "");
+                            setIsEditingTitle(false);
+                          }}
+                        >
+                          Annulla
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <div className="text-2xl font-bold pr-2 truncate">{task.title}</div>
+                      {canEditMeta ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          disabled={isSavingMeta}
+                          onClick={() => {
+                            setDraftTitle(task.title || "");
+                            setIsEditingTitle(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  )}
+                  {isEditingDescription ? (
+                    <div className="mt-3 space-y-2 max-w-3xl">
+                      <Textarea
+                        value={draftDescription}
+                        onChange={(e) => setDraftDescription(e.target.value)}
+                        placeholder="Aggiungi una descrizione…"
+                        className="min-h-[110px]"
+                        disabled={isSavingMeta}
+                      />
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={isSavingMeta}
+                          onClick={() => {
+                            setDraftDescription(task.description || "");
+                            setIsEditingDescription(false);
+                          }}
+                        >
+                          Annulla
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={isSavingMeta}
+                          onClick={() =>
+                            updateTaskMeta({ description: draftDescription }).then(() => setIsEditingDescription(false))
+                          }
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Salva descrizione
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex items-start justify-between gap-2">
+                      {task.description ? (
+                        <p className="text-sm text-muted-foreground line-clamp-2 whitespace-pre-wrap">{task.description}</p>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">Nessuna descrizione.</p>
+                      )}
+                      {canEditMeta ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0"
+                          disabled={isSavingMeta}
+                          onClick={() => {
+                            setDraftDescription(task.description || "");
+                            setIsEditingDescription(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -582,6 +815,38 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                           updateTaskMeta({ dueDate: `${v}T12:00:00Z` });
                         }}
                       />
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Priority */}
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-2">
+                    <Hash className="w-3 h-3" />
+                    Priority
+                  </Label>
+                  <div className="space-y-2">
+                    <Badge className={getPriorityColor(task.priority)}>
+                      {task.priority === "high" && "Alta"}
+                      {task.priority === "medium" && "Media"}
+                      {task.priority === "low" && "Bassa"}
+                    </Badge>
+
+                    {canEditMeta ? (
+                      <Select
+                        value={task.priority}
+                        onValueChange={(v) => updateTaskMeta({ priority: v })}
+                        disabled={isSavingMeta}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Priorità" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="high">Alta</SelectItem>
+                          <SelectItem value="medium">Media</SelectItem>
+                          <SelectItem value="low">Bassa</SelectItem>
+                        </SelectContent>
+                      </Select>
                     ) : null}
                   </div>
                 </div>
@@ -779,7 +1044,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
           </div>
 
           <ScrollArea className="flex-1">
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               {activeTab === "subtasks" ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-4">
@@ -859,24 +1124,67 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                       <div className="text-sm text-muted-foreground">Nessun allegato.</div>
                     ) : null}
                     {attachments.map((attachment) => (
-                      <a
+                      <div
                         key={attachment.id}
-                        href={attachment.filePath}
-                        target="_blank"
-                        rel="noreferrer"
                         className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
                       >
-                        <Paperclip className="w-4 h-4 text-muted-foreground" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{attachment.fileName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(attachment.fileSize / 1024).toFixed(2)} KB
-                          </p>
-                        </div>
-                      </a>
+                        <a
+                          href={attachment.filePath}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 flex-1 min-w-0"
+                        >
+                          <Paperclip className="w-4 h-4 text-muted-foreground" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(attachment.fileSize / 1024).toFixed(2)} KB
+                            </p>
+                          </div>
+                        </a>
+                        {(() => {
+                          const isUploader = Boolean(meId) && attachment.uploadedBy === meId;
+                          const canDelete = canEditMeta || isUploader;
+                          if (!canDelete) return null;
+                          return (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              disabled={deletingAttachmentId === attachment.id || uploading}
+                              onClick={async () => {
+                                if (!confirm("Eliminare questo allegato?")) return;
+                                setDeletingAttachmentId(attachment.id);
+                                try {
+                                  const res = await fetch(`/api/tasks/${taskId}/attachments/${attachment.id}`, {
+                                    method: "DELETE",
+                                  });
+                                  const data = await res.json().catch(() => ({}));
+                                  if (!res.ok) throw new Error((data as any)?.error || "Eliminazione fallita");
+                                  setAttachments((prev) => prev.filter((a) => a.id !== attachment.id));
+                                  toast.success("Allegato eliminato");
+                                } catch (e) {
+                                  toast.error(e instanceof Error ? e.message : "Eliminazione fallita");
+                                } finally {
+                                  setDeletingAttachmentId(null);
+                                }
+                              }}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          );
+                        })()}
+                      </div>
                     ))}
 
-                    <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-muted-foreground/30 rounded-lg cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors">
+                    <label
+                      className={`flex items-center justify-center gap-2 p-4 border-2 border-dashed border-muted-foreground/30 rounded-lg transition-colors ${
+                        canUploadTaskAttachment && !uploading
+                          ? "cursor-pointer hover:border-primary/40 hover:bg-muted/20"
+                          : "opacity-60 cursor-not-allowed"
+                      }`}
+                    >
                       <Upload className="w-4 h-4" />
                       <span className="text-sm">
                         {uploading ? "Caricamento..." : "Trascina file o clicca per caricare"}
@@ -885,7 +1193,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                         type="file"
                         className="hidden"
                         onChange={(e) => e.target.files?.[0] && uploadAttachment(e.target.files[0])}
-                        disabled={uploading}
+                        disabled={uploading || !canUploadTaskAttachment}
                       />
                     </label>
                   </div>
@@ -914,10 +1222,77 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                         </Avatar>
                         <div className="flex-1">
                           <div className="bg-muted/30 rounded-lg p-3">
-                            <p className="text-sm font-medium">
-                              {comment.user.name || comment.user.email}
-                            </p>
-                            <p className="text-sm text-foreground/80 mt-1 whitespace-pre-wrap">{comment.content}</p>
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-medium">{comment.user.name || comment.user.email}</p>
+                              {(() => {
+                                const isAuthor = Boolean(meId) && comment.user.id === meId;
+                                const canManage = canEditMeta || isAuthor;
+                                if (!canManage) return null;
+                                return (
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      disabled={isSavingCommentEdit}
+                                      onClick={() => {
+                                        setEditingCommentId(comment.id);
+                                        setEditingCommentDraft(comment.content);
+                                      }}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-destructive"
+                                      disabled={isSavingCommentEdit}
+                                      onClick={() => void deleteComment(comment.id)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+
+                            {editingCommentId === comment.id ? (
+                              <div className="mt-2 space-y-2">
+                                <Textarea
+                                  value={editingCommentDraft}
+                                  onChange={(e) => setEditingCommentDraft(e.target.value)}
+                                  className="min-h-[90px]"
+                                  disabled={isSavingCommentEdit}
+                                />
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={isSavingCommentEdit}
+                                    onClick={() => {
+                                      setEditingCommentId(null);
+                                      setEditingCommentDraft("");
+                                    }}
+                                  >
+                                    Annulla
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={isSavingCommentEdit || !editingCommentDraft.trim()}
+                                    onClick={() => void saveCommentEdit(comment.id)}
+                                  >
+                                    <Check className="h-4 w-4 mr-1" />
+                                    Salva
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-foreground/80 mt-1 whitespace-pre-wrap">{comment.content}</p>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
                             {format(new Date(comment.createdAt), "PPp", { locale: it })}
@@ -927,12 +1302,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                     ))}
 
                     <Textarea
-                      placeholder="Scrivi un commento..."
+                      placeholder={canWriteTaskComment ? "Scrivi un commento..." : "Non hai permessi per commentare"}
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
                       className="min-h-[90px]"
+                      disabled={!canWriteTaskComment}
                     />
-                    <Button onClick={addComment} className="w-full">
+                    <Button onClick={addComment} className="w-full" disabled={!canWriteTaskComment || !newComment.trim()}>
                       Aggiungi Commento
                     </Button>
                   </div>
@@ -985,13 +1361,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
       >
         {selectedSubtask ? (
           <div className="flex h-full flex-col">
-            <div className="border-b bg-background p-6">
+            <div className="border-b bg-background p-4 sm:p-6">
               <div className="text-lg font-semibold truncate pr-10">{selectedSubtask.title}</div>
               <div className="text-xs text-muted-foreground mt-1">Subtask</div>
             </div>
 
             <ScrollArea className="flex-1">
-              <div className="p-6 space-y-6">
+              <div className="p-4 sm:p-6 space-y-6">
                 <div className="space-y-2">
                   <Label>Descrizione</Label>
                   <Textarea
@@ -1042,16 +1418,57 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                   ) : (
                     <div className="space-y-2">
                       {subtaskAttachments.map((a) => (
-                        <a
+                        <div
                           key={a.id}
-                          href={a.filePath}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block border rounded-lg p-2 hover:bg-muted/30"
+                          className="flex items-center justify-between gap-3 border rounded-lg p-2 hover:bg-muted/30"
                         >
-                          <div className="text-sm font-medium">{a.fileName}</div>
-                          <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
-                        </a>
+                          <a
+                            href={a.filePath}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="min-w-0 flex-1"
+                          >
+                            <div className="text-sm font-medium truncate">{a.fileName}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {Math.round(a.fileSize / 1024)} KB
+                            </div>
+                          </a>
+                          {(() => {
+                            const isUploader = Boolean(meId) && a.uploadedBy === meId;
+                            const canDelete = canEditMeta || isUploader;
+                            if (!canDelete) return null;
+                            return (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive"
+                                disabled={deletingSubtaskAttachmentId === a.id || subtaskUploading}
+                                onClick={async () => {
+                                  if (!selectedSubtask) return;
+                                  if (!confirm("Eliminare questo allegato?")) return;
+                                  setDeletingSubtaskAttachmentId(a.id);
+                                  try {
+                                    const res = await fetch(
+                                      `/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/attachments/${a.id}`,
+                                      { method: "DELETE" }
+                                    );
+                                    const data = await res.json().catch(() => ({}));
+                                    if (!res.ok) throw new Error((data as any)?.error || "Eliminazione fallita");
+                                    setSubtaskAttachments((prev) => prev.filter((x) => x.id !== a.id));
+                                    toast.success("Allegato eliminato");
+                                  } catch (e) {
+                                    toast.error(e instanceof Error ? e.message : "Eliminazione fallita");
+                                  } finally {
+                                    setDeletingSubtaskAttachmentId(null);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            );
+                          })()}
+                        </div>
                       ))}
                     </div>
                   )}
@@ -1067,10 +1484,79 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                     <div className="space-y-3">
                       {subtaskComments.map((c) => (
                         <div key={c.id} className="border rounded-lg p-3">
-                          <div className="text-xs text-muted-foreground">
-                            {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="text-xs text-muted-foreground">
+                              {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
+                            </div>
+                            {(() => {
+                              const isAuthor = Boolean(meId) && c.user?.id === meId;
+                              const canManage = canEditMeta || isAuthor;
+                              if (!canManage) return null;
+                              return (
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7"
+                                    disabled={isSavingSubtaskCommentEdit}
+                                    onClick={() => {
+                                      setEditingSubtaskCommentId(c.id);
+                                      setEditingSubtaskCommentDraft(c.content);
+                                    }}
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive"
+                                    disabled={isSavingSubtaskCommentEdit}
+                                    onClick={() => void deleteSubtaskComment(c.id)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              );
+                            })()}
                           </div>
-                          <div className="text-sm mt-1 whitespace-pre-wrap">{c.content}</div>
+
+                          {editingSubtaskCommentId === c.id ? (
+                            <div className="mt-2 space-y-2">
+                              <Textarea
+                                value={editingSubtaskCommentDraft}
+                                onChange={(e) => setEditingSubtaskCommentDraft(e.target.value)}
+                                className="min-h-[90px]"
+                                disabled={isSavingSubtaskCommentEdit}
+                              />
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={isSavingSubtaskCommentEdit}
+                                  onClick={() => {
+                                    setEditingSubtaskCommentId(null);
+                                    setEditingSubtaskCommentDraft("");
+                                  }}
+                                >
+                                  Annulla
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  disabled={isSavingSubtaskCommentEdit || !editingSubtaskCommentDraft.trim()}
+                                  onClick={() => void saveSubtaskCommentEdit(c.id)}
+                                >
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Salva
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-sm mt-1 whitespace-pre-wrap">{c.content}</div>
+                          )}
                         </div>
                       ))}
                     </div>

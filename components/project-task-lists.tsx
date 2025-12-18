@@ -45,6 +45,9 @@ export function ProjectTaskLists({ projectId }: { projectId: string }) {
   const [lists, setLists] = useState<ListDto[]>([]);
   const [tasks, setTasks] = useState<TaskDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [tasksPage, setTasksPage] = useState(1);
+  const [tasksTotal, setTasksTotal] = useState(0);
   const [listsUnavailable, setListsUnavailable] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -86,10 +89,35 @@ export function ProjectTaskLists({ projectId }: { projectId: string }) {
 
       const t = Array.isArray(tasksData?.tasks) ? (tasksData.tasks as TaskDto[]) : [];
       setTasks(t);
+      setTasksPage(1);
+      setTasksTotal(Number.isFinite(tasksData?.total) ? Number(tasksData.total) : t.length);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore caricamento");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreTasks = async () => {
+    if (loadingMore) return;
+    if (tasks.length >= tasksTotal) return;
+    const nextPage = tasksPage + 1;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/tasks?projectId=${encodeURIComponent(projectId)}&page=${nextPage}&pageSize=200`,
+        { cache: "no-store" }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Errore caricamento task");
+      const next = Array.isArray(data?.tasks) ? (data.tasks as TaskDto[]) : [];
+      setTasks((prev) => [...prev, ...next]);
+      setTasksPage(nextPage);
+      setTasksTotal(Number.isFinite(data?.total) ? Number(data.total) : tasksTotal);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore caricamento task");
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -224,7 +252,9 @@ export function ProjectTaskLists({ projectId }: { projectId: string }) {
                 <div className="flex items-center justify-between w-full pr-4">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="font-semibold truncate">{l.name}</div>
-                    <Badge variant="secondary">{listTasks.length}</Badge>
+                    <Badge variant="secondary">
+                      {listTasks.length}/{l._count?.tasks ?? listTasks.length}
+                    </Badge>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
@@ -309,6 +339,15 @@ export function ProjectTaskLists({ projectId }: { projectId: string }) {
           );
         })}
       </Accordion>
+
+      {tasks.length > 0 && tasks.length < tasksTotal ? (
+        <div className="flex justify-center">
+          <Button variant="outline" onClick={loadMoreTasks} disabled={loadingMore}>
+            {loadingMore ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Carica altre task ({tasksTotal - tasks.length})
+          </Button>
+        </div>
+      ) : null}
 
       <Dialog open={showCreateList} onOpenChange={setShowCreateList}>
         <DialogContent>

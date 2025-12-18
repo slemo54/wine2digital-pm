@@ -6,6 +6,13 @@ import { resolveDriveUploadFolderId, uploadFileToDrive } from "@/lib/google-driv
 
 export const dynamic = 'force-dynamic';
 
+function parseOptionalInt(input: string | null): number | null {
+  if (input === null) return null;
+  const n = Number(input);
+  if (!Number.isFinite(n)) return null;
+  return Math.trunc(n);
+}
+
 // GET - List files for a project
 export async function GET(req: NextRequest) {
   try {
@@ -22,6 +29,11 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const projectId = (searchParams.get('projectId') || '').trim();
+    const pageRaw = parseOptionalInt(searchParams.get('page'));
+    const pageSizeRaw = parseOptionalInt(searchParams.get('pageSize'));
+    const page = Math.max(1, pageRaw ?? 1);
+    const pageSize = Math.min(200, Math.max(1, pageSizeRaw ?? 50));
+    const skip = (page - 1) * pageSize;
 
     if (!projectId || projectId === 'undefined' || projectId === 'null') {
       return NextResponse.json({ error: 'Project ID required' }, { status: 400 });
@@ -38,24 +50,29 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const files = await prisma.fileUpload.findMany({
-      where: { projectId },
-      include: {
-        uploader: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+    const [total, files] = await Promise.all([
+      prisma.fileUpload.count({ where: { projectId } }),
+      prisma.fileUpload.findMany({
+        where: { projectId },
+        include: {
+          uploader: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: pageSize,
+      }),
+    ]);
 
-    return NextResponse.json({ files });
+    return NextResponse.json({ files, page, pageSize, total });
   } catch (error) {
     console.error('List files error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

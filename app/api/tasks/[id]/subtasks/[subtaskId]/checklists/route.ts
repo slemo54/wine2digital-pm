@@ -75,8 +75,10 @@ export async function POST(
     });
     if (!subtask) return NextResponse.json({ error: "Subtask not found" }, { status: 404 });
 
+    const isProjectManager = access.projectRole === "owner" || access.projectRole === "manager";
     const canWrite =
       role === "admin" ||
+      isProjectManager ||
       (role === "manager" && access.isProjectMember) ||
       (role === "member" && access.isAssignee);
     if (!canWrite) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
