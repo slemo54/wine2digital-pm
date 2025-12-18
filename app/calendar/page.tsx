@@ -419,7 +419,17 @@ export default function CalendarPage() {
                 mode="single"
                 selected={selectedDay}
                 onSelect={(d) => setSelectedDay(d)}
-                className="w-full flex justify-center scale-110 origin-center"
+                className="w-full border rounded-md p-4 shadow-sm"
+                classNames={{
+                  months: "w-full space-y-4",
+                  month: "w-full space-y-4",
+                  table: "w-full border-collapse space-y-1",
+                  head_row: "flex w-full justify-between",
+                  head_cell: "text-muted-foreground rounded-md w-10 font-normal text-[0.8rem] flex-1 text-center",
+                  row: "flex w-full mt-2 justify-between",
+                  cell: "relative h-14 w-14 text-center text-sm p-0 focus-within:relative focus-within:z-20 flex-1 flex justify-center items-center",
+                  day: "h-12 w-12 p-0 font-normal aria-selected:opacity-100 flex items-center justify-center rounded-lg transition-all",
+                }}
                 modifiers={{
                   approved: (date) => approvedDayKeys.has(toDayKey(date)),
                   pending: (date) => pendingDayKeys.has(toDayKey(date)),
