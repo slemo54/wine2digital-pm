@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
-import { uploadFileToDrive } from "@/lib/google-drive";
+import { resolveDriveUploadFolderId, uploadFileToDrive } from "@/lib/google-drive";
 
 export const dynamic = 'force-dynamic';
 
@@ -100,11 +100,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing GOOGLE_DRIVE_FOLDER_ID" }, { status: 500 });
     }
 
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true },
+    });
+    if (!project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
+    let uploadFolderId = folderId;
+    try {
+      uploadFolderId = await resolveDriveUploadFolderId({
+        baseFolderId: folderId,
+        projectId: project.id,
+        projectName: project.name,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return NextResponse.json({ error: msg }, { status: 502 });
+    }
+
     const bytes = new Uint8Array(await file.arrayBuffer());
     let uploaded: { id: string; webViewLink?: string; webContentLink?: string };
     try {
       uploaded = await uploadFileToDrive({
-        folderId,
+        folderId: uploadFolderId,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
         bytes,

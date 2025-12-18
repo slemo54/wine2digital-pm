@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { uploadFileToDrive } from "@/lib/google-drive";
+import { resolveDriveUploadFolderId, uploadFileToDrive } from "@/lib/google-drive";
 import { getTaskAccessFlags } from "@/lib/task-access";
 import { prisma } from "@/lib/prisma";
 
@@ -88,11 +88,31 @@ export async function POST(
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
+    const task = await prisma.task.findUnique({
+      where: { id: params.id },
+      select: { projectId: true, project: { select: { name: true } } },
+    });
+    if (!task) {
+      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    let uploadFolderId = folderId;
+    try {
+      uploadFolderId = await resolveDriveUploadFolderId({
+        baseFolderId: folderId,
+        projectId: task.projectId,
+        projectName: task.project?.name,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return NextResponse.json({ error: msg }, { status: 502 });
+    }
+
     const bytes = new Uint8Array(await file.arrayBuffer());
     let uploaded: { id: string; webViewLink?: string; webContentLink?: string };
     try {
       uploaded = await uploadFileToDrive({
-        folderId,
+        folderId: uploadFolderId,
         fileName,
         mimeType: mimeType || "application/octet-stream",
         bytes,
