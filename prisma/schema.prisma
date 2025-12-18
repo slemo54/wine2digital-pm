@@ -220,6 +220,35 @@ model Subtask {
   task          Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
   comments      SubtaskComment[]
   attachments   SubtaskAttachment[]
+  checklists    SubtaskChecklist[]
+}
+
+model SubtaskChecklist {
+  id        String   @id @default(cuid())
+  subtaskId String
+  title     String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subtask   Subtask  @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  items     SubtaskChecklistItem[]
+
+  @@index([subtaskId, position])
+}
+
+model SubtaskChecklistItem {
+  id          String   @id @default(cuid())
+  checklistId String
+  content     String   @db.Text
+  completed   Boolean  @default(false)
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  checklist   SubtaskChecklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
+  @@index([checklistId, position])
 }
 
 model SubtaskComment {
