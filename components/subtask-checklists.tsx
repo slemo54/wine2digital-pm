@@ -8,28 +8,6 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 
-// ... (inside component)
-
-<div className="flex items-start gap-2">
-  <AutosizeTextarea
-    value={editingTitles[c.id] ?? c.title}
-    onChange={(e) => setEditingTitles((prev) => ({ ...prev, [c.id]: e.target.value }))}
-    onBlur={() => void saveChecklistTitle(c.id)}
-    disabled={disabled || loading}
-    className="font-medium resize-none min-h-[40px]"
-    placeholder="Checklist Title"
-  />
-  <Button
-    variant="ghost"
-    size="icon"
-    onClick={() => void deleteChecklist(c.id)}
-    disabled={disabled || loading}
-    className="mt-1"
-  >
-    <Trash2 className="h-4 w-4" />
-  </Button>
-</div>
-
 type ChecklistItem = {
   id: string;
   content: string;
