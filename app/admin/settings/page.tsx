@@ -101,26 +101,7 @@ export default function AdminSettingsPage() {
                                     onChange={handleChange}
                                 />
                             </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="breakDurationMin">Break Duration (minutes)</Label>
-                                <Input
-                                    id="breakDurationMin"
-                                    name="breakDurationMin"
-                                    type="number"
-                                    value={settings.breakDurationMin}
-                                    onChange={handleChange}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="lateToleranceMin">Late Tolerance (minutes)</Label>
-                                <Input
-                                    id="lateToleranceMin"
-                                    name="lateToleranceMin"
-                                    type="number"
-                                    value={settings.lateToleranceMin}
-                                    onChange={handleChange}
-                                />
-                            </div>
+
                         </div>
 
                         <div className="flex justify-end pt-4">
