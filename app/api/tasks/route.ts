@@ -45,11 +45,11 @@ export async function GET(req: NextRequest) {
         : scope === 'projects'
           ? { project: { members: { some: { userId } } } }
           : {
-              OR: [
-                { assignees: { some: { userId } } },
-                { project: { members: { some: { userId } } } },
-              ],
-            };
+            OR: [
+              { assignees: { some: { userId } } },
+              { project: { members: { some: { userId } } } },
+            ],
+          };
 
     const where = {
       AND: [
@@ -59,24 +59,24 @@ export async function GET(req: NextRequest) {
         projectId && projectId !== 'all' ? { projectId } : {},
         dueFrom || dueTo
           ? {
-              dueDate: {
-                ...(dueFrom ? { gte: new Date(dueFrom) } : {}),
-                ...(dueTo ? { lte: new Date(dueTo) } : {}),
-              },
-            }
+            dueDate: {
+              ...(dueFrom ? { gte: new Date(dueFrom) } : {}),
+              ...(dueTo ? { lte: new Date(dueTo) } : {}),
+            },
+          }
           : {},
         q
           ? {
-              OR: [
-                { title: { contains: q, mode: 'insensitive' as const } },
-                { description: { contains: q, mode: 'insensitive' as const } },
-              ],
-            }
+            OR: [
+              { title: { contains: q, mode: 'insensitive' as const } },
+              { description: { contains: q, mode: 'insensitive' as const } },
+            ],
+          }
           : {},
         tag
           ? {
-              tags: { contains: `"${tag.replace(/"/g, '\\"')}"` },
-            }
+            tags: { contains: `"${tag.replace(/"/g, '\\"')}"` },
+          }
           : {},
       ],
     } as const;
@@ -106,6 +106,10 @@ export async function GET(req: NextRequest) {
             },
           },
           _count: { select: { comments: true, attachments: true, subtasks: true } },
+          subtasks: {
+            where: { OR: [{ status: "done" }, { completed: true }] },
+            select: { id: true }
+          }
         },
       }),
     ]);
@@ -189,10 +193,10 @@ export async function POST(req: NextRequest) {
         ...(resolvedListId ? { listId: resolvedListId } : {}),
         assignees: assigneeIds && Array.isArray(assigneeIds) && assigneeIds.length > 0
           ? {
-              create: assigneeIds.map((userId: string) => ({
-                userId,
-              })),
-            }
+            create: assigneeIds.map((userId: string) => ({
+              userId,
+            })),
+          }
           : undefined,
       },
       include: {

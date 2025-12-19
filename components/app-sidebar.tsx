@@ -17,6 +17,8 @@ import {
   User,
   Shield,
   LogOut,
+  Clock,
+  Settings,
 } from "lucide-react";
 
 type NavItem = {
@@ -31,6 +33,7 @@ const NAV: NavItem[] = [
   { href: "/projects", label: "Progetti", icon: FolderKanban, isActive: (p) => p.startsWith("/projects") || p.startsWith("/project/") },
   { href: "/tasks", label: "Task", icon: CheckSquare, isActive: (p) => p.startsWith("/tasks") },
   { href: "/calendar", label: "Calendario", icon: CalendarDays, isActive: (p) => p.startsWith("/calendar") },
+  { href: "/attendance", label: "Presenze", icon: Clock, isActive: (p) => p.startsWith("/attendance") },
   { href: "/files", label: "File", icon: FileText, isActive: (p) => p.startsWith("/files") },
   { href: "/profile", label: "Profilo", icon: User, isActive: (p) => p.startsWith("/profile") },
 ];
@@ -100,6 +103,18 @@ export function AppSidebar({ className }: AppSidebarProps) {
               >
                 <Shield className="h-4 w-4" />
                 Admin
+              </Link>
+              <Link
+                href="/admin/settings"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                  pathname.startsWith("/admin/settings")
+                    ? "bg-accent text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                )}
+              >
+                <Settings className="h-4 w-4" />
+                Settings
               </Link>
             </div>
           ) : null}

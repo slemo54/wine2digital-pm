@@ -33,16 +33,44 @@ export async function PUT(
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const { completed, title, description } = await request.json();
+    const { completed, status, title, description, assigneeId, dueDate, priority } = await request.json();
+
+    // Determine target status
+    let targetStatus = status;
+    if (!targetStatus && typeof completed === "boolean") {
+      targetStatus = completed ? "done" : "todo";
+    }
+
+    // Dependency Guard
+    if (targetStatus === "done") {
+      const pendingDependencies = await prisma.subtaskDependency.findFirst({
+        where: {
+          subtaskId: params.subtaskId,
+          dependsOn: {
+            status: { not: "done" }
+          }
+        }
+      });
+
+      if (pendingDependencies) {
+        return NextResponse.json(
+          { error: "Cannot complete subtask. Waiting on dependencies." },
+          { status: 409 }
+        );
+      }
+    }
 
     const subtask = await prisma.subtask.update({
       where: { id: params.subtaskId },
       data: {
-        ...(typeof completed === "boolean" && { completed }),
+        ...(targetStatus && { status: targetStatus, completed: targetStatus === "done" }),
         ...(title && { title }),
         ...(typeof description === "string" || description === null
           ? { description: description === null ? null : String(description) }
           : {}),
+        ...(assigneeId !== undefined && { assigneeId }), // allow null to unassign
+        ...(dueDate !== undefined && { dueDate }),
+        ...(priority && { priority }),
       },
     });
 
@@ -53,9 +81,8 @@ export async function PUT(
         type: "task.subtask_updated",
         metadata: {
           subtaskId: subtask.id,
-          ...(typeof completed === "boolean" ? { completed } : {}),
-          ...(title ? { title } : {}),
-          ...(typeof description === "string" || description === null ? { descriptionUpdated: true } : {}),
+          status: subtask.status,
+          title: subtask.title,
         },
       },
     });

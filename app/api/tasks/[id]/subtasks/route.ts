@@ -34,6 +34,20 @@ export async function GET(
     const subtasks = await prisma.subtask.findMany({
       where: { taskId: params.id },
       orderBy: { position: "asc" },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            firstName: true,
+            lastName: true
+          }
+        },
+        dependencies: true,
+        dependentOn: true
+      }
     });
 
     return NextResponse.json(subtasks);
@@ -76,7 +90,7 @@ export async function POST(
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const { title, description } = await request.json();
+    const { title, description, assigneeId, dueDate, priority, status } = await request.json();
 
     // Get max position
     const maxPosition = await prisma.subtask.aggregate({
@@ -90,6 +104,10 @@ export async function POST(
         title,
         description,
         position: (maxPosition._max.position || 0) + 1,
+        ...(assigneeId && { assigneeId }),
+        ...(dueDate && { dueDate }),
+        ...(priority && { priority }),
+        ...(status && { status }),
       },
     });
 
