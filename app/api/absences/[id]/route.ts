@@ -21,32 +21,50 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const body = await req.json();
     const { status } = body;
 
-    // Only managers/admins can approve/reject
-    if (status && (status === 'approved' || status === 'rejected')) {
-      if (user?.role !== 'admin' && user?.role !== 'manager') {
-        return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
-      }
+    // Only managers/admins can approve/reject/edit
+    if (user?.role !== 'admin' && user?.role !== 'manager') {
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+    }
 
-      const absence = await prisma.absence.update({
-        where: { id: params.id },
-        data: {
-          status,
-          approvedBy: userId,
-          approvedAt: new Date(),
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-            },
+    // Construct update data
+    const updateData: any = {};
+
+    // Allow status update logic (existing)
+    if (status && (status === 'approved' || status === 'rejected')) {
+       updateData.status = status;
+       updateData.approvedBy = userId;
+       updateData.approvedAt = new Date();
+    } else if (status === 'pending') {
+       // Allow resetting to pending if needed
+       updateData.status = status;
+       updateData.approvedBy = null;
+       updateData.approvedAt = null;
+    }
+
+    // Allow editing other fields
+    if (body.startDate) updateData.startDate = body.startDate;
+    if (body.endDate) updateData.endDate = body.endDate;
+    if (body.type) updateData.type = body.type;
+    if (body.reason !== undefined) updateData.reason = body.reason;
+
+    const absence = await prisma.absence.update({
+      where: { id: params.id },
+      data: updateData,
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            name: true,
           },
         },
-      });
+      },
+    });
 
-      // Create notification for user
+    // Create notification only if status changed
+    if (status && status !== absence.status && (status === 'approved' || status === 'rejected')) {
       await prisma.notification.create({
         data: {
           userId: absence.userId,
@@ -56,9 +74,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
           link: '/calendar',
         },
       });
-
-      return NextResponse.json({ absence });
     }
+
+    return NextResponse.json({ absence });
 
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   } catch (error) {

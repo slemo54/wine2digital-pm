@@ -21,9 +21,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, Plus, Check, X, Loader2, Clock, User, ChevronRight } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Check, X, Loader2, Clock, User, ChevronRight, LayoutList, CalendarDays } from "lucide-react";
 import { toast } from "react-hot-toast";
-import { format, isAfter, isBefore, isSameDay, startOfDay } from "date-fns";
+import { format, isAfter, isBefore, isSameDay, startOfDay, differenceInDays } from "date-fns";
+import { AbsenceTable } from "@/components/calendar/AbsenceTable";
+import { AbsenceFilters } from "@/components/calendar/AbsenceFilters";
 
 interface Absence {
   id: string;
@@ -68,6 +70,14 @@ export default function CalendarPage() {
   const [pendingTake, setPendingTake] = useState(500);
   const [approvedTake, setApprovedTake] = useState(25);
   const [rejectedTake, setRejectedTake] = useState(25);
+
+  // New State for Admin Features
+  const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
+  const [editingAbsence, setEditingAbsence] = useState<Absence | null>(null);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [newAbsence, setNewAbsence] = useState({
     type: "vacation",
     startDate: "",
@@ -193,39 +203,65 @@ export default function CalendarPage() {
     }
   };
 
+  const handleEditClick = (absence: Absence) => {
+    setEditingAbsence(absence);
+    setNewAbsence({
+      type: absence.type,
+      startDate: new Date(absence.startDate).toISOString().split("T")[0],
+      endDate: new Date(absence.endDate).toISOString().split("T")[0],
+      isFullDay: absence.isFullDay,
+      startTime: absence.startTime || "",
+      endTime: absence.endTime || "",
+      reason: absence.reason || "",
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDialogChange = (open: boolean) => {
+    setIsDialogOpen(open);
+    if (!open) {
+      setEditingAbsence(null);
+      setNewAbsence({
+        type: "vacation",
+        startDate: "",
+        endDate: "",
+        isFullDay: true,
+        startTime: "",
+        endTime: "",
+        reason: "",
+      });
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newAbsence.startDate || !newAbsence.endDate) {
       toast.error("Please select start and end dates");
       return;
     }
 
     try {
-      const response = await fetch("/api/absences", {
-        method: "POST",
+      const url = editingAbsence ? `/api/absences/${editingAbsence.id}` : "/api/absences";
+      const method = editingAbsence ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newAbsence),
       });
 
+      const data = await response.json();
+
       if (response.ok) {
-        toast.success("Absence request submitted");
-        setIsDialogOpen(false);
-        setNewAbsence({
-          type: "vacation",
-          startDate: "",
-          endDate: "",
-          isFullDay: true,
-          startTime: "",
-          endTime: "",
-          reason: "",
-        });
+        toast.success(editingAbsence ? "Absence updated successfully" : "Absence request submitted");
+        handleDialogChange(false);
         fetchAbsences();
       } else {
-        throw new Error();
+        throw new Error(data.error || "Failed to submit");
       }
-    } catch (error) {
-      toast.error("Failed to submit absence request");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to submit absence request");
     }
   };
 
@@ -322,6 +358,27 @@ export default function CalendarPage() {
     ? calendarAbsences.filter((a) => isBetweenInclusive(selectedDay, new Date(a.startDate), new Date(a.endDate)))
     : [];
 
+  // Filter logic for Table View
+  const filteredAbsences = calendarAbsences.filter(a => {
+    const matchesStatus = statusFilter === 'all' || a.status === statusFilter;
+    const matchesType = typeFilter === 'all' || a.type === typeFilter;
+    const searchLower = searchQuery.toLowerCase();
+    const userName = a.user.name || `${a.user.firstName} ${a.user.lastName}`;
+    const matchesSearch = !searchQuery ||
+      userName.toLowerCase().includes(searchLower) ||
+      a.user.email.toLowerCase().includes(searchLower);
+
+    return matchesStatus && matchesType && matchesSearch;
+  });
+
+  const sickDaysCount = filteredAbsences
+    .filter(a => a.type === 'sick_leave' && a.status === 'approved')
+    .reduce((acc, curr) => {
+      const start = new Date(curr.startDate);
+      const end = new Date(curr.endDate);
+      return acc + (differenceInDays(end, start) + 1);
+    }, 0);
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-secondary">
@@ -353,80 +410,101 @@ export default function CalendarPage() {
             <h2 className="text-3xl font-bold text-foreground mb-1">Absence Management</h2>
             <p className="text-muted-foreground">Review and manage team absence requests</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90">
-                <Plus className="mr-2 h-4 w-4" />
-                Request Absence
+          <div className="flex gap-2">
+            <div className="bg-white p-1 rounded-lg border shadow-sm flex items-center">
+              <Button
+                variant={viewMode === "calendar" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("calendar")}
+                title="Calendar View"
+              >
+                <CalendarDays className="h-4 w-4" />
               </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <form onSubmit={handleSubmit}>
-                <DialogHeader>
-                  <DialogTitle>Request Absence</DialogTitle>
-                  <DialogDescription>
-                    Submit a new absence request for approval
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="type">Type</Label>
-                    <Select
-                      value={newAbsence.type}
-                      onValueChange={(value) => setNewAbsence({ ...newAbsence, type: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="vacation">Vacation</SelectItem>
-                        <SelectItem value="sick_leave">Sick Leave</SelectItem>
-                        <SelectItem value="personal">Personal</SelectItem>
-                      </SelectContent>
-                    </Select>
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("list")}
+                title="List View"
+              >
+                <LayoutList className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
+              <DialogTrigger asChild>
+                <Button className="bg-primary hover:bg-primary/90">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Request Absence
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <form onSubmit={handleSubmit}>
+                  <DialogHeader>
+                    <DialogTitle>{editingAbsence ? "Edit Absence" : "Request Absence"}</DialogTitle>
+                    <DialogDescription>
+                      {editingAbsence ? `Modify absence request for ${editingAbsence.user.firstName}` : "Submit a new absence request for approval"}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="type">Type</Label>
+                      <Select
+                        value={newAbsence.type}
+                        onValueChange={(value) => setNewAbsence({ ...newAbsence, type: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vacation">Vacation</SelectItem>
+                          <SelectItem value="sick_leave">Sick Leave</SelectItem>
+                          <SelectItem value="personal">Personal</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="startDate">Start Date</Label>
+                      <Input
+                        id="startDate"
+                        type="date"
+                        value={newAbsence.startDate}
+                        onChange={(e) => setNewAbsence({ ...newAbsence, startDate: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="endDate">End Date</Label>
+                      <Input
+                        id="endDate"
+                        type="date"
+                        value={newAbsence.endDate}
+                        onChange={(e) => setNewAbsence({ ...newAbsence, endDate: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="reason">Reason (Optional)</Label>
+                      <Textarea
+                        id="reason"
+                        value={newAbsence.reason}
+                        onChange={(e) => setNewAbsence({ ...newAbsence, reason: e.target.value })}
+                        placeholder="Provide a reason for your absence..."
+                        rows={3}
+                      />
+                    </div>
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="startDate">Start Date</Label>
-                    <Input
-                      id="startDate"
-                      type="date"
-                      value={newAbsence.startDate}
-                      onChange={(e) => setNewAbsence({ ...newAbsence, startDate: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="endDate">End Date</Label>
-                    <Input
-                      id="endDate"
-                      type="date"
-                      value={newAbsence.endDate}
-                      onChange={(e) => setNewAbsence({ ...newAbsence, endDate: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="reason">Reason (Optional)</Label>
-                    <Textarea
-                      id="reason"
-                      value={newAbsence.reason}
-                      onChange={(e) => setNewAbsence({ ...newAbsence, reason: e.target.value })}
-                      placeholder="Provide a reason for your absence..."
-                      rows={3}
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" className="bg-primary hover:bg-primary/90">
-                    Submit Request
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => handleDialogChange(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" className="bg-primary hover:bg-primary/90">
+                      {editingAbsence ? "Update Request" : "Submit Request"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -475,87 +553,88 @@ export default function CalendarPage() {
         </div>
 
         {/* Calendar and Details View */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
-          {/* Calendar Card */}
-          <Card className="bg-white lg:col-span-8 shadow-md border-none overflow-hidden">
-            <CardHeader className="bg-white/50 border-b">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-xl">Team Calendar</CardTitle>
-                  <CardDescription>
-                    Overview of all absence requests
-                  </CardDescription>
+        {viewMode === "calendar" ? (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
+            {/* Calendar Card */}
+            <Card className="bg-white lg:col-span-8 shadow-md border-none overflow-hidden">
+              <CardHeader className="bg-white/50 border-b">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xl">Team Calendar</CardTitle>
+                    <CardDescription>
+                      Overview of all absence requests
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-4 text-xs font-medium uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-full bg-success shadow-sm shadow-success/20" />
+                      <span className="text-muted-foreground">Approved</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-full bg-warning shadow-sm shadow-warning/20" />
+                      <span className="text-muted-foreground">Pending</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-full bg-destructive shadow-sm shadow-destructive/20" />
+                      <span className="text-muted-foreground">Rejected</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-4 text-xs font-medium uppercase tracking-wider">
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-3 w-3 rounded-full bg-success shadow-sm shadow-success/20" />
-                    <span className="text-muted-foreground">Approved</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-3 w-3 rounded-full bg-warning shadow-sm shadow-warning/20" />
-                    <span className="text-muted-foreground">Pending</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="h-3 w-3 rounded-full bg-destructive shadow-sm shadow-destructive/20" />
-                    <span className="text-muted-foreground">Rejected</span>
-                  </div>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-4 sm:p-8">
-              <Calendar
-                mode="single"
-                month={visibleMonth}
-                onMonthChange={(m) => setVisibleMonth(m)}
-                selected={selectedDay}
-                onSelect={(d) => setSelectedDay(d)}
-                className="w-full border rounded-md p-4 shadow-sm"
-                classNames={{
-                  months: "w-full flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 justify-center",
-                  month: "w-full space-y-6",
-                  table: "w-full border-collapse",
-                  head_row: "flex w-full justify-between mb-2",
-                  head_cell: "text-muted-foreground rounded-md w-full font-semibold text-[0.85rem] flex-1 text-center py-2",
-                  row: "flex w-full mt-1 justify-between",
-                  cell: "relative h-16 w-full text-center text-sm p-0 focus-within:relative focus-within:z-20 flex-1 flex justify-center items-center rounded-xl transition-all duration-200",
-                  day: "h-14 w-14 p-0 font-medium aria-selected:opacity-100 flex items-center justify-center rounded-2xl hover:bg-secondary/50 transition-all text-base",
-                  day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                  day_today: "bg-accent text-accent-foreground border-2 border-primary/20",
-                }}
-                modifiers={{
-                  approved: (date) => approvedDayKeys.has(toDayKey(date)),
-                  pending: (date) => pendingDayKeys.has(toDayKey(date)),
-                  rejected: (date) => rejectedDayKeys.has(toDayKey(date)),
-                }}
-                modifiersClassNames={{
-                  approved: "bg-success/20 text-success font-bold hover:bg-success/30",
-                  pending: "bg-warning/20 text-warning font-bold hover:bg-warning/30",
-                  rejected: "bg-destructive/20 text-destructive font-bold hover:bg-destructive/30",
-                }}
-              />
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-8">
+                <Calendar
+                  mode="single"
+                  month={visibleMonth}
+                  onMonthChange={(m) => setVisibleMonth(m)}
+                  selected={selectedDay}
+                  onSelect={(d) => setSelectedDay(d)}
+                  className="w-full border rounded-md p-4 shadow-sm"
+                  classNames={{
+                    months: "w-full flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0 justify-center",
+                    month: "w-full space-y-6",
+                    table: "w-full border-collapse",
+                    head_row: "flex w-full justify-between mb-2",
+                    head_cell: "text-muted-foreground rounded-md w-full font-semibold text-[0.85rem] flex-1 text-center py-2",
+                    row: "flex w-full mt-1 justify-between",
+                    cell: "relative h-16 w-full text-center text-sm p-0 focus-within:relative focus-within:z-20 flex-1 flex justify-center items-center rounded-xl transition-all duration-200",
+                    day: "h-14 w-14 p-0 font-medium aria-selected:opacity-100 flex items-center justify-center rounded-2xl hover:bg-secondary/50 transition-all text-base",
+                    day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                    day_today: "bg-accent text-accent-foreground border-2 border-primary/20",
+                  }}
+                  modifiers={{
+                    approved: (date) => approvedDayKeys.has(toDayKey(date)),
+                    pending: (date) => pendingDayKeys.has(toDayKey(date)),
+                    rejected: (date) => rejectedDayKeys.has(toDayKey(date)),
+                  }}
+                  modifiersClassNames={{
+                    approved: "bg-success/20 text-success font-bold hover:bg-success/30",
+                    pending: "bg-warning/20 text-warning font-bold hover:bg-warning/30",
+                    rejected: "bg-destructive/20 text-destructive font-bold hover:bg-destructive/30",
+                  }}
+                />
+              </CardContent>
+            </Card>
 
-          {/* Details Card */}
-          <Card className="bg-white lg:col-span-4 shadow-md border-none flex flex-col">
-            <CardHeader className="bg-white/50 border-b">
-              <CardTitle className="text-xl">
-                {selectedDay ? format(selectedDay, "MMMM d, yyyy") : "Details"}
-              </CardTitle>
-              <CardDescription>
-                {selectedDay ? `${absencesForSelectedDay.length} requests on this day` : "Select a day to view details"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-6 flex-1 overflow-auto max-h-[500px] space-y-4">
-              {selectedDay && absencesForSelectedDay.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center p-6 sm:p-8 opacity-60">
-                  <CalendarIcon className="h-12 w-14 mb-4 text-muted-foreground/30" />
-                  <p className="text-sm text-muted-foreground italic">No absences scheduled for this date.</p>
-                </div>
-              ) : null}
+            {/* Details Card */}
+            <Card className="bg-white lg:col-span-4 shadow-md border-none flex flex-col">
+              <CardHeader className="bg-white/50 border-b">
+                <CardTitle className="text-xl">
+                  {selectedDay ? format(selectedDay, "MMMM d, yyyy") : "Details"}
+                </CardTitle>
+                <CardDescription>
+                  {selectedDay ? `${absencesForSelectedDay.length} requests on this day` : "Select a day to view details"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 flex-1 overflow-auto max-h-[500px] space-y-4">
+                {selectedDay && absencesForSelectedDay.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 sm:p-8 opacity-60">
+                    <CalendarIcon className="h-12 w-14 mb-4 text-muted-foreground/30" />
+                    <p className="text-sm text-muted-foreground italic">No absences scheduled for this date.</p>
+                  </div>
+                ) : null}
 
-              {selectedDay
-                ? absencesForSelectedDay.map((a) => (
+                {selectedDay
+                  ? absencesForSelectedDay.map((a) => (
                     <div key={a.id} className="group relative rounded-xl border p-4 hover:border-primary/30 transition-colors bg-secondary/5 shadow-sm">
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="flex items-center gap-3">
@@ -594,10 +673,71 @@ export default function CalendarPage() {
                       </div>
                     </div>
                   ))
-                : null}
-            </CardContent>
-          </Card>
-        </div>
+                  : null}
+              </CardContent>
+            </Card>
+          </div>
+        ) : (
+          <div className="space-y-4 mb-12">
+            <Card className="bg-white border-none shadow-sm">
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Attendance Report</CardTitle>
+                    <CardDescription>Detailed view of absences for {format(visibleMonth, "MMMM yyyy")}</CardDescription>
+                  </div>
+                  {sickDaysCount > 0 && (
+                    <Badge variant="outline" className="text-destructive border-destructive/20 bg-destructive/5">
+                      Total Sick Days: {sickDaysCount}
+                    </Badge>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                <AbsenceFilters
+                  statusFilter={statusFilter}
+                  setStatusFilter={setStatusFilter}
+                  typeFilter={typeFilter}
+                  setTypeFilter={setTypeFilter}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  onClear={() => {
+                    setStatusFilter("all");
+                    setTypeFilter("all");
+                    setSearchQuery("");
+                  }}
+                />
+                <AbsenceTable
+                  absences={filteredAbsences}
+                  isLoading={isLoading}
+                  isAdmin={isManagerOrAdmin}
+                  onEdit={handleEditClick}
+                  onDelete={(id) => {
+                    // TODO: Add delete confirmation? For now just handleReject or implement delete logic
+                    // The original code uses buttons, here table uses actions.
+                    // Let's reuse handleReject for now or verify if we need strict delete.
+                    // The API has specific DELETE endpoint.
+                    // Let's implement delete logic briefly here or use handleReject if appropriate?
+                    // Actually let's use a simple delete fetch.
+                    if (confirm("Are you sure you want to delete this absence?")) {
+                      fetch(`/api/absences/${id}`, { method: "DELETE" })
+                        .then(res => {
+                          if (res.ok) {
+                            toast.success("Absence deleted");
+                            fetchAbsences();
+                          } else {
+                            toast.error("Failed to delete");
+                          }
+                        });
+                    }
+                  }}
+                  onApprove={handleApprove}
+                  onReject={handleReject}
+                />
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Requests Management Grid */}
         <div className="space-y-6">
@@ -605,7 +745,7 @@ export default function CalendarPage() {
             <h3 className="text-xl font-bold text-foreground">Requests Management</h3>
             <div className="h-px flex-1 bg-border/60" />
           </div>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Pending Column */}
             <div className="space-y-4">
@@ -645,7 +785,7 @@ export default function CalendarPage() {
                             {getTypeLabel(absence.type)}
                           </Badge>
                         </div>
-                        
+
                         <div className="space-y-3 mb-5 pl-1">
                           <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
                             <CalendarIcon className="h-4 w-4 text-warning/60" />
