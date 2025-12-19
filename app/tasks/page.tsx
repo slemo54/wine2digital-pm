@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -46,6 +46,7 @@ type TaskListItem = {
 export default function TasksPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [projects, setProjects] = useState<ProjectLite[]>([]);
   const [tasks, setTasks] = useState<TaskListItem[]>([]);
@@ -55,6 +56,7 @@ export default function TasksPage() {
   const [total, setTotal] = useState(0);
   const pageSize = 100;
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
 
   const [filters, setFilters] = useState<{
@@ -82,6 +84,16 @@ export default function TasksPage() {
       router.push("/auth/login");
     }
   }, [status, router]);
+
+  useEffect(() => {
+    const taskIdFromUrl = searchParams?.get("taskId");
+    const subtaskIdFromUrl = searchParams?.get("subtaskId");
+    if (taskIdFromUrl) {
+      setSelectedTaskId(taskIdFromUrl);
+      setSelectedSubtaskId(subtaskIdFromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -460,9 +472,14 @@ export default function TasksPage() {
         {selectedTaskId ? (
           <TaskDetailModal
             open={true}
-            onClose={() => setSelectedTaskId(null)}
+            onClose={() => {
+              setSelectedTaskId(null);
+              setSelectedSubtaskId(null);
+              if (searchParams?.get("taskId")) router.replace("/tasks");
+            }}
             taskId={selectedTaskId}
             projectId={"_global"}
+            initialSubtaskId={selectedSubtaskId || undefined}
             onUpdate={() => {
               // refresh list after edits
               fetchTasksPage({ page: 1, append: false }).catch(() => {});

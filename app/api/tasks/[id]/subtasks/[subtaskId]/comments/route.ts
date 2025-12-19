@@ -3,6 +3,12 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getTaskAccessFlags } from "@/lib/task-access";
 import { prisma } from "@/lib/prisma";
+import { buildMentionNotifications, isEffectivelyEmptyRichContent, normalizeMentionedUserIds } from "@/lib/rich-text";
+
+type CreateBody = {
+  content?: string;
+  mentionedUserIds?: unknown;
+};
 
 export async function GET(
   _request: NextRequest,
@@ -69,9 +75,13 @@ export async function POST(
       (role === "member" && access.isAssignee);
     if (!canWrite) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
 
-    const { content } = await request.json();
-    const text = typeof content === "string" ? content.trim() : "";
-    if (!text) return NextResponse.json({ error: "content required" }, { status: 400 });
+    const body = (await request.json().catch(() => ({}))) as CreateBody;
+    const text = typeof body?.content === "string" ? body.content.trim() : "";
+    if (!text || isEffectivelyEmptyRichContent(text)) {
+      return NextResponse.json({ error: "content required" }, { status: 400 });
+    }
+
+    const mentionedUserIds = normalizeMentionedUserIds((body as any)?.mentionedUserIds, userId);
 
     const comment = await prisma.subtaskComment.create({
       data: {
@@ -101,6 +111,27 @@ export async function POST(
         metadata: { subtaskId: params.subtaskId, commentId: comment.id },
       },
     });
+
+    if (mentionedUserIds.length > 0) {
+      const [task, subtask] = await Promise.all([
+        prisma.task.findUnique({ where: { id: params.id }, select: { title: true, projectId: true } }),
+        prisma.subtask.findUnique({ where: { id: params.subtaskId }, select: { title: true } }),
+      ]);
+      const authorLabel = String(comment.user?.name || comment.user?.email || "Un collega");
+      const subtaskTitle = String(subtask?.title || "Subtask");
+      const taskTitle = String(task?.title || "Task");
+
+      await prisma.notification.createMany({
+        data: buildMentionNotifications({
+          mentionedUserIds,
+          authorLabel,
+          taskId: params.id,
+          subtaskId: params.subtaskId,
+          taskTitle,
+          subtaskTitle,
+        }),
+      });
+    }
 
     return NextResponse.json(comment, { status: 201 });
   } catch (error) {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { SideDrawer } from "@/components/side-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,17 +28,20 @@ import {
   Upload,
   Users,
   Hash,
-  Clock
+  Clock,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { formatTaskActivityEvent } from "@/lib/task-activity-format";
+import { RichTextEditor, RichTextViewer, type MentionUser } from "@/components/ui/rich-text-editor";
 
 interface Subtask {
   id: string;
   title: string;
+  description?: string | null;
   completed: boolean;
   position: number;
 }
@@ -61,15 +65,35 @@ interface Attachment {
   createdAt: string;
 }
 
+interface SubtaskAttachment {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  filePath: string;
+  createdAt: string;
+}
+
+interface SubtaskComment {
+  id: string;
+  content: string;
+  user: {
+    name: string | null;
+    email: string;
+    image: string | null;
+  };
+  createdAt: string;
+}
+
 interface TaskDetailModalProps {
   open: boolean;
   onClose: () => void;
   taskId: string;
   projectId: string;
   onUpdate?: () => void;
+  initialSubtaskId?: string;
 }
 
-export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: TaskDetailModalProps) {
+export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, initialSubtaskId }: TaskDetailModalProps) {
   const { data: session } = useSession();
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -77,20 +101,82 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [activityEvents, setActivityEvents] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<"activity" | "my_work" | "assigned" | "comments">("activity");
+  const [activeTab, setActiveTab] = useState<"subtasks" | "attachments" | "comments" | "activity">("subtasks");
   const [isSavingMeta, setIsSavingMeta] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [draftAssigneeIds, setDraftAssigneeIds] = useState<string[]>([]);
+  const [tagsPickerOpen, setTagsPickerOpen] = useState(false);
+  const [draftTags, setDraftTags] = useState<string[]>([]);
+  const [draftTagInput, setDraftTagInput] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
   const [newComment, setNewComment] = useState("");
   const [uploading, setUploading] = useState(false);
   const [projectLists, setProjectLists] = useState<Array<{ id: string; name: string }>>([]);
+  const [subtaskDetailOpen, setSubtaskDetailOpen] = useState(false);
+  const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null);
+  const [subtaskAttachments, setSubtaskAttachments] = useState<SubtaskAttachment[]>([]);
+  const [subtaskComments, setSubtaskComments] = useState<SubtaskComment[]>([]);
+  const [subtaskUploading, setSubtaskUploading] = useState(false);
+  const [subtaskDraftDescription, setSubtaskDraftDescription] = useState("");
+  const [subtaskNewCommentHtml, setSubtaskNewCommentHtml] = useState("");
+  const [subtaskMentionedUserIds, setSubtaskMentionedUserIds] = useState<string[]>([]);
+
+  const didOpenInitialSubtaskRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (open && taskId) {
       fetchTaskDetails();
     }
   }, [open, taskId]);
+
+  useEffect(() => {
+    didOpenInitialSubtaskRef.current = null;
+  }, [taskId]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!initialSubtaskId) return;
+    if (didOpenInitialSubtaskRef.current === initialSubtaskId) return;
+
+    let cancelled = false;
+    (async () => {
+      const direct = subtasks.find((s) => s.id === initialSubtaskId) || null;
+      if (direct) {
+        if (!cancelled) {
+          setSelectedSubtask(direct);
+          setSubtaskDetailOpen(true);
+          didOpenInitialSubtaskRef.current = initialSubtaskId;
+        }
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/tasks/${taskId}/subtasks/${initialSubtaskId}`, { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.id) return;
+        if (!cancelled) {
+          setSelectedSubtask(data);
+          setSubtaskDetailOpen(true);
+          didOpenInitialSubtaskRef.current = initialSubtaskId;
+        }
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, initialSubtaskId, subtasks, taskId]);
+
+  useEffect(() => {
+    if (!subtaskDetailOpen || !selectedSubtask) return;
+    setSubtaskDraftDescription(selectedSubtask.description || "");
+    setSubtaskNewCommentHtml("");
+    setSubtaskMentionedUserIds([]);
+    void fetchSubtaskDetails(selectedSubtask.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtaskDetailOpen, selectedSubtask?.id]);
 
   const fetchTaskDetails = async () => {
     setLoading(true);
@@ -242,11 +328,97 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
     }
   };
 
+  const fetchSubtaskDetails = async (subtaskId: string) => {
+    try {
+      const [aRes, cRes] = await Promise.all([
+        fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}/attachments`, { cache: "no-store" }),
+        fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}/comments`, { cache: "no-store" }),
+      ]);
+      const [aData, cData] = await Promise.all([aRes.json(), cRes.json()]);
+      setSubtaskAttachments(Array.isArray(aData) ? aData : []);
+      setSubtaskComments(Array.isArray(cData) ? cData : []);
+    } catch {
+      setSubtaskAttachments([]);
+      setSubtaskComments([]);
+    }
+  };
+
+  const saveSubtaskDescription = async () => {
+    if (!selectedSubtask) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: subtaskDraftDescription }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error || "Salvataggio fallito");
+      }
+      toast.success("Descrizione subtask salvata");
+      setSelectedSubtask((prev) => (prev ? { ...prev, description: subtaskDraftDescription } : prev));
+      setSubtasks((prev) => prev.map((s) => (s.id === selectedSubtask.id ? { ...s, description: subtaskDraftDescription } : s)));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Salvataggio fallito");
+    }
+  };
+
+  const uploadSubtaskAttachment = async (file: File) => {
+    if (!selectedSubtask) return null;
+    const fd = new FormData();
+    fd.append("file", file);
+    setSubtaskUploading(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/attachments`, {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Upload fallito");
+      setSubtaskAttachments((prev) => [data, ...prev]);
+      toast.success("File caricato");
+      return data as SubtaskAttachment;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload fallito");
+      return null;
+    } finally {
+      setSubtaskUploading(false);
+    }
+  };
+
+  const addSubtaskComment = async () => {
+    if (!selectedSubtask) return;
+    const contentHtml = subtaskNewCommentHtml.trim();
+    if (!contentHtml) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: contentHtml, mentionedUserIds: subtaskMentionedUserIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Commento fallito");
+      setSubtaskComments((prev) => [...prev, data]);
+      setSubtaskNewCommentHtml("");
+      setSubtaskMentionedUserIds([]);
+      toast.success("Commento aggiunto");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Commento fallito");
+    }
+  };
+
   const completedSubtasks = subtasks.filter(st => st.completed).length;
   const totalSubtasks = subtasks.length;
 
   const projectMembers: Array<any> = Array.isArray(task?.project?.members) ? task.project.members : [];
   const memberUsers = projectMembers.map((m: any) => m.user).filter(Boolean);
+  const mentionUsers: MentionUser[] = memberUsers
+    .map((u: any) => {
+      const label =
+        String(u?.name || `${u?.firstName || ""} ${u?.lastName || ""}`.trim() || u?.email || "").trim() || "Utente";
+      return { id: String(u?.id || ""), label, email: u?.email || null, image: u?.image || null } as MentionUser;
+    })
+    .filter((u: MentionUser) => u.id);
   const userNameById = (id: string) => {
     const u = memberUsers.find((x: any) => x?.id === id);
     if (!u) return null;
@@ -258,6 +430,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   useEffect(() => {
     if (!task) return;
     setDraftAssigneeIds(currentAssigneeIds);
+    try {
+      const parsed = typeof task?.tags === "string" ? JSON.parse(task.tags) : [];
+      setDraftTags(Array.isArray(parsed) ? parsed.map(String) : []);
+    } catch {
+      setDraftTags([]);
+    }
   }, [taskId, task?.updatedAt, currentAssigneeKey, task]);
 
   if (loading) {
@@ -273,6 +451,23 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
   }
 
   if (!task) return null;
+
+  const globalRole = ((session?.user as any)?.role as string | undefined) || "member";
+  const meId = (session?.user as any)?.id as string | undefined;
+  const isMeAssignee =
+    Boolean(meId) &&
+    Array.isArray(task?.assignees) &&
+    task.assignees.some((a: any) => a?.user?.id === meId || a?.userId === meId);
+  const canEditStatus = canEditMeta || (globalRole === "member" && isMeAssignee);
+
+  const tags: string[] = (() => {
+    try {
+      const parsed = typeof task?.tags === "string" ? JSON.parse(task.tags) : [];
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  })();
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -294,14 +489,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
 
   return (
     <Sheet open={open} onOpenChange={onClose}>
-      <SheetContent side="right" className="w-[95vw] sm:max-w-6xl max-h-[90vh] overflow-hidden p-0">
-        <div className="flex h-full">
-          {/* Left Panel - Main Content */}
-          <div className="flex-1 flex flex-col">
-            <div className="p-6 border-b">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
+      <SheetContent side="right" className="w-[95vw] sm:max-w-6xl h-full overflow-hidden p-0">
+        <div className="flex h-full flex-col">
+          <div className="border-b bg-background">
+            <div className="p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
                     <Badge className={getStatusColor(task.status)}>
                       {task.status === "todo" && "Da Fare"}
                       {task.status === "in_progress" && "In Corso"}
@@ -313,32 +507,496 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                         {task.taskList?.name || task.list}
                       </Badge>
                     ) : null}
+                    <Badge className={getPriorityColor(task.priority)}>
+                      {task.priority === "high" && "Alta"}
+                      {task.priority === "medium" && "Media"}
+                      {task.priority === "low" && "Bassa"}
+                    </Badge>
                   </div>
-                  <div className="text-2xl font-bold pr-10">{task.title}</div>
-                  {task.description && (
-                    <p className="text-sm text-gray-600 mt-2">{task.description}</p>
-                  )}
+                  <div className="text-2xl font-bold pr-10 truncate">{task.title}</div>
+                  {task.description ? (
+                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{task.description}</p>
+                  ) : null}
                 </div>
               </div>
-              <div className="mt-4">
+
+              <div className="mt-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Assignees */}
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-2">
+                    <Users className="w-3 h-3" />
+                    Assignees
+                  </Label>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {task.assignees?.map((assignee: any) => (
+                      <Avatar key={assignee.user.id} className="w-8 h-8">
+                        <AvatarImage src={assignee.user.image || undefined} />
+                        <AvatarFallback>
+                          {assignee.user.name?.[0] || assignee.user.email[0].toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                    ))}
+                    {(!task.assignees || task.assignees.length === 0) ? (
+                      <span className="text-sm text-muted-foreground">Add</span>
+                    ) : null}
+                  </div>
+
+                  {canEditMeta ? (
+                    <div className="mt-3">
+                      <Popover open={assigneePickerOpen} onOpenChange={setAssigneePickerOpen}>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" disabled={isSavingMeta}>
+                            Modifica
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-3" align="start">
+                          <div className="text-sm font-medium mb-2">Seleziona assignees</div>
+                          <div className="max-h-56 overflow-auto space-y-2">
+                            {memberUsers.map((u: any) => {
+                              const label =
+                                u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
+                              const checked = draftAssigneeIds.includes(u.id);
+                              return (
+                                <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => {
+                                      setDraftAssigneeIds((prev) =>
+                                        e.target.checked
+                                          ? Array.from(new Set([...prev, u.id]))
+                                          : prev.filter((x: string) => x !== u.id)
+                                      );
+                                    }}
+                                  />
+                                  <span className="truncate">{label}</span>
+                                </label>
+                              );
+                            })}
+                            {memberUsers.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">Nessun membro progetto</p>
+                            ) : null}
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={isSavingMeta}
+                              onClick={() => {
+                                setDraftAssigneeIds(currentAssigneeIds);
+                                setAssigneePickerOpen(false);
+                              }}
+                            >
+                              Annulla
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={isSavingMeta}
+                              onClick={() =>
+                                updateTaskMeta({ assigneeIds: draftAssigneeIds }).then(() =>
+                                  setAssigneePickerOpen(false)
+                                )
+                              }
+                            >
+                              Salva
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Dates */}
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-2">
+                    <Calendar className="w-3 h-3" />
+                    Dates
+                  </Label>
+                  <div className="space-y-2">
+                    {task.dueDate ? (
+                      <Badge variant="outline" className="text-sm">
+                        {format(new Date(task.dueDate), "PPP", { locale: it })}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Add</span>
+                    )}
+
+                    {canEditMeta ? (
+                      <Input
+                        type="date"
+                        disabled={isSavingMeta}
+                        value={task.dueDate ? format(new Date(task.dueDate), "yyyy-MM-dd") : ""}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (!v) {
+                            updateTaskMeta({ dueDate: null });
+                            return;
+                          }
+                          updateTaskMeta({ dueDate: `${v}T12:00:00Z` });
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-2">
+                    <Tag className="w-3 h-3" />
+                    Tags
+                  </Label>
+                  <div className="flex flex-wrap gap-1">
+                    {tags.length === 0 ? <span className="text-sm text-muted-foreground">Add</span> : null}
+                    {tags.slice(0, 6).map((t) => (
+                      <Badge key={t} variant="secondary">
+                        {t}
+                      </Badge>
+                    ))}
+                    {tags.length > 6 ? <Badge variant="outline">+{tags.length - 6}</Badge> : null}
+                  </div>
+
+                  {canEditMeta ? (
+                    <div className="mt-3">
+                      <Popover
+                        open={tagsPickerOpen}
+                        onOpenChange={(o) => {
+                          setTagsPickerOpen(o);
+                          if (o) {
+                            setDraftTags(tags);
+                            setDraftTagInput("");
+                          }
+                        }}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" disabled={isSavingMeta}>
+                            Modifica
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-3" align="start">
+                          <div className="text-sm font-medium mb-2">Tags</div>
+                          <div className="flex flex-wrap gap-1">
+                            {draftTags.map((t) => (
+                              <span
+                                key={t}
+                                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+                              >
+                                {t}
+                                <button
+                                  type="button"
+                                  className="opacity-70 hover:opacity-100"
+                                  onClick={() => setDraftTags((prev) => prev.filter((x) => x !== t))}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </span>
+                            ))}
+                            {draftTags.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">Nessun tag</span>
+                            ) : null}
+                          </div>
+
+                          <div className="mt-3 flex items-center gap-2">
+                            <Input
+                              value={draftTagInput}
+                              onChange={(e) => setDraftTagInput(e.target.value)}
+                              placeholder="Nuovo tag…"
+                              onKeyDown={(e) => {
+                                if (e.key !== "Enter") return;
+                                e.preventDefault();
+                                const next = draftTagInput.trim();
+                                if (!next) return;
+                                setDraftTags((prev) => (prev.includes(next) ? prev : [...prev, next]));
+                                setDraftTagInput("");
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                const next = draftTagInput.trim();
+                                if (!next) return;
+                                setDraftTags((prev) => (prev.includes(next) ? prev : [...prev, next]));
+                                setDraftTagInput("");
+                              }}
+                            >
+                              Add
+                            </Button>
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={isSavingMeta}
+                              onClick={() => {
+                                setDraftTags(tags);
+                                setDraftTagInput("");
+                                setTagsPickerOpen(false);
+                              }}
+                            >
+                              Annulla
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={isSavingMeta}
+                              onClick={() => updateTaskMeta({ tags: draftTags }).then(() => setTagsPickerOpen(false))}
+                            >
+                              Salva
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* List/Category */}
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-2">
+                    <List className="w-3 h-3" />
+                    List
+                  </Label>
+                  <div className="space-y-2">
+                    {task.taskList?.name || task.list ? (
+                      <Badge variant="outline" className="text-sm">
+                        {task.taskList?.name || task.list}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Add</span>
+                    )}
+
+                    {canEditMeta ? (
+                      <Select
+                        value={task.listId || ""}
+                        onValueChange={(v) => updateTaskMeta({ listId: v || null })}
+                        disabled={isSavingMeta || projectLists.length === 0}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue
+                            placeholder={projectLists.length === 0 ? "Categorie non disponibili" : "Seleziona"}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {projectLists.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>
+                              {l.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Status */}
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-2">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Status
+                  </Label>
+                  <div className="space-y-2">
+                    <Badge className={getStatusColor(task.status)}>
+                      {task.status === "todo" && "Da Fare"}
+                      {task.status === "in_progress" && "In Corso"}
+                      {task.status === "done" && "Completato"}
+                    </Badge>
+                    <Select
+                      value={task.status}
+                      onValueChange={(v) => updateTaskMeta({ status: v })}
+                      disabled={!canEditStatus || isSavingMeta}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Stato" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todo">Da Fare</SelectItem>
+                        <SelectItem value="in_progress">In Corso</SelectItem>
+                        <SelectItem value="done">Completato</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
                 <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
                   <TabsList>
-                    <TabsTrigger value="activity">Activity</TabsTrigger>
-                    <TabsTrigger value="my_work">My Work</TabsTrigger>
-                    <TabsTrigger value="assigned">Assigned</TabsTrigger>
+                    <TabsTrigger value="subtasks">Subtasks</TabsTrigger>
+                    <TabsTrigger value="attachments">Attachments</TabsTrigger>
                     <TabsTrigger value="comments">Comments</TabsTrigger>
+                    <TabsTrigger value="activity">Activity</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
             </div>
+          </div>
 
-            <ScrollArea className="flex-1 p-6">
-              {activeTab === "activity" || activeTab === "my_work" ? (
+          <ScrollArea className="flex-1">
+            <div className="p-6">
+              {activeTab === "subtasks" ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      Subtasks
+                      <span className="text-muted-foreground">
+                        {completedSubtasks} / {totalSubtasks}
+                      </span>
+                    </h3>
+                    {totalSubtasks > 0 ? (
+                      <div className="w-40 h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-success transition-all"
+                          style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    {subtasks.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">Nessuna subtask.</div>
+                    ) : null}
+                    {subtasks.map((subtask) => (
+                      <button
+                        key={subtask.id}
+                        type="button"
+                        className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
+                        onClick={() => {
+                          setSelectedSubtask(subtask);
+                          setSubtaskDetailOpen(true);
+                        }}
+                      >
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={subtask.completed}
+                            onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <div className={subtask.completed ? "line-through text-muted-foreground" : ""}>
+                            {subtask.title}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Aggiungi un subtask..."
+                      value={newSubtask}
+                      onChange={(e) => setNewSubtask(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && addSubtask()}
+                      className="flex-1"
+                    />
+                    <Button onClick={addSubtask} size="sm" variant="outline">
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === "attachments" ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <Paperclip className="w-4 h-4" />
+                      Allegati
+                      <span className="text-muted-foreground">({attachments.length})</span>
+                    </h3>
+                  </div>
+
+                  <div className="space-y-2">
+                    {attachments.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">Nessun allegato.</div>
+                    ) : null}
+                    {attachments.map((attachment) => (
+                      <a
+                        key={attachment.id}
+                        href={attachment.filePath}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
+                      >
+                        <Paperclip className="w-4 h-4 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {(attachment.fileSize / 1024).toFixed(2)} KB
+                          </p>
+                        </div>
+                      </a>
+                    ))}
+
+                    <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-muted-foreground/30 rounded-lg cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors">
+                      <Upload className="w-4 h-4" />
+                      <span className="text-sm">
+                        {uploading ? "Caricamento..." : "Trascina file o clicca per caricare"}
+                      </span>
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => e.target.files?.[0] && uploadAttachment(e.target.files[0])}
+                        disabled={uploading}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === "comments" ? (
+                <div className="space-y-4">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    Commenti
+                    <span className="text-muted-foreground">({comments.length})</span>
+                  </h3>
+
+                  <div className="space-y-3">
+                    {comments.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">Nessun commento.</div>
+                    ) : null}
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="flex gap-3">
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage src={comment.user.image || undefined} />
+                          <AvatarFallback>
+                            {comment.user.name?.[0] || comment.user.email[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="bg-muted/30 rounded-lg p-3">
+                            <p className="text-sm font-medium">
+                              {comment.user.name || comment.user.email}
+                            </p>
+                            <p className="text-sm text-foreground/80 mt-1 whitespace-pre-wrap">{comment.content}</p>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {format(new Date(comment.createdAt), "PPp", { locale: it })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+
+                    <Textarea
+                      placeholder="Scrivi un commento..."
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      className="min-h-[90px]"
+                    />
+                    <Button onClick={addComment} className="w-full">
+                      Aggiungi Commento
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {activeTab === "activity" ? (
                 <div className="space-y-3">
-                  {(activeTab === "my_work"
-                    ? activityEvents.filter((e) => e?.actor?.id && e.actor.id === (session?.user as any)?.id)
-                    : activityEvents
-                  ).map((e) => (
+                  {activityEvents.map((e) => (
                     <div key={e.id} className="flex gap-3">
                       <Avatar className="w-8 h-8">
                         <AvatarImage src={e.actor?.image || undefined} />
@@ -347,432 +1005,151 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="bg-muted/30 rounded-lg p-3">
                           <p className="text-sm font-medium">
                             {e.actor?.name || e.actor?.email || "Sistema"}
                           </p>
-                          <p className="text-sm text-gray-700 mt-1">
+                          <p className="text-sm text-foreground/80 mt-1">
                             {formatTaskActivityEvent(e, userNameById).message}
                           </p>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {format(new Date(e.createdAt), "PPp", { locale: it })}
                         </p>
                       </div>
                     </div>
                   ))}
-                  {(activeTab === "my_work"
-                    ? activityEvents.filter((e) => e?.actor?.id && e.actor.id === (session?.user as any)?.id)
-                    : activityEvents
-                  ).length === 0 ? (
-                    <p className="text-sm text-gray-500">Nessuna attività.</p>
+                  {activityEvents.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nessuna attività.</p>
                   ) : null}
                 </div>
               ) : null}
+            </div>
+          </ScrollArea>
+        </div>
+      </SheetContent>
 
-              {activeTab === "assigned" ? (
-                <div>
-                  <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
-                    <Users className="w-4 h-4" />
-                    Assegnatari
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {task.assignees?.map((assignee: any) => (
-                      <div key={assignee.user.id} className="flex items-center gap-2 border rounded-lg px-3 py-2">
-                        <Avatar className="w-8 h-8">
-                          <AvatarImage src={assignee.user.image || undefined} />
-                          <AvatarFallback>
-                            {assignee.user.name?.[0] || assignee.user.email[0].toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {assignee.user.name || `${assignee.user.firstName || ""} ${assignee.user.lastName || ""}`.trim() || assignee.user.email}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">{assignee.user.email}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {(!task.assignees || task.assignees.length === 0) ? (
-                      <p className="text-sm text-gray-500">Nessun assegnatario</p>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
+      <SideDrawer
+        open={subtaskDetailOpen}
+        onOpenChange={(next) => {
+          setSubtaskDetailOpen(next);
+          if (!next) setSelectedSubtask(null);
+        }}
+        contentClassName="z-[61] w-[95vw] sm:max-w-3xl h-full p-0 flex flex-col bg-background"
+        overlayClassName="z-[60] bg-black/40"
+      >
+        <div className="p-6 border-b">
+          <div className="text-xs text-muted-foreground">Subtask</div>
+          <div className="mt-2 text-xl font-semibold">{selectedSubtask?.title || ""}</div>
+        </div>
 
-              {activeTab === "comments" ? (
-                <>
-                  {/* Subtasks Section */}
-                  <div className="mb-6">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4" />
-                        Subtasks
-                        <span className="text-gray-500">
-                          {completedSubtasks} / {totalSubtasks}
-                        </span>
-                      </h3>
-                      {totalSubtasks > 0 && (
-                        <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-green-500 transition-all"
-                            style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-2">
-                      {subtasks.map((subtask) => (
-                        <div key={subtask.id} className="flex items-center gap-2 p-2 rounded hover:bg-gray-50">
-                          <Checkbox
-                            checked={subtask.completed}
-                            onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
-                          />
-                          <span className={subtask.completed ? "line-through text-gray-500" : ""}>
-                            {subtask.title}
-                          </span>
-                        </div>
-                      ))}
-
-                      <div className="flex items-center gap-2 mt-2">
-                        <Input
-                          placeholder="Aggiungi un subtask..."
-                          value={newSubtask}
-                          onChange={(e) => setNewSubtask(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && addSubtask()}
-                          className="flex-1"
-                        />
-                        <Button onClick={addSubtask} size="sm" variant="outline">
-                          <Plus className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Separator className="my-6" />
-
-                  {/* Attachments Section */}
-                  <div className="mb-6">
-                    <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
-                      <Paperclip className="w-4 h-4" />
-                      Allegati
-                      <span className="text-gray-500">({attachments.length})</span>
-                    </h3>
-
-                    <div className="space-y-2">
-                      {attachments.map((attachment) => (
-                        <a
-                          key={attachment.id}
-                          href={attachment.filePath}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-2 p-2 rounded border hover:bg-gray-50 transition-colors"
-                        >
-                          <Paperclip className="w-4 h-4 text-gray-400" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{attachment.fileName}</p>
-                            <p className="text-xs text-gray-500">
-                              {(attachment.fileSize / 1024).toFixed(2)} KB
-                            </p>
-                          </div>
-                        </a>
-                      ))}
-
-                      <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-300 rounded cursor-pointer hover:border-orange-500 hover:bg-orange-50 transition-colors">
-                        <Upload className="w-4 h-4" />
-                        <span className="text-sm">
-                          {uploading ? "Caricamento..." : "Trascina file o clicca per caricare"}
-                        </span>
-                        <input
-                          type="file"
-                          className="hidden"
-                          onChange={(e) => e.target.files?.[0] && uploadAttachment(e.target.files[0])}
-                          disabled={uploading}
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <Separator className="my-6" />
-
-                  {/* Comments Section */}
-                  <div>
-                    <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
-                      <MessageSquare className="w-4 h-4" />
-                      Commenti
-                      <span className="text-gray-500">({comments.length})</span>
-                    </h3>
-
-                    <div className="space-y-3">
-                      {comments.map((comment) => (
-                        <div key={comment.id} className="flex gap-3">
-                          <Avatar className="w-8 h-8">
-                            <AvatarImage src={comment.user.image || undefined} />
-                            <AvatarFallback>
-                              {comment.user.name?.[0] || comment.user.email[0].toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <div className="bg-gray-50 rounded-lg p-3">
-                              <p className="text-sm font-medium">
-                                {comment.user.name || comment.user.email}
-                              </p>
-                              <p className="text-sm text-gray-700 mt-1">{comment.content}</p>
-                            </div>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {format(new Date(comment.createdAt), "PPp", { locale: it })}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-
-                      <div className="flex gap-2 mt-4">
-                        <Textarea
-                          placeholder="Scrivi un commento..."
-                          value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
-                          className="flex-1 min-h-[80px]"
-                        />
-                      </div>
-                      <Button onClick={addComment} className="w-full">
-                        Aggiungi Commento
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </ScrollArea>
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="space-y-2">
+            <Label>Descrizione</Label>
+            <Textarea
+              value={subtaskDraftDescription}
+              onChange={(e) => setSubtaskDraftDescription(e.target.value)}
+              placeholder="Aggiungi una descrizione..."
+              disabled={!selectedSubtask}
+            />
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={saveSubtaskDescription} disabled={!selectedSubtask}>
+                Salva descrizione
+              </Button>
+            </div>
           </div>
 
-          {/* Right Sidebar - Task Details */}
-          <div className="w-80 border-l bg-gray-50 p-6 overflow-y-auto">
-            <div className="space-y-6">
-              {/* Assignees */}
-              <div>
-                <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1 mb-2">
-                  <Users className="w-3 h-3" />
-                  Assegnatari
-                </Label>
-                <div className="flex gap-1 flex-wrap">
-                  {task.assignees?.map((assignee: any) => (
-                    <Avatar key={assignee.user.id} className="w-8 h-8">
-                      <AvatarImage src={assignee.user.image || undefined} />
-                      <AvatarFallback>
-                        {assignee.user.name?.[0] || assignee.user.email[0].toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                  ))}
-                  {(!task.assignees || task.assignees.length === 0) && (
-                    <p className="text-sm text-gray-500">Nessun assegnatario</p>
-                  )}
-                </div>
+          <Separator />
 
-                {canEditMeta ? (
-                  <div className="mt-3">
-                    <Popover open={assigneePickerOpen} onOpenChange={setAssigneePickerOpen}>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={isSavingMeta}>
-                          Modifica assegnatari
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-72 p-3" align="start">
-                        <div className="text-sm font-medium mb-2">Seleziona assegnatari</div>
-                        <div className="max-h-56 overflow-auto space-y-2">
-                          {memberUsers.map((u: any) => {
-                            const label =
-                              u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
-                            const checked = draftAssigneeIds.includes(u.id);
-                            return (
-                              <label key={u.id} className="flex items-center gap-2 text-sm cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={(e) => {
-                                    setDraftAssigneeIds((prev) =>
-                                      e.target.checked
-                                        ? Array.from(new Set([...prev, u.id]))
-                                        : prev.filter((x: string) => x !== u.id)
-                                    );
-                                  }}
-                                />
-                                <span className="truncate">{label}</span>
-                              </label>
-                            );
-                          })}
-                          {memberUsers.length === 0 ? (
-                            <p className="text-sm text-gray-500">Nessun membro progetto disponibile</p>
-                          ) : null}
-                        </div>
-
-                        <div className="mt-3 flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={isSavingMeta}
-                            onClick={() => {
-                              setDraftAssigneeIds(currentAssigneeIds);
-                              setAssigneePickerOpen(false);
-                            }}
-                          >
-                            Annulla
-                          </Button>
-                          <Button
-                            size="sm"
-                            disabled={isSavingMeta}
-                            onClick={() => updateTaskMeta({ assigneeIds: draftAssigneeIds }).then(() => setAssigneePickerOpen(false))}
-                          >
-                            Salva
-                          </Button>
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                ) : null}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">Allegati</div>
+              <label className="inline-flex items-center gap-2">
+                <Input
+                  type="file"
+                  disabled={subtaskUploading || !selectedSubtask}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadSubtaskAttachment(f);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+            </div>
+            {subtaskUploading ? (
+              <div className="text-sm text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Upload…
               </div>
-
-              {/* Category */}
-              <div>
-                <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1 mb-2">
-                  <List className="w-3 h-3" />
-                  Categoria
-                </Label>
-                <div className="space-y-2">
-                  {task.taskList?.name || task.list ? (
-                    <Badge variant="outline" className="text-sm">
-                      {task.taskList?.name || task.list}
-                    </Badge>
-                  ) : (
-                    <p className="text-sm text-gray-500">Nessuna categoria</p>
-                  )}
-
-                  {canEditMeta ? (
-                    <Select
-                      value={task.listId || ""}
-                      onValueChange={(v) => updateTaskMeta({ listId: v || null })}
-                      disabled={isSavingMeta || projectLists.length === 0}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder={projectLists.length === 0 ? "Categorie non disponibili" : "Seleziona"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {projectLists.map((l) => (
-                          <SelectItem key={l.id} value={l.id}>
-                            {l.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : null}
-                </div>
+            ) : null}
+            {subtaskAttachments.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nessun allegato.</div>
+            ) : (
+              <div className="space-y-2">
+                {subtaskAttachments.map((a) => (
+                  <a
+                    key={a.id}
+                    href={a.filePath}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block border rounded-lg p-2 hover:bg-muted/30"
+                  >
+                    <div className="text-sm font-medium">{a.fileName}</div>
+                    <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
+                  </a>
+                ))}
               </div>
+            )}
+          </div>
 
-              {/* Due Date */}
-              <div>
-                <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1 mb-2">
-                  <Calendar className="w-3 h-3" />
-                  Scadenza
-                </Label>
-                <div className="space-y-2">
-                  {task.dueDate ? (
-                    <Badge variant="outline" className="text-sm">
-                      {format(new Date(task.dueDate), "PPP", { locale: it })}
-                    </Badge>
-                  ) : (
-                    <p className="text-sm text-gray-500">Nessuna scadenza</p>
-                  )}
+          <Separator />
 
-                  {canEditMeta ? (
-                    <Input
-                      type="date"
-                      disabled={isSavingMeta}
-                      value={task.dueDate ? format(new Date(task.dueDate), "yyyy-MM-dd") : ""}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (!v) {
-                          updateTaskMeta({ dueDate: null });
-                          return;
-                        }
-                        updateTaskMeta({ dueDate: `${v}T12:00:00Z` });
-                      }}
+          <div className="space-y-2">
+            <div className="font-semibold">Commenti</div>
+            {subtaskComments.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nessun commento.</div>
+            ) : (
+              <div className="space-y-3">
+                {subtaskComments.map((c) => (
+                  <div key={c.id} className="border rounded-lg p-3">
+                    <div className="text-xs text-muted-foreground">
+                      {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
+                    </div>
+                    <RichTextViewer
+                      html={c.content.includes("<") ? c.content : c.content.replace(/\n/g, "<br/>")}
+                      className="mt-2"
                     />
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Priority */}
-              <div>
-                <Label className="text-xs font-semibold text-gray-600 mb-2 block">
-                  Priorità
-                </Label>
-                <div className="space-y-2">
-                  <Badge className={getPriorityColor(task.priority)}>
-                    {task.priority === "high" && "Alta"}
-                    {task.priority === "medium" && "Media"}
-                    {task.priority === "low" && "Bassa"}
-                  </Badge>
-
-                  {canEditMeta ? (
-                    <Select
-                      value={task.priority}
-                      onValueChange={(v) => updateTaskMeta({ priority: v })}
-                      disabled={isSavingMeta}
-                    >
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Priorità" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="high">Alta</SelectItem>
-                        <SelectItem value="medium">Media</SelectItem>
-                        <SelectItem value="low">Bassa</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Story Points */}
-              {task.storyPoints !== null && (
-                <div>
-                  <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1 mb-2">
-                    <Hash className="w-3 h-3" />
-                    Story Points
-                  </Label>
-                  <Badge variant="outline">{task.storyPoints}</Badge>
-                </div>
-              )}
-
-              {/* Tags */}
-              {task.tags && (
-                <div>
-                  <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1 mb-2">
-                    <Tag className="w-3 h-3" />
-                    Tags
-                  </Label>
-                  <div className="flex flex-wrap gap-1">
-                    {JSON.parse(task.tags).map((tag: string, index: number) => (
-                      <Badge key={index} variant="secondary">
-                        {tag}
-                      </Badge>
-                    ))}
                   </div>
-                </div>
-              )}
-
-              {/* Created At */}
-              <div>
-                <Label className="text-xs font-semibold text-gray-600 flex items-center gap-1 mb-2">
-                  <Clock className="w-3 h-3" />
-                  Creato
-                </Label>
-                <p className="text-sm text-gray-700">
-                  {format(new Date(task.createdAt), "PPP", { locale: it })}
-                </p>
+                ))}
+              </div>
+            )}
+            <div className="space-y-2">
+              <RichTextEditor
+                valueHtml={subtaskNewCommentHtml}
+                onChange={(html, ids) => {
+                  setSubtaskNewCommentHtml(html);
+                  setSubtaskMentionedUserIds(ids);
+                }}
+                mentionUsers={mentionUsers}
+                disabled={!selectedSubtask}
+                placeholder="Scrivi un commento…"
+                onUploadImage={async (file) => {
+                  const uploaded = await uploadSubtaskAttachment(file);
+                  if (!uploaded) throw new Error("Upload fallito");
+                  return { src: uploaded.filePath, alt: uploaded.fileName };
+                }}
+              />
+              <div className="flex justify-end">
+                <Button
+                  onClick={addSubtaskComment}
+                  disabled={!selectedSubtask || !subtaskNewCommentHtml.trim()}
+                >
+                  Invia
+                </Button>
               </div>
             </div>
           </div>
         </div>
-      </SheetContent>
+      </SideDrawer>
     </Sheet>
   );
 }

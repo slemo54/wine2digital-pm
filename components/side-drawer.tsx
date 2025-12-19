@@ -1,11 +1,12 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 type SideDrawerProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  children: React.ReactNode;
+  children: ReactNode;
   side?: "right" | "left" | "top" | "bottom";
   contentClassName?: string;
   overlayClassName?: string;
