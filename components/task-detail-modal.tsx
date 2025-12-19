@@ -5,6 +5,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -199,7 +200,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate }: 
                   </div>
                   {isEditingDescription ? (
                     <div className="space-y-2">
-                      <Textarea value={draftDescription} onChange={e => setDraftDescription(e.target.value)} rows={5} />
+                      <AutosizeTextarea
+                        value={draftDescription}
+                        onChange={e => setDraftDescription(e.target.value)}
+                        minHeight={100}
+                        className="resize-none"
+                      />
                       <div className="flex gap-2 justify-end">
                         <Button variant="ghost" size="sm" onClick={() => setIsEditingDescription(false)}>Cancel</Button>
                         <Button size="sm" onClick={() => updateTaskMeta({ description: draftDescription }).then(() => setIsEditingDescription(false))}>Save</Button>
