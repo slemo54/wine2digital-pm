@@ -41,7 +41,11 @@ function initials(name?: string | null, email?: string | null): string {
   return ((parts[0]?.[0] || "U") + (parts[1]?.[0] || "")).toUpperCase();
 }
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  className?: string;
+}
+
+export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname() || "";
   const router = useRouter();
   const { data: session } = useSession();
@@ -49,7 +53,7 @@ export function AppSidebar() {
   const isAdmin = globalRole === "admin";
 
   return (
-    <aside className="w-64 shrink-0 border-r border-border bg-background sticky top-0 h-screen">
+    <aside className={cn("w-64 shrink-0 border-r border-border bg-background sticky top-0 h-screen", className)}>
       <div className="h-full flex flex-col">
         <div className="px-4 py-4 border-b border-border flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2">

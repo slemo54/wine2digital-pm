@@ -513,7 +513,9 @@ export default function CalendarPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Pending</p>
+                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    {isManagerOrAdmin ? "Team Pending" : "My Pending"}
+                  </p>
                   <p className="text-4xl font-bold text-foreground mt-1">{counts.pending}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-warning/10 flex items-center justify-center">
@@ -527,7 +529,9 @@ export default function CalendarPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Approved</p>
+                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    {isManagerOrAdmin ? "Team Approved" : "My Approved"}
+                  </p>
                   <p className="text-4xl font-bold text-foreground mt-1">{counts.approved}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center">
@@ -541,7 +545,9 @@ export default function CalendarPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Rejected</p>
+                  <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+                    {isManagerOrAdmin ? "Team Rejected" : "My Rejected"}
+                  </p>
                   <p className="text-4xl font-bold text-foreground mt-1">{counts.rejected}</p>
                 </div>
                 <div className="w-14 h-14 rounded-full bg-destructive/10 flex items-center justify-center">
