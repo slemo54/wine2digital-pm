@@ -37,6 +37,7 @@ import { toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { formatTaskActivityEvent } from "@/lib/task-activity-format";
 import { RichTextEditor, RichTextViewer, type MentionUser } from "@/components/ui/rich-text-editor";
+import { SubtaskChecklists } from "@/components/subtask-checklists";
 
 interface Subtask {
   id: string;
@@ -1057,6 +1058,20 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                 Salva descrizione
               </Button>
             </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="font-semibold">Checklists</div>
+            {selectedSubtask ? (
+              <SubtaskChecklists
+                taskId={taskId}
+                subtaskId={selectedSubtask.id}
+                open={subtaskDetailOpen}
+                disabled={!selectedSubtask}
+              />
+            ) : null}
           </div>
 
           <Separator />
