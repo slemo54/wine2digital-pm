@@ -109,6 +109,20 @@ export async function POST(
         ...(priority && { priority }),
         ...(status && { status }),
       },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        dependencies: true,
+        dependentOn: true,
+      },
     });
 
     await prisma.taskActivity.create({

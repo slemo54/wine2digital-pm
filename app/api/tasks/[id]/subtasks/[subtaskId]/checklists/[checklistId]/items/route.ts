@@ -35,9 +35,7 @@ export async function POST(
 
     const canWrite =
       role === "admin" ||
-      isProjectManager ||
-      (role === "manager" && access.isProjectMember) ||
-      (role === "member" && access.isAssignee);
+      isProjectManager;
     if (!canWrite) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
 
     const checklist = await prisma.subtaskChecklist.findFirst({

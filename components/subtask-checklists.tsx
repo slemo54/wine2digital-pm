@@ -8,6 +8,8 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 
+const checklistsCache = new Map<string, Checklist[]>();
+
 type ChecklistItem = {
   id: string;
   content: string;
@@ -62,8 +64,8 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     [taskId, subtaskId]
   );
 
-  const refresh = async () => {
-    setLoading(true);
+  const refresh = async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const res = await fetch(baseUrl, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
@@ -71,23 +73,29 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
         const msg = String((data as any)?.error || "Failed to load checklists");
         throw new Error(msg);
       }
-      setChecklists(normalizeChecklists(data));
+      const next = normalizeChecklists(data);
+      setChecklists(next);
+      checklistsCache.set(baseUrl, next);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load checklists";
-      if (msg.toLowerCase().includes("table missing") || msg.includes("Run Prisma migrations")) {
-        toast.error("Checklists non disponibili: applica prima le migrations Prisma.");
-      } else {
-        toast.error(msg);
+      if (!opts?.silent) {
+        if (msg.toLowerCase().includes("table missing") || msg.includes("Run Prisma migrations")) {
+          toast.error("Checklists non disponibili: applica prima le migrations Prisma.");
+        } else {
+          toast.error(msg);
+        }
+        setChecklists([]);
       }
-      setChecklists([]);
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (!open) return;
-    void refresh();
+    const cached = checklistsCache.get(baseUrl);
+    if (cached) setChecklists(cached);
+    void refresh({ silent: Boolean(cached) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, baseUrl]);
 
@@ -104,7 +112,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
       if (!res.ok) throw new Error(String((data as any)?.error || "Create failed"));
       const checklist = (data as any)?.checklist;
       if (checklist?.id) {
-        setChecklists((prev) => [...prev, normalizeChecklists({ checklists: [checklist] })[0]].filter(Boolean));
+        setChecklists((prev) => {
+          const next = [...prev, normalizeChecklists({ checklists: [checklist] })[0]].filter(Boolean) as Checklist[];
+          checklistsCache.set(baseUrl, next);
+          return next;
+        });
       } else {
         await refresh();
       }
@@ -129,7 +141,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(String((data as any)?.error || "Update failed"));
-      setChecklists((prev) => prev.map((c) => (c.id === checklistId ? { ...c, title } : c)));
+      setChecklists((prev) => {
+        const next = prev.map((c) => (c.id === checklistId ? { ...c, title } : c));
+        checklistsCache.set(baseUrl, next);
+        return next;
+      });
       toast.success("Checklist aggiornata");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
@@ -144,7 +160,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
       const res = await fetch(`${baseUrl}/${encodeURIComponent(checklistId)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(String((data as any)?.error || "Delete failed"));
-      setChecklists((prev) => prev.filter((c) => c.id !== checklistId));
+      setChecklists((prev) => {
+        const next = prev.filter((c) => c.id !== checklistId);
+        checklistsCache.set(baseUrl, next);
+        return next;
+      });
       toast.success("Checklist eliminata");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Delete failed");
@@ -167,13 +187,15 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
       if (!res.ok) throw new Error(String((data as any)?.error || "Create failed"));
       const item = (data as any)?.item;
       if (item?.id) {
-        setChecklists((prev) =>
-          prev.map((c) =>
+        setChecklists((prev) => {
+          const next = prev.map((c) =>
             c.id === checklistId
               ? { ...c, items: [...c.items, { id: item.id, content, completed: false, position: item.position ?? 0 }] }
               : c
-          )
-        );
+          );
+          checklistsCache.set(baseUrl, next);
+          return next;
+        });
       } else {
         await refresh();
       }
@@ -187,11 +209,13 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
   };
 
   const toggleItem = async (checklistId: string, itemId: string, completed: boolean) => {
-    setChecklists((prev) =>
-      prev.map((c) =>
+    setChecklists((prev) => {
+      const next = prev.map((c) =>
         c.id === checklistId ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, completed } : i)) } : c
-      )
-    );
+      );
+      checklistsCache.set(baseUrl, next);
+      return next;
+    });
     try {
       const res = await fetch(
         `${baseUrl}/${encodeURIComponent(checklistId)}/items/${encodeURIComponent(itemId)}`,
@@ -218,9 +242,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(String((data as any)?.error || "Delete failed"));
-      setChecklists((prev) =>
-        prev.map((c) => (c.id === checklistId ? { ...c, items: c.items.filter((i) => i.id !== itemId) } : c))
-      );
+      setChecklists((prev) => {
+        const next = prev.map((c) => (c.id === checklistId ? { ...c, items: c.items.filter((i) => i.id !== itemId) } : c));
+        checklistsCache.set(baseUrl, next);
+        return next;
+      });
       toast.success("Elemento eliminato");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Delete failed");
@@ -233,7 +259,7 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="font-semibold">Checklists</div>
-        <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>
+        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
           Refresh
         </Button>
       </div>

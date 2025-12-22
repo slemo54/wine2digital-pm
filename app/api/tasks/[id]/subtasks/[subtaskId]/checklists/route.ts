@@ -78,9 +78,7 @@ export async function POST(
     const isProjectManager = access.projectRole === "owner" || access.projectRole === "manager";
     const canWrite =
       role === "admin" ||
-      isProjectManager ||
-      (role === "manager" && access.isProjectMember) ||
-      (role === "member" && access.isAssignee);
+      isProjectManager;
     if (!canWrite) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
 
     const body = await req.json().catch(() => ({}));

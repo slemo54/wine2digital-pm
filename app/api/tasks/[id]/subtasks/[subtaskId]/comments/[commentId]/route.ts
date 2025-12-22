@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getTaskAccessFlags } from "@/lib/task-access";
 import { prisma } from "@/lib/prisma";
+import { isEffectivelyEmptyRichContent, sanitizeRichHtml } from "@/lib/rich-text";
 
 export const dynamic = "force-dynamic";
 
@@ -44,13 +45,16 @@ export async function PUT(
       role === "admin" || isProjectManager || (role === "manager" && access.isProjectMember) || isAuthor;
     if (!canEdit) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
 
-    const body = (await request.json()) as PatchBody;
-    const text = typeof body?.content === "string" ? body.content.trim() : "";
-    if (!text) return NextResponse.json({ error: "content required" }, { status: 400 });
+    const body = (await request.json().catch(() => ({}))) as PatchBody;
+    const raw = typeof body?.content === "string" ? body.content.trim() : "";
+    const sanitized = sanitizeRichHtml(raw);
+    if (!sanitized || isEffectivelyEmptyRichContent(sanitized)) {
+      return NextResponse.json({ error: "content required" }, { status: 400 });
+    }
 
     const updated = await prisma.subtaskComment.update({
       where: { id: params.commentId },
-      data: { content: text },
+      data: { content: sanitized },
       include: {
         user: {
           select: {

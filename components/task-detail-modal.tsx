@@ -29,7 +29,10 @@ import {
   Users,
   Hash,
   Clock,
-  Loader2
+  Loader2,
+  Pencil,
+  Trash2,
+  Link2
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -54,6 +57,20 @@ interface Subtask {
   title: string;
   description?: string | null;
   completed: boolean;
+  status?: string;
+  priority?: string;
+  dueDate?: string | null;
+  assigneeId?: string | null;
+  assignee?: {
+    id: string;
+    name: string | null;
+    email: string;
+    image: string | null;
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
+  dependencies?: Array<{ id: string; subtaskId: string; dependsOnId: string }>;
+  dependentOn?: Array<{ id: string; subtaskId: string; dependsOnId: string }>;
   position: number;
 }
 
@@ -61,6 +78,7 @@ interface Comment {
   id: string;
   content: string;
   user: {
+    id: string;
     name: string | null;
     email: string;
     image: string | null;
@@ -88,6 +106,7 @@ interface SubtaskComment {
   id: string;
   content: string;
   user: {
+    id: string;
     name: string | null;
     email: string;
     image: string | null;
@@ -99,7 +118,7 @@ interface TaskDetailModalProps {
   open: boolean;
   onClose: () => void;
   taskId: string;
-  projectId: string;
+  projectId?: string;
   onUpdate?: () => void;
   initialSubtaskId?: string;
 }
@@ -120,7 +139,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [draftTags, setDraftTags] = useState<string[]>([]);
   const [draftTagInput, setDraftTagInput] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
-  const [newComment, setNewComment] = useState("");
+  const [newCommentHtml, setNewCommentHtml] = useState("");
+  const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentHtml, setEditingCommentHtml] = useState<string>("");
+  const [editingMentionedUserIds, setEditingMentionedUserIds] = useState<string[]>([]);
+  const [savingCommentEdit, setSavingCommentEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [projectLists, setProjectLists] = useState<Array<{ id: string; name: string }>>([]);
   const [subtaskDetailOpen, setSubtaskDetailOpen] = useState(false);
@@ -129,8 +153,14 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [subtaskComments, setSubtaskComments] = useState<SubtaskComment[]>([]);
   const [subtaskUploading, setSubtaskUploading] = useState(false);
   const [subtaskDraftDescription, setSubtaskDraftDescription] = useState("");
+  const [isEditingSubtaskTitle, setIsEditingSubtaskTitle] = useState(false);
+  const [subtaskDraftTitle, setSubtaskDraftTitle] = useState("");
+  const [savingSubtaskTitle, setSavingSubtaskTitle] = useState(false);
   const [subtaskNewCommentHtml, setSubtaskNewCommentHtml] = useState("");
   const [subtaskMentionedUserIds, setSubtaskMentionedUserIds] = useState<string[]>([]);
+  const [editingSubtaskCommentId, setEditingSubtaskCommentId] = useState<string | null>(null);
+  const [editingSubtaskCommentHtml, setEditingSubtaskCommentHtml] = useState<string>("");
+  const [savingSubtaskCommentEdit, setSavingSubtaskCommentEdit] = useState(false);
 
   const didOpenInitialSubtaskRef = useRef<string | null>(null);
 
@@ -183,6 +213,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   useEffect(() => {
     if (!subtaskDetailOpen || !selectedSubtask) return;
     setSubtaskDraftDescription(selectedSubtask.description || "");
+    setSubtaskDraftTitle(selectedSubtask.title || "");
+    setIsEditingSubtaskTitle(false);
+    setEditingSubtaskCommentId(null);
+    setEditingSubtaskCommentHtml("");
     setSubtaskNewCommentHtml("");
     setSubtaskMentionedUserIds([]);
     void fetchSubtaskDetails(selectedSubtask.id);
@@ -192,22 +226,20 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const fetchTaskDetails = async () => {
     setLoading(true);
     try {
-      const [taskRes, subtasksRes, commentsRes, attachmentsRes, activityRes, listsRes] = await Promise.all([
+      const [taskRes, subtasksRes, commentsRes, attachmentsRes, activityRes] = await Promise.all([
         fetch(`/api/tasks/${taskId}`),
         fetch(`/api/tasks/${taskId}/subtasks`),
         fetch(`/api/tasks/${taskId}/comments`),
         fetch(`/api/tasks/${taskId}/attachments`),
         fetch(`/api/tasks/${taskId}/activity`),
-        fetch(`/api/projects/${projectId}/lists`, { cache: "no-store" }),
       ]);
 
-      const [taskData, subtasksData, commentsData, attachmentsData, activityData, listsData] = await Promise.all([
+      const [taskData, subtasksData, commentsData, attachmentsData, activityData] = await Promise.all([
         taskRes.json(),
         subtasksRes.json(),
         commentsRes.json(),
         attachmentsRes.json(),
         activityRes.json(),
-        listsRes.json().catch(() => ({})),
       ]);
 
       setTask(taskData);
@@ -215,10 +247,26 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       setComments(commentsData);
       setAttachments(attachmentsData);
       setActivityEvents(Array.isArray(activityData?.events) ? activityData.events : []);
-      if (listsRes.ok && Array.isArray((listsData as any)?.lists)) {
-        setProjectLists((listsData as any).lists.map((l: any) => ({ id: String(l.id), name: String(l.name) })));
-      } else {
+
+      // Lists sono per-progetto: quando il modal viene aperto da /tasks (scope globale),
+      // il caller potrebbe non conoscere subito il projectId. In quel caso lo deduciamo dal task.
+      const taskProjectId =
+        typeof (taskData as any)?.projectId === "string" ? String((taskData as any).projectId) : "";
+      const effectiveProjectId = taskProjectId || (projectId && projectId !== "_global" ? projectId : "");
+      if (!effectiveProjectId) {
         setProjectLists([]);
+      } else {
+        try {
+          const listsRes = await fetch(`/api/projects/${effectiveProjectId}/lists`, { cache: "no-store" });
+          const listsData = await listsRes.json().catch(() => ({}));
+          if (listsRes.ok && Array.isArray((listsData as any)?.lists)) {
+            setProjectLists((listsData as any).lists.map((l: any) => ({ id: String(l.id), name: String(l.name) })));
+          } else {
+            setProjectLists([]);
+          }
+        } catch {
+          setProjectLists([]);
+        }
       }
     } catch (error) {
       console.error("Failed to fetch task details:", error);
@@ -227,11 +275,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       setLoading(false);
     }
   };
-
-  const canEditMeta = (() => {
-    const role = (session?.user as any)?.role as string | undefined;
-    return role === "admin" || role === "manager";
-  })();
 
   const updateTaskMeta = async (patch: Record<string, any>) => {
     setIsSavingMeta(true);
@@ -284,34 +327,104 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         body: JSON.stringify({ completed }),
       });
 
-      if (res.ok) {
-        setSubtasks(subtasks.map(st => 
-          st.id === subtaskId ? { ...st, completed } : st
-        ));
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore aggiornamento subtask");
+
+      setSubtasks(subtasks.map(st =>
+        st.id === subtaskId
+          ? { ...st, completed, status: completed ? "done" : "todo" }
+          : st
+      ));
     } catch (error) {
-      toast.error("Errore durante l'aggiornamento del subtask");
+      toast.error(error instanceof Error ? error.message : "Errore durante l'aggiornamento del subtask");
+    }
+  };
+
+  const deleteSubtask = async (subtaskId: string) => {
+    const ok = confirm("Eliminare subtask?");
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Eliminazione fallita");
+      setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+      if (selectedSubtask?.id === subtaskId) {
+        setSelectedSubtask(null);
+        setSubtaskDetailOpen(false);
+      }
+      toast.success("Subtask eliminata");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Eliminazione fallita");
     }
   };
 
   const addComment = async () => {
-    if (!newComment.trim()) return;
+    const contentHtml = newCommentHtml.trim();
+    if (!contentHtml) return;
 
     try {
       const res = await fetch(`/api/tasks/${taskId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: newComment }),
+        body: JSON.stringify({ content: contentHtml, mentionedUserIds }),
       });
-
-      if (res.ok) {
-        const comment = await res.json();
-        setComments([...comments, comment]);
-        setNewComment("");
-        toast.success("Commento aggiunto");
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore durante l'aggiunta del commento");
+      setComments((prev) => [...prev, data as any]);
+      setNewCommentHtml("");
+      setMentionedUserIds([]);
+      toast.success("Commento aggiunto");
     } catch (error) {
-      toast.error("Errore durante l'aggiunta del commento");
+      toast.error(error instanceof Error ? error.message : "Errore durante l'aggiunta del commento");
+    }
+  };
+
+  const startEditComment = (c: Comment) => {
+    setEditingCommentId(c.id);
+    setEditingCommentHtml(c.content || "");
+    setEditingMentionedUserIds([]);
+  };
+
+  const cancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentHtml("");
+    setEditingMentionedUserIds([]);
+  };
+
+  const saveCommentEdit = async () => {
+    if (!editingCommentId) return;
+    const contentHtml = editingCommentHtml.trim();
+    if (!contentHtml) return;
+    setSavingCommentEdit(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/comments/${editingCommentId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: contentHtml, mentionedUserIds: editingMentionedUserIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore salvataggio");
+      setComments((prev) => prev.map((c) => (c.id === editingCommentId ? (data as any) : c)));
+      cancelEditComment();
+      toast.success("Commento aggiornato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore salvataggio");
+    } finally {
+      setSavingCommentEdit(false);
+    }
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!confirm("Eliminare questo commento?")) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore eliminazione");
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      if (editingCommentId === commentId) cancelEditComment();
+      toast.success("Commento eliminato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore eliminazione");
     }
   };
 
@@ -374,6 +487,124 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     }
   };
 
+  const updateSelectedSubtaskMeta = async (patch: Record<string, any>) => {
+    if (!selectedSubtask) return;
+    const subtaskId = selectedSubtask.id;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Aggiornamento fallito");
+
+      const nextAssigneeId =
+        (data as any)?.assigneeId !== undefined ? (data as any).assigneeId : patch.assigneeId;
+      const nextAssignee =
+        typeof nextAssigneeId === "string" && nextAssigneeId
+          ? memberUsers.find((u: any) => u?.id === nextAssigneeId) || null
+          : nextAssigneeId === null
+            ? null
+            : undefined;
+
+      setSelectedSubtask((prev) =>
+        prev && prev.id === subtaskId
+          ? { ...(prev as any), ...(data as any), ...(nextAssignee !== undefined ? { assignee: nextAssignee } : {}) }
+          : prev
+      );
+      setSubtasks((prev) =>
+        prev.map((s) =>
+          s.id === subtaskId
+            ? { ...(s as any), ...(data as any), ...(nextAssignee !== undefined ? { assignee: nextAssignee } : {}) }
+            : s
+        )
+      );
+      toast.success("Subtask aggiornata");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Aggiornamento fallito");
+    }
+  };
+
+  const saveSubtaskTitle = async () => {
+    if (!selectedSubtask) return;
+    const title = subtaskDraftTitle.trim();
+    if (!title) {
+      toast.error("Titolo richiesto");
+      return;
+    }
+    if (title === selectedSubtask.title) {
+      setIsEditingSubtaskTitle(false);
+      return;
+    }
+    setSavingSubtaskTitle(true);
+    try {
+      await updateSelectedSubtaskMeta({ title });
+      setIsEditingSubtaskTitle(false);
+    } finally {
+      setSavingSubtaskTitle(false);
+    }
+  };
+
+  const addSelectedSubtaskDependency = async (dependsOnId: string) => {
+    if (!selectedSubtask) return;
+    try {
+      const res = await fetch(`/api/subtasks/${selectedSubtask.id}/dependencies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dependsOnId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore aggiunta dipendenza");
+      setSelectedSubtask((prev) =>
+        prev
+          ? {
+              ...(prev as any),
+              dependencies: [...(prev.dependencies || []), data as any],
+            }
+          : prev
+      );
+      setSubtasks((prev) =>
+        prev.map((s) =>
+          s.id === selectedSubtask.id
+            ? { ...(s as any), dependencies: [...(s.dependencies || []), data as any] }
+            : s
+        )
+      );
+      toast.success("Dipendenza aggiunta");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore aggiunta dipendenza");
+    }
+  };
+
+  const removeSelectedSubtaskDependency = async (dependencyId: string) => {
+    if (!selectedSubtask) return;
+    try {
+      const res = await fetch(`/api/subtasks/dependencies/${dependencyId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore rimozione dipendenza");
+
+      setSelectedSubtask((prev) =>
+        prev
+          ? {
+              ...(prev as any),
+              dependencies: (prev.dependencies || []).filter((d: any) => d.id !== dependencyId),
+            }
+          : prev
+      );
+      setSubtasks((prev) =>
+        prev.map((s) =>
+          s.id === selectedSubtask.id
+            ? { ...(s as any), dependencies: (s.dependencies || []).filter((d: any) => d.id !== dependencyId) }
+            : s
+        )
+      );
+      toast.success("Dipendenza rimossa");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore rimozione dipendenza");
+    }
+  };
+
   const uploadSubtaskAttachment = async (file: File) => {
     if (!selectedSubtask) return null;
     const fd = new FormData();
@@ -415,6 +646,64 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       toast.success("Commento aggiunto");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Commento fallito");
+    }
+  };
+
+  const startEditSubtaskComment = (c: SubtaskComment) => {
+    setEditingSubtaskCommentId(c.id);
+    setEditingSubtaskCommentHtml(c.content || "");
+  };
+
+  const cancelEditSubtaskComment = () => {
+    setEditingSubtaskCommentId(null);
+    setEditingSubtaskCommentHtml("");
+  };
+
+  const saveSubtaskCommentEdit = async () => {
+    if (!selectedSubtask) return;
+    if (!editingSubtaskCommentId) return;
+    const contentHtml = editingSubtaskCommentHtml.trim();
+    if (!contentHtml) return;
+    setSavingSubtaskCommentEdit(true);
+    try {
+      const res = await fetch(
+        `/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/comments/${editingSubtaskCommentId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: contentHtml }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore salvataggio");
+      setSubtaskComments((prev) => prev.map((c) => (c.id === editingSubtaskCommentId ? (data as any) : c)));
+      cancelEditSubtaskComment();
+      toast.success("Commento aggiornato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore salvataggio");
+    } finally {
+      setSavingSubtaskCommentEdit(false);
+    }
+  };
+
+  const deleteSubtaskComment = async (commentId: string) => {
+    if (!selectedSubtask) return;
+    const ok = confirm("Eliminare commento?");
+    if (!ok) return;
+    setSavingSubtaskCommentEdit(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/comments/${commentId}`, {
+        method: "DELETE",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore eliminazione");
+      setSubtaskComments((prev) => prev.filter((c) => c.id !== commentId));
+      if (editingSubtaskCommentId === commentId) cancelEditSubtaskComment();
+      toast.success("Commento eliminato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore eliminazione");
+    } finally {
+      setSavingSubtaskCommentEdit(false);
     }
   };
 
@@ -465,11 +754,26 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
   const globalRole = ((session?.user as any)?.role as string | undefined) || "member";
   const meId = (session?.user as any)?.id as string | undefined;
+  const myMembership = Boolean(meId) && Array.isArray(task?.project?.members)
+    ? task.project.members.find((m: any) => m?.userId === meId) || null
+    : null;
+  const isMeProjectMember = Boolean(myMembership);
+  const myProjectRole = myMembership?.role ? String(myMembership.role) : "";
+  const isMeProjectManager = myProjectRole === "owner" || myProjectRole === "manager";
   const isMeAssignee =
     Boolean(meId) &&
     Array.isArray(task?.assignees) &&
     task.assignees.some((a: any) => a?.user?.id === meId || a?.userId === meId);
+  const canEditMeta = globalRole === "admin" || isMeProjectManager || (globalRole === "manager" && isMeProjectMember);
   const canEditStatus = canEditMeta || (globalRole === "member" && isMeAssignee);
+  const canWriteTask =
+    globalRole === "admin" ||
+    isMeProjectManager ||
+    (globalRole === "manager" && isMeProjectMember) ||
+    (globalRole === "member" && isMeAssignee);
+  const canDeleteSubtask = globalRole === "admin" || isMeProjectManager;
+  const canAssignSubtask = globalRole === "admin" || isMeProjectManager;
+  const canManageSubtaskChecklists = globalRole === "admin" || isMeProjectManager;
 
   const tags: string[] = (() => {
     try {
@@ -871,18 +1175,27 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       <div className="text-sm text-muted-foreground">Nessuna subtask.</div>
                     ) : null}
                     {subtasks.map((subtask) => (
-                      <button
+                      <div
                         key={subtask.id}
-                        type="button"
+                        role="button"
+                        tabIndex={0}
                         className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
                         onClick={() => {
                           setSelectedSubtask(subtask);
                           setSubtaskDetailOpen(true);
                         }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedSubtask(subtask);
+                            setSubtaskDetailOpen(true);
+                          }
+                        }}
                       >
                         <div onClick={(e) => e.stopPropagation()}>
                           <Checkbox
                             checked={subtask.completed}
+                            disabled={!canWriteTask}
                             onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
                           />
                         </div>
@@ -891,7 +1204,21 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             {subtask.title}
                           </div>
                         </div>
-                      </button>
+                        {canDeleteSubtask ? (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 text-destructive"
+                              onClick={() => void deleteSubtask(subtask.id)}
+                              aria-label="Elimina subtask"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
 
@@ -900,10 +1227,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       placeholder="Aggiungi un subtask..."
                       value={newSubtask}
                       onChange={(e) => setNewSubtask(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && addSubtask()}
+                      onKeyDown={(e) => e.key === "Enter" && canWriteTask && addSubtask()}
                       className="flex-1"
+                      disabled={!canWriteTask}
                     />
-                    <Button onClick={addSubtask} size="sm" variant="outline">
+                    <Button onClick={addSubtask} size="sm" variant="outline" disabled={!canWriteTask}>
                       <Plus className="w-4 h-4" />
                     </Button>
                   </div>
@@ -980,10 +1308,76 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         </Avatar>
                         <div className="flex-1">
                           <div className="bg-muted/30 rounded-lg p-3">
-                            <p className="text-sm font-medium">
-                              {comment.user.name || comment.user.email}
-                            </p>
-                            <p className="text-sm text-foreground/80 mt-1 whitespace-pre-wrap">{comment.content}</p>
+                            <div className="flex items-start justify-between gap-3">
+                              <p className="text-sm font-medium">{comment.user.name || comment.user.email}</p>
+                              <div className="flex items-center gap-1">
+                                {(canEditMeta || (meId && comment.user.id === meId)) ? (
+                                  <>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => startEditComment(comment)}
+                                      disabled={savingCommentEdit}
+                                      aria-label="Modifica commento"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-destructive"
+                                      onClick={() => deleteComment(comment.id)}
+                                      disabled={savingCommentEdit}
+                                      aria-label="Elimina commento"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                ) : null}
+                              </div>
+                            </div>
+                            {editingCommentId === comment.id ? (
+                              <div className="mt-2 space-y-2">
+                                <RichTextEditor
+                                  valueHtml={editingCommentHtml}
+                                  onChange={(html, ids) => {
+                                    setEditingCommentHtml(html);
+                                    setEditingMentionedUserIds(ids);
+                                  }}
+                                  mentionUsers={mentionUsers}
+                                  placeholder="Modifica commento…"
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={cancelEditComment}
+                                    disabled={savingCommentEdit}
+                                  >
+                                    Annulla
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    onClick={saveCommentEdit}
+                                    disabled={savingCommentEdit || !editingCommentHtml.trim()}
+                                  >
+                                    Salva
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <RichTextViewer
+                                html={
+                                  comment.content.includes("<")
+                                    ? comment.content
+                                    : comment.content.replace(/\n/g, "<br/>")
+                                }
+                                className="mt-2"
+                              />
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
                             {format(new Date(comment.createdAt), "PPp", { locale: it })}
@@ -992,15 +1386,21 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       </div>
                     ))}
 
-                    <Textarea
-                      placeholder="Scrivi un commento..."
-                      value={newComment}
-                      onChange={(e) => setNewComment(e.target.value)}
-                      className="min-h-[90px]"
-                    />
-                    <Button onClick={addComment} className="w-full">
-                      Aggiungi Commento
-                    </Button>
+                    <div className="space-y-2">
+                      <RichTextEditor
+                        valueHtml={newCommentHtml}
+                        onChange={(html, ids) => {
+                          setNewCommentHtml(html);
+                          setMentionedUserIds(ids);
+                        }}
+                        mentionUsers={mentionUsers}
+                        placeholder="Scrivi un commento…"
+                        disabled={!canWriteTask}
+                      />
+                      <Button onClick={addComment} className="w-full" disabled={!canWriteTask || !newCommentHtml.trim()}>
+                        Invia
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -1051,10 +1451,211 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       >
         <div className="p-6 border-b">
           <div className="text-xs text-muted-foreground">Subtask</div>
-          <div className="mt-2 text-xl font-semibold">{selectedSubtask?.title || ""}</div>
+          <div className="mt-2 flex items-start justify-between gap-2">
+            {isEditingSubtaskTitle ? (
+              <div className="flex-1 flex items-start gap-2">
+                <Input
+                  value={subtaskDraftTitle}
+                  onChange={(e) => setSubtaskDraftTitle(e.target.value)}
+                  disabled={!selectedSubtask || !canWriteTask || savingSubtaskTitle}
+                  className="h-10"
+                />
+                <Button
+                  type="button"
+                  onClick={saveSubtaskTitle}
+                  disabled={!selectedSubtask || !canWriteTask || savingSubtaskTitle || !subtaskDraftTitle.trim()}
+                >
+                  Salva
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setIsEditingSubtaskTitle(false);
+                    setSubtaskDraftTitle(selectedSubtask?.title || "");
+                  }}
+                  disabled={savingSubtaskTitle}
+                >
+                  Annulla
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="text-xl font-semibold">{selectedSubtask?.title || ""}</div>
+                {selectedSubtask && canWriteTask ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={() => {
+                      setSubtaskDraftTitle(selectedSubtask.title || "");
+                      setIsEditingSubtaskTitle(true);
+                    }}
+                    aria-label="Modifica titolo subtask"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                ) : null}
+              </>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="space-y-3">
+            <div className="font-semibold">Dettagli</div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Status</Label>
+                <Select
+                  value={
+                    selectedSubtask?.status ||
+                    (selectedSubtask?.completed ? "done" : "todo")
+                  }
+                  onValueChange={(v) => updateSelectedSubtaskMeta({ status: v })}
+                  disabled={!selectedSubtask || !canWriteTask}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Stato" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todo">Da Fare</SelectItem>
+                    <SelectItem value="in_progress">In Corso</SelectItem>
+                    <SelectItem value="done">Completato</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Priorità</Label>
+                <Select
+                  value={selectedSubtask?.priority || "medium"}
+                  onValueChange={(v) => updateSelectedSubtaskMeta({ priority: v })}
+                  disabled={!selectedSubtask || !canWriteTask}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Priorità" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Bassa</SelectItem>
+                    <SelectItem value="medium">Media</SelectItem>
+                    <SelectItem value="high">Alta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label>Due date</Label>
+                <Input
+                  type="date"
+                  value={
+                    selectedSubtask?.dueDate
+                      ? new Date(selectedSubtask.dueDate).toISOString().slice(0, 10)
+                      : ""
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateSelectedSubtaskMeta({ dueDate: v ? new Date(v).toISOString() : null });
+                  }}
+                  disabled={!selectedSubtask || !canWriteTask}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label>Assegnatario</Label>
+                <Select
+                  value={selectedSubtask?.assigneeId || "__none__"}
+                  onValueChange={(v) => updateSelectedSubtaskMeta({ assigneeId: v === "__none__" ? null : v })}
+                  disabled={!selectedSubtask || !canAssignSubtask}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Seleziona" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Nessuno</SelectItem>
+                    {mentionUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="font-semibold flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Dipendenze
+              </div>
+            </div>
+
+            {selectedSubtask && (selectedSubtask.dependencies || []).length > 0 ? (
+              <div className="space-y-2">
+                {(selectedSubtask.dependencies || []).map((d) => {
+                  const dependsOn = subtasks.find((s) => s.id === d.dependsOnId);
+                  return (
+                    <div key={d.id} className="flex items-center justify-between gap-3 rounded-lg border p-2">
+                      <div className="min-w-0">
+                        <div className="text-sm truncate">{dependsOn?.title || d.dependsOnId}</div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive"
+                        disabled={!canWriteTask}
+                        onClick={() => removeSelectedSubtaskDependency(d.id)}
+                        aria-label="Rimuovi dipendenza"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">Nessuna dipendenza.</div>
+            )}
+
+            {selectedSubtask ? (
+              <div className="space-y-2">
+                <Label>Aggiungi dipendenza</Label>
+                <Select
+                  value="__none__"
+                  onValueChange={(v) => {
+                    if (!selectedSubtask) return;
+                    if (!v || v === "__none__") return;
+                    void addSelectedSubtaskDependency(v);
+                  }}
+                  disabled={!canWriteTask}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Seleziona subtask" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Seleziona…</SelectItem>
+                    {subtasks
+                      .filter((s) => s.id !== selectedSubtask.id)
+                      .filter((s) => !(selectedSubtask.dependencies || []).some((d) => d.dependsOnId === s.id))
+                      .map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.title}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
+          </div>
+
+          <Separator />
+
           <div className="space-y-2">
             <Label>Descrizione</Label>
             <Textarea
@@ -1079,7 +1680,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                 taskId={taskId}
                 subtaskId={selectedSubtask.id}
                 open={subtaskDetailOpen}
-                disabled={!selectedSubtask}
+                disabled={!canManageSubtaskChecklists}
               />
             ) : null}
           </div>
@@ -1136,13 +1737,76 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
               <div className="space-y-3">
                 {subtaskComments.map((c) => (
                   <div key={c.id} className="border rounded-lg p-3">
-                    <div className="text-xs text-muted-foreground">
-                      {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
+                      </div>
+                      {(canEditMeta || (meId && c.user?.id === meId)) ? (
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => startEditSubtaskComment(c)}
+                            disabled={savingSubtaskCommentEdit}
+                            aria-label="Modifica commento"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            onClick={() => void deleteSubtaskComment(c.id)}
+                            disabled={savingSubtaskCommentEdit}
+                            aria-label="Elimina commento"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
-                    <RichTextViewer
-                      html={c.content.includes("<") ? c.content : c.content.replace(/\n/g, "<br/>")}
-                      className="mt-2"
-                    />
+
+                    {editingSubtaskCommentId === c.id ? (
+                      <div className="mt-2 space-y-2">
+                        <RichTextEditor
+                          valueHtml={editingSubtaskCommentHtml}
+                          onChange={(html) => setEditingSubtaskCommentHtml(html)}
+                          mentionUsers={mentionUsers}
+                          placeholder="Modifica commento…"
+                          disabled={savingSubtaskCommentEdit}
+                          onUploadImage={async (file) => {
+                            const uploaded = await uploadSubtaskAttachment(file);
+                            if (!uploaded) throw new Error("Upload fallito");
+                            return { src: uploaded.filePath, alt: uploaded.fileName };
+                          }}
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={cancelEditSubtaskComment}
+                            disabled={savingSubtaskCommentEdit}
+                          >
+                            Annulla
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={saveSubtaskCommentEdit}
+                            disabled={savingSubtaskCommentEdit || !editingSubtaskCommentHtml.trim()}
+                          >
+                            Salva
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <RichTextViewer
+                        html={c.content.includes("<") ? c.content : c.content.replace(/\n/g, "<br/>")}
+                        className="mt-2"
+                      />
+                    )}
                   </div>
                 ))}
               </div>

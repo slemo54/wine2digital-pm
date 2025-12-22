@@ -34,6 +34,10 @@ export async function PUT(
     }
 
     const { completed, status, title, description, assigneeId, dueDate, priority } = await request.json();
+    const canAssign = role === "admin" || isProjectManager;
+    if (assigneeId !== undefined && !canAssign) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
 
     // Determine target status
     let targetStatus = status;
@@ -71,6 +75,20 @@ export async function PUT(
         ...(assigneeId !== undefined && { assigneeId }), // allow null to unassign
         ...(dueDate !== undefined && { dueDate }),
         ...(priority && { priority }),
+      },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        dependencies: true,
+        dependentOn: true,
       },
     });
 
@@ -117,12 +135,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
     const isProjectManager = access.projectRole === "owner" || access.projectRole === "manager";
-    const canWrite =
-      role === "admin" ||
-      isProjectManager ||
-      (role === "manager" && access.isProjectMember) ||
-      (role === "member" && access.isAssignee);
-    if (!canWrite) {
+    const canDelete = role === "admin" || isProjectManager;
+    if (!canDelete) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 

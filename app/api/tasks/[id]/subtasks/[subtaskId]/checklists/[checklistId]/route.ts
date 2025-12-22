@@ -35,9 +35,7 @@ export async function PUT(
 
     const canWrite =
       role === "admin" ||
-      isProjectManager ||
-      (role === "manager" && access.isProjectMember) ||
-      (role === "member" && access.isAssignee);
+      isProjectManager;
     if (!canWrite) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
 
     const existing = await prisma.subtaskChecklist.findFirst({
@@ -104,9 +102,7 @@ export async function DELETE(
 
     const canWrite =
       role === "admin" ||
-      isProjectManager ||
-      (role === "manager" && access.isProjectMember) ||
-      (role === "member" && access.isAssignee);
+      isProjectManager;
     if (!canWrite) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
 
     const existing = await prisma.subtaskChecklist.findFirst({
