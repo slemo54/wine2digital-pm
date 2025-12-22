@@ -214,6 +214,10 @@ export default function ProjectsPage() {
 
   const bulkAction = async (action: "archive" | "delete") => {
     if (selectedProjects.size === 0) return;
+    if (action === "delete") {
+      const ok = confirm(`Eliminare definitivamente ${selectedProjects.size} progetti?`);
+      if (!ok) return;
+    }
     setIsBulkLoading(true);
     try {
       const response = await fetch("/api/projects", {
@@ -232,14 +236,14 @@ export default function ProjectsPage() {
   };
 
   const columns = [
-    { key: "name", label: "Project name", sortable: true },
-    { key: "status", label: "Status", sortable: true },
+    { key: "name", label: "Nome", sortable: true },
+    { key: "status", label: "Stato", sortable: true },
     { key: "owner", label: "Owner", sortable: false },
-    { key: "start", label: "Start date", sortable: true },
-    { key: "end", label: "End date", sortable: true },
-    { key: "completionRate", label: "Completion", sortable: true },
-    { key: "description", label: "Description", sortable: false },
-    { key: "users", label: "Users", sortable: false },
+    { key: "start", label: "Start date", sortable: false },
+    { key: "end", label: "End date", sortable: false },
+    { key: "completionRate", label: "Completamento", sortable: true },
+    { key: "description", label: "Descrizione", sortable: false },
+    { key: "users", label: "Utenti", sortable: false },
   ] as const;
 
   const sortIcon = (col: OrderBy) => {
@@ -271,8 +275,8 @@ export default function ProjectsPage() {
                 Dashboard
               </Button>
             </Link>
-            <h1 className="text-3xl font-bold text-foreground">Project List</h1>
-            <p className="text-muted-foreground mt-1">These companies have purchased in the last 12 months.</p>
+            <h1 className="text-3xl font-bold text-foreground">Projects</h1>
+            <p className="text-muted-foreground mt-1">Gestisci i progetti e lo stato di avanzamento.</p>
           </div>
           <Button onClick={() => setShowCreateDialog(true)} className="bg-primary hover:bg-primary/90 text-white">
             <Plus className="mr-2 h-4 w-4" />

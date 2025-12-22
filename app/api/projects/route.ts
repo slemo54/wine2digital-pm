@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { buildProjectDateOverlapWhere, parseDateRangeInput } from '@/lib/projects-date-filter';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +25,11 @@ export async function GET(req: NextRequest) {
     const orderBy = (searchParams.get('orderBy') || 'createdAt') as 'name' | 'status' | 'createdAt' | 'completionRate';
     const order = (searchParams.get('order') || 'desc') as 'asc' | 'desc';
 
+    const parsedDates = parseDateRangeInput({ startDate, endDate });
+    if (!parsedDates.ok) {
+      return NextResponse.json({ error: parsedDates.error }, { status: 400 });
+    }
+
     // Fetch projects for the user with DB-side filters where possible
     const projects = await prisma.project.findMany({
       where: {
@@ -36,14 +42,7 @@ export async function GET(req: NextRequest) {
               status: status === 'running' ? 'active' : status, // normalize running -> active
             }
           : {}),
-        ...(startDate || endDate
-          ? {
-              createdAt: {
-                ...(startDate ? { gte: new Date(startDate) } : {}),
-                ...(endDate ? { lte: new Date(endDate) } : {}),
-              },
-            }
-          : {}),
+        ...buildProjectDateOverlapWhere({ start: parsedDates.start, end: parsedDates.end }),
       },
       include: {
         creator: {
