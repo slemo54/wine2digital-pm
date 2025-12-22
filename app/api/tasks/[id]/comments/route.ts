@@ -3,6 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getTaskAccessFlags } from "@/lib/task-access";
 import { prisma } from "@/lib/prisma";
+import { isEffectivelyEmptyRichContent, sanitizeRichHtml } from "@/lib/rich-text";
+
+type CreateBody = {
+  content?: unknown;
+};
 
 export async function GET(
   request: NextRequest,
@@ -67,7 +72,13 @@ export async function POST(
   }
 
   try {
-    const { content } = await request.json();
+    const body = (await request.json().catch(() => ({}))) as CreateBody;
+    const raw = typeof body?.content === "string" ? body.content.trim() : "";
+    const sanitized = sanitizeRichHtml(raw);
+    if (!sanitized || isEffectivelyEmptyRichContent(sanitized)) {
+      return NextResponse.json({ error: "content required" }, { status: 400 });
+    }
+
     const userId = (session.user as any).id;
     const role = ((session.user as any).role as string | undefined) || "member";
     if (!userId) {
@@ -92,7 +103,7 @@ export async function POST(
       data: {
         taskId: params.id,
         userId,
-        content,
+        content: sanitized,
       },
       include: {
         user: {
