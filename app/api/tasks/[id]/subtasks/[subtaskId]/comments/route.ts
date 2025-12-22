@@ -3,7 +3,13 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getTaskAccessFlags } from "@/lib/task-access";
 import { prisma } from "@/lib/prisma";
-import { buildMentionNotifications, isEffectivelyEmptyRichContent, normalizeMentionedUserIds } from "@/lib/rich-text";
+import {
+  buildMentionNotifications,
+  filterMentionedUserIdsToAllowed,
+  isEffectivelyEmptyRichContent,
+  normalizeMentionedUserIds,
+  sanitizeRichHtml,
+} from "@/lib/rich-text";
 
 type CreateBody = {
   content?: string;
@@ -76,8 +82,9 @@ export async function POST(
     if (!canWrite) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
 
     const body = (await request.json().catch(() => ({}))) as CreateBody;
-    const text = typeof body?.content === "string" ? body.content.trim() : "";
-    if (!text || isEffectivelyEmptyRichContent(text)) {
+    const raw = typeof body?.content === "string" ? body.content.trim() : "";
+    const sanitized = sanitizeRichHtml(raw);
+    if (!sanitized || isEffectivelyEmptyRichContent(sanitized)) {
       return NextResponse.json({ error: "content required" }, { status: 400 });
     }
 
@@ -87,7 +94,7 @@ export async function POST(
       data: {
         subtaskId: params.subtaskId,
         userId,
-        content: text,
+        content: sanitized,
       },
       include: {
         user: {
@@ -113,17 +120,35 @@ export async function POST(
     });
 
     if (mentionedUserIds.length > 0) {
-      const [task, subtask] = await Promise.all([
-        prisma.task.findUnique({ where: { id: params.id }, select: { title: true, projectId: true } }),
+      const task = await prisma.task.findUnique({
+        where: { id: params.id },
+        select: { title: true, projectId: true },
+      });
+      if (!task?.projectId) {
+        return NextResponse.json(comment, { status: 201 });
+      }
+
+      const [subtask, allowedMembers] = await Promise.all([
         prisma.subtask.findUnique({ where: { id: params.subtaskId }, select: { title: true } }),
+        prisma.projectMember.findMany({
+          where: { projectId: task.projectId, userId: { in: mentionedUserIds } },
+          select: { userId: true },
+        }),
       ]);
+
       const authorLabel = String(comment.user?.name || comment.user?.email || "Un collega");
       const subtaskTitle = String(subtask?.title || "Subtask");
       const taskTitle = String(task?.title || "Task");
 
+      const allowedUserIds = allowedMembers.map((m) => m.userId);
+      const filteredMentioned = filterMentionedUserIdsToAllowed(mentionedUserIds, allowedUserIds);
+      if (filteredMentioned.length === 0) {
+        return NextResponse.json(comment, { status: 201 });
+      }
+
       await prisma.notification.createMany({
         data: buildMentionNotifications({
-          mentionedUserIds,
+          mentionedUserIds: filteredMentioned,
           authorLabel,
           taskId: params.id,
           subtaskId: params.subtaskId,

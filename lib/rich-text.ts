@@ -1,3 +1,5 @@
+import sanitizeHtml from "sanitize-html";
+
 export function isEffectivelyEmptyRichContent(html: string): boolean {
   const hasImage = /<img\b/i.test(html);
   const text = html
@@ -42,6 +44,66 @@ export function buildMentionNotifications(opts: {
     message: `${opts.authorLabel} ti ha menzionato in: ${opts.subtaskTitle} (task: ${opts.taskTitle})`,
     link,
   }));
+}
+
+const ALLOWED_RICH_TAGS = [
+  "p",
+  "br",
+  "strong",
+  "em",
+  "u",
+  "s",
+  "ul",
+  "ol",
+  "li",
+  "blockquote",
+  "code",
+  "pre",
+  "a",
+  "span",
+  "img",
+] as const;
+
+const ALLOWED_RICH_ATTRS: Record<string, string[]> = {
+  a: ["href", "target", "rel"],
+  span: ["class", "data-type", "data-id", "data-label"],
+  img: ["src", "alt", "title", "width", "height"],
+};
+
+export function sanitizeRichHtml(input: string): string {
+  const html = typeof input === "string" ? input : "";
+
+  const cleaned = sanitizeHtml(html, {
+    allowedTags: [...ALLOWED_RICH_TAGS],
+    allowedAttributes: ALLOWED_RICH_ATTRS,
+    allowedSchemes: ["http", "https", "mailto"],
+    allowedSchemesByTag: {
+      img: ["http", "https"],
+    },
+    allowProtocolRelative: false,
+    transformTags: {
+      a: (tagName, attribs) => {
+        const next = { ...attribs, rel: "noreferrer", target: "_blank" };
+        return { tagName, attribs: next };
+      },
+    },
+    exclusiveFilter: (frame) => {
+      // Remove empty paragraphs/spans after sanitization
+      if (frame.tag === "p" || frame.tag === "span") {
+        const text = String(frame.text || "").replace(/\s+/g, " ").trim();
+        return !text;
+      }
+      return false;
+    },
+  }).trim();
+
+  return cleaned;
+}
+
+export function filterMentionedUserIdsToAllowed(mentionedUserIds: string[], allowedUserIds: string[]): string[] {
+  if (mentionedUserIds.length === 0) return [];
+  const allowed = new Set(allowedUserIds);
+  return mentionedUserIds.filter((id) => allowed.has(id));
 }
 
 

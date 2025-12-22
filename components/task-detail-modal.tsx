@@ -36,8 +36,18 @@ import { it } from "date-fns/locale";
 import { toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
 import { formatTaskActivityEvent } from "@/lib/task-activity-format";
-import { RichTextEditor, RichTextViewer, type MentionUser } from "@/components/ui/rich-text-editor";
+import dynamic from "next/dynamic";
+import type { MentionUser } from "@/components/ui/rich-text-editor";
+import { RichTextViewer } from "@/components/ui/rich-text-viewer";
 import { SubtaskChecklists } from "@/components/subtask-checklists";
+
+const RichTextEditor = dynamic(
+  () => import("@/components/ui/rich-text-editor").then((m) => m.RichTextEditor),
+  {
+    ssr: false,
+    loading: () => <div className="text-sm text-muted-foreground">Caricamento editor…</div>,
+  }
+);
 
 interface Subtask {
   id: string;
