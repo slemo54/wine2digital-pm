@@ -123,17 +123,39 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const body = await req.json();
-    const { name, description, startDate, endDate, status } = body;
+    const body = await req.json().catch(() => ({}));
+    const name = typeof (body as any)?.name === "string" ? String((body as any).name) : undefined;
+    const description =
+      (body as any)?.description !== undefined ? String((body as any).description ?? "") : undefined;
+    const startDateRaw = (body as any)?.startDate;
+    const endDateRaw = (body as any)?.endDate;
+    const statusRaw = (body as any)?.status;
+
+    const normalizedStatus =
+      typeof statusRaw === "string" && statusRaw.trim()
+        ? (statusRaw.trim() === "running" ? "active" : statusRaw.trim())
+        : undefined;
+
+    const startDateStr = typeof startDateRaw === "string" ? startDateRaw.trim() : null;
+    const endDateStr = typeof endDateRaw === "string" ? endDateRaw.trim() : null;
+    const startDate =
+      startDateRaw === undefined ? undefined : startDateStr ? new Date(startDateStr) : null;
+    const endDate = endDateRaw === undefined ? undefined : endDateStr ? new Date(endDateStr) : null;
+    if (startDate instanceof Date && Number.isNaN(startDate.getTime())) {
+      return NextResponse.json({ error: "Invalid startDate" }, { status: 400 });
+    }
+    if (endDate instanceof Date && Number.isNaN(endDate.getTime())) {
+      return NextResponse.json({ error: "Invalid endDate" }, { status: 400 });
+    }
 
     const project = await prisma.project.update({
       where: { id: params.id },
       data: {
-        ...(name && { name }),
+        ...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}),
         ...(description !== undefined && { description }),
-        ...(startDate && { startDate: new Date(startDate) }),
-        ...(endDate && { endDate: new Date(endDate) }),
-        ...(status && { status }),
+        ...(startDate !== undefined && { startDate }),
+        ...(endDate !== undefined && { endDate }),
+        ...(normalizedStatus !== undefined && { status: normalizedStatus }),
       },
       include: {
         creator: {

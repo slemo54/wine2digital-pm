@@ -55,7 +55,9 @@ export async function GET(req: NextRequest) {
           },
         },
         members: {
-          include: {
+          select: {
+            userId: true,
+            role: true,
             user: {
               select: {
                 id: true,
@@ -213,30 +215,95 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any)?.id;
+    const userId = (session.user as any)?.id as string | undefined;
     const globalRole = String((session.user as any)?.role || "");
     const body = await req.json();
     const { ids, action } = body as { ids?: string[]; action?: 'archive' | 'delete' };
 
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    const normalizedIds = Array.from(
+      new Set((Array.isArray(ids) ? ids : []).map((x) => String(x || "")).filter(Boolean))
+    );
+    if (normalizedIds.length === 0) {
       return NextResponse.json({ error: 'No project ids provided' }, { status: 400 });
     }
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const normalizedAction: 'archive' | 'delete' = action === 'delete' ? 'delete' : 'archive';
+    const requested = normalizedIds.length;
 
     if (globalRole === "admin") {
-      if (action === 'delete') {
-        await prisma.project.deleteMany({ where: { id: { in: ids } } });
-        return NextResponse.json({ success: true, deleted: ids.length });
+      if (normalizedAction === 'delete') {
+        await prisma.project.deleteMany({ where: { id: { in: normalizedIds } } });
+        return NextResponse.json({
+          success: true,
+          action: 'delete',
+          requested,
+          processed: requested,
+          unauthorized: 0,
+          unauthorizedIds: [],
+          deleted: requested,
+        });
       }
-      await prisma.project.updateMany({ where: { id: { in: ids } }, data: { status: 'archived' } });
-      return NextResponse.json({ success: true, archived: ids.length });
+      await prisma.project.updateMany({ where: { id: { in: normalizedIds } }, data: { status: 'archived' } });
+      return NextResponse.json({
+        success: true,
+        action: 'archive',
+        requested,
+        processed: requested,
+        unauthorized: 0,
+        unauthorizedIds: [],
+        archived: requested,
+      });
     }
 
     // Permissions:
     // - archive: project owner/manager (or creator)
     // - delete: project owner (or creator)
+    if (normalizedAction === 'delete') {
+      const deletable = await prisma.project.findMany({
+        where: {
+          id: { in: normalizedIds },
+          OR: [{ creatorId: userId }, { members: { some: { userId, role: "owner" } } }],
+        },
+        select: { id: true },
+      });
+      const deletableIds = deletable.map((p) => p.id);
+      const allowed = new Set(deletableIds);
+      const unauthorizedIds = normalizedIds.filter((id) => !allowed.has(id));
+      if (deletableIds.length === 0) {
+        return NextResponse.json(
+          {
+            error: 'Not authorized for selected projects',
+            action: 'delete',
+            requested,
+            processed: 0,
+            unauthorized: unauthorizedIds.length,
+            unauthorizedIds,
+            deleted: 0,
+          },
+          { status: 403 }
+        );
+      }
+      await prisma.project.deleteMany({
+        where: { id: { in: deletableIds } },
+      });
+      return NextResponse.json({
+        success: true,
+        action: 'delete',
+        requested,
+        processed: deletableIds.length,
+        unauthorized: unauthorizedIds.length,
+        unauthorizedIds,
+        deleted: deletableIds.length,
+      });
+    }
+
+    // Default: archive (soft)
     const archivable = await prisma.project.findMany({
       where: {
-        id: { in: ids },
+        id: { in: normalizedIds },
         OR: [
           { creatorId: userId },
           { members: { some: { userId, role: { in: ["owner", "manager"] } } } },
@@ -245,35 +312,36 @@ export async function PATCH(req: NextRequest) {
       select: { id: true },
     });
     const archivableIds = archivable.map((p) => p.id);
+    const allowed = new Set(archivableIds);
+    const unauthorizedIds = normalizedIds.filter((id) => !allowed.has(id));
     if (archivableIds.length === 0) {
-      return NextResponse.json({ error: 'Not authorized for selected projects' }, { status: 403 });
-    }
-
-    if (action === 'delete') {
-      const deletable = await prisma.project.findMany({
-        where: {
-          id: { in: ids },
-          OR: [{ creatorId: userId }, { members: { some: { userId, role: "owner" } } }],
+      return NextResponse.json(
+        {
+          error: 'Not authorized for selected projects',
+          action: 'archive',
+          requested,
+          processed: 0,
+          unauthorized: unauthorizedIds.length,
+          unauthorizedIds,
+          archived: 0,
         },
-        select: { id: true },
-      });
-      const deletableIds = deletable.map((p) => p.id);
-      if (deletableIds.length === 0) {
-        return NextResponse.json({ error: 'Not authorized for selected projects' }, { status: 403 });
-      }
-      await prisma.project.deleteMany({
-        where: { id: { in: deletableIds } },
-      });
-      return NextResponse.json({ success: true, deleted: deletableIds.length });
+        { status: 403 }
+      );
     }
-
-    // Default: archive (soft)
     await prisma.project.updateMany({
       where: { id: { in: archivableIds } },
       data: { status: 'archived' },
     });
 
-    return NextResponse.json({ success: true, archived: archivableIds.length });
+    return NextResponse.json({
+      success: true,
+      action: 'archive',
+      requested,
+      processed: archivableIds.length,
+      unauthorized: unauthorizedIds.length,
+      unauthorizedIds,
+      archived: archivableIds.length,
+    });
   } catch (error) {
     console.error('Bulk project patch error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
