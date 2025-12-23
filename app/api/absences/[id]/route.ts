@@ -26,6 +26,15 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
+    // Fetch existing absence to check current status
+    const existingAbsence = await prisma.absence.findUnique({
+      where: { id: params.id },
+    });
+
+    if (!existingAbsence) {
+      return NextResponse.json({ error: 'Absence not found' }, { status: 404 });
+    }
+
     // Construct update data
     const updateData: any = {};
 
@@ -42,10 +51,15 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 
     // Allow editing other fields
-    if (body.startDate) updateData.startDate = body.startDate;
-    if (body.endDate) updateData.endDate = body.endDate;
+    if (body.startDate) updateData.startDate = new Date(body.startDate);
+    if (body.endDate) updateData.endDate = new Date(body.endDate);
     if (body.type) updateData.type = body.type;
     if (body.reason !== undefined) updateData.reason = body.reason;
+
+    // Check if there's anything to update
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
+    }
 
     const absence = await prisma.absence.update({
       where: { id: params.id },
@@ -64,7 +78,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     });
 
     // Create notification only if status changed
-    if (status && status !== absence.status && (status === 'approved' || status === 'rejected')) {
+    if (status && status !== existingAbsence.status && (status === 'approved' || status === 'rejected')) {
       await prisma.notification.create({
         data: {
           userId: absence.userId,
@@ -77,8 +91,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 
     return NextResponse.json({ absence });
-
-    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   } catch (error) {
     console.error('Update absence error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
