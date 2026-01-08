@@ -125,6 +125,7 @@ export async function PUT(
     const isProjectMember = Boolean(membership);
     const projectRole = membership?.role ? String(membership.role) : "";
     const isProjectManager = projectRole === "owner" || projectRole === "manager";
+    const canEditMeta = role === "admin" || isProjectManager || (role === "manager" && isProjectMember);
 
     const canWrite =
       role === "admin" ||
@@ -148,6 +149,20 @@ export async function PUT(
       listId,
       assigneeIds,
     } = body || {};
+
+    const statusStr = typeof status === "string" ? status.trim() : null;
+    if (statusStr) {
+      const allowedStatuses = new Set(["todo", "in_progress", "done", "archived"]);
+      if (!allowedStatuses.has(statusStr)) {
+        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+      }
+      // archive/unarchive is a meta action
+      const isArchiving = statusStr === "archived" && existing.status !== "archived";
+      const isUnarchiving = statusStr !== "archived" && existing.status === "archived";
+      if ((isArchiving || isUnarchiving) && !canEditMeta) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+      }
+    }
 
     // Only plain members (non project-managers) can update status only
     if (role === "member" && !isProjectManager) {
@@ -212,7 +227,7 @@ export async function PUT(
     const updated = await prisma.task.update({
       where: { id: params.id },
       data: {
-        ...(typeof status === "string" ? { status } : {}),
+        ...(typeof statusStr === "string" && statusStr ? { status: statusStr } : {}),
         ...(typeof priority === "string" ? { priority } : {}),
         ...(typeof title === "string" ? { title } : {}),
         ...(typeof description === "string" ? { description } : {}),
@@ -256,8 +271,8 @@ export async function PUT(
 
     // Activity (best-effort): record changes done via this endpoint
     const changes: Array<{ type: string; metadata: any }> = [];
-    if (typeof status === "string" && status !== existing.status) {
-      changes.push({ type: "task.status_changed", metadata: { from: existing.status, to: status } });
+    if (typeof statusStr === "string" && statusStr && statusStr !== existing.status) {
+      changes.push({ type: "task.status_changed", metadata: { from: existing.status, to: statusStr } });
     }
     if (typeof priority === "string" && priority !== existing.priority) {
       changes.push({ type: "task.priority_changed", metadata: { from: existing.priority, to: priority } });

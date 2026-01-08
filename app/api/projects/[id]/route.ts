@@ -73,6 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           },
         },
         tasks: {
+          where: { status: { not: "archived" } },
           include: {
             assignees: {
               include: {

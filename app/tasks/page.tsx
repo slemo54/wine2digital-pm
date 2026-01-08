@@ -173,7 +173,7 @@ export default function TasksPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -198,6 +198,8 @@ export default function TasksPage() {
         return "bg-success/10 text-success border-success/30";
       case "in_progress":
         return "bg-info/10 text-info border-info/30";
+      case "archived":
+        return "bg-muted text-muted-foreground border-border";
       case "todo":
       default:
         return "bg-muted text-muted-foreground border-border";
@@ -221,7 +223,7 @@ export default function TasksPage() {
   };
 
   return (
-    <div className="min-h-screen bg-secondary">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="mb-6">
           <Link href="/dashboard">
@@ -232,17 +234,20 @@ export default function TasksPage() {
           </Link>
         </div>
 
-        <Card className="bg-white">
+        <Card>
           <CardHeader className="pb-4">
             <div className="flex flex-col gap-4">
-              <div className="flex items-start justify-between gap-4">
-                <div>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <div className="min-w-0">
                   <h1 className="text-2xl font-bold">Tutte le mie task</h1>
                   <p className="text-sm text-muted-foreground">
                     Filtra per status, priorità, progetto, scadenza, testo e tag. Clicca una task per aprire i dettagli.
                   </p>
                 </div>
-                <Button onClick={() => setShowCreateTask(true)} className="bg-black text-white hover:bg-black/90">
+                <Button
+                  onClick={() => setShowCreateTask(true)}
+                  className="bg-black text-white hover:bg-black/90 w-full sm:w-auto"
+                >
                   <Plus className="h-4 w-4 mr-2" />
                   Crea Task
                 </Button>
@@ -284,6 +289,7 @@ export default function TasksPage() {
                       <SelectItem value="todo">Da fare</SelectItem>
                       <SelectItem value="in_progress">In corso</SelectItem>
                       <SelectItem value="done">Completate</SelectItem>
+                      <SelectItem value="archived">Archiviate</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -351,7 +357,7 @@ export default function TasksPage() {
           <Separator />
 
           <CardContent className="p-0">
-            <ScrollArea className="h-[70vh]">
+            <ScrollArea className="h-[70vh] h-[70dvh]">
               <div className="divide-y">
                 {loadingList ? (
                   <div className="p-6 flex items-center gap-2 text-muted-foreground">
@@ -376,7 +382,8 @@ export default function TasksPage() {
                                 {t.status === "todo" && "Da fare"}
                                 {t.status === "in_progress" && "In corso"}
                                 {t.status === "done" && "Done"}
-                                {!["todo", "in_progress", "done"].includes(t.status) && t.status}
+                                {t.status === "archived" && "Archiviata"}
+                                {!["todo", "in_progress", "done", "archived"].includes(t.status) && t.status}
                               </Badge>
                               <Badge variant="outline" className={getPriorityBadge(t.priority)}>
                                 {t.priority}

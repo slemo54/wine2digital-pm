@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
           },
         },
         tasks: {
+          where: { status: { not: "archived" } },
           select: {
             id: true,
             status: true,

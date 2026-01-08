@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     const where = {
       AND: [
         accessFilter,
-        status && status !== 'all' ? { status } : {},
+        status && status !== 'all' ? { status } : { status: { not: "archived" } },
         priority && priority !== 'all' ? { priority } : {},
         projectId && projectId !== 'all' ? { projectId } : {},
         dueFrom || dueTo

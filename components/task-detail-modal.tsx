@@ -32,7 +32,8 @@ import {
   Loader2,
   Pencil,
   Trash2,
-  Link2
+  Link2,
+  Archive
 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
@@ -43,6 +44,7 @@ import dynamic from "next/dynamic";
 import type { MentionUser } from "@/components/ui/rich-text-editor";
 import { RichTextViewer } from "@/components/ui/rich-text-viewer";
 import { SubtaskChecklists } from "@/components/subtask-checklists";
+import { getHrefForFilePath, getImageSrcForFilePath } from "@/lib/drive-links";
 
 const RichTextEditor = dynamic(
   () => import("@/components/ui/rich-text-editor").then((m) => m.RichTextEditor),
@@ -51,6 +53,24 @@ const RichTextEditor = dynamic(
     loading: () => <div className="text-sm text-muted-foreground">Caricamento editor…</div>,
   }
 );
+
+function isEffectivelyEmptyRichHtmlClient(html: string): boolean {
+  const hasImage = /<img\b/i.test(html);
+  const text = String(html || "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return !hasImage && !text;
+}
+
+function isProbablyImageFile(fileName: string, mimeType?: string | null): boolean {
+  const mt = String(mimeType || "").toLowerCase();
+  if (mt.startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|svg)$/i.test(String(fileName || ""));
+}
 
 interface Subtask {
   id: string;
@@ -90,6 +110,7 @@ interface Attachment {
   id: string;
   fileName: string;
   fileSize: number;
+  mimeType?: string | null;
   filePath: string;
   createdAt: string;
 }
@@ -98,6 +119,7 @@ interface SubtaskAttachment {
   id: string;
   fileName: string;
   fileSize: number;
+  mimeType?: string | null;
   filePath: string;
   createdAt: string;
 }
@@ -147,6 +169,9 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [savingCommentEdit, setSavingCommentEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [projectLists, setProjectLists] = useState<Array<{ id: string; name: string }>>([]);
+  const [isEditingTaskTitle, setIsEditingTaskTitle] = useState(false);
+  const [taskDraftTitle, setTaskDraftTitle] = useState("");
+  const [savingTaskTitle, setSavingTaskTitle] = useState(false);
   const [subtaskDetailOpen, setSubtaskDetailOpen] = useState(false);
   const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null);
   const [subtaskAttachments, setSubtaskAttachments] = useState<SubtaskAttachment[]>([]);
@@ -160,6 +185,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [subtaskMentionedUserIds, setSubtaskMentionedUserIds] = useState<string[]>([]);
   const [editingSubtaskCommentId, setEditingSubtaskCommentId] = useState<string | null>(null);
   const [editingSubtaskCommentHtml, setEditingSubtaskCommentHtml] = useState<string>("");
+  const [editingSubtaskMentionedUserIds, setEditingSubtaskMentionedUserIds] = useState<string[]>([]);
   const [savingSubtaskCommentEdit, setSavingSubtaskCommentEdit] = useState(false);
 
   const didOpenInitialSubtaskRef = useRef<string | null>(null);
@@ -217,6 +243,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     setIsEditingSubtaskTitle(false);
     setEditingSubtaskCommentId(null);
     setEditingSubtaskCommentHtml("");
+    setEditingSubtaskMentionedUserIds([]);
     setSubtaskNewCommentHtml("");
     setSubtaskMentionedUserIds([]);
     void fetchSubtaskDetails(selectedSubtask.id);
@@ -276,7 +303,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     }
   };
 
-  const updateTaskMeta = async (patch: Record<string, any>) => {
+  const updateTaskMeta = async (
+    patch: Record<string, any>,
+    opts?: { successMessage?: string; silent?: boolean }
+  ) => {
     setIsSavingMeta(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
@@ -288,13 +318,52 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || "Update failed");
       }
-      toast.success("Aggiornato");
+      if (!opts?.silent) toast.success(opts?.successMessage || "Aggiornato");
       await fetchTaskDetails();
       onUpdate?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore aggiornamento");
     } finally {
       setIsSavingMeta(false);
+    }
+  };
+
+  const saveTaskTitle = async () => {
+    const nextTitle = taskDraftTitle.trim();
+    if (!nextTitle) {
+      toast.error("Titolo richiesto");
+      return;
+    }
+    if (nextTitle === String(task?.title || "")) {
+      setIsEditingTaskTitle(false);
+      return;
+    }
+    setSavingTaskTitle(true);
+    try {
+      await updateTaskMeta({ title: nextTitle }, { successMessage: "Titolo aggiornato" });
+      setIsEditingTaskTitle(false);
+    } finally {
+      setSavingTaskTitle(false);
+    }
+  };
+
+  const toggleArchiveTask = async () => {
+    if (!task) return;
+    const isArchived = String(task.status || "") === "archived";
+    const ok = confirm(
+      isArchived
+        ? `Ripristinare la task "${task.title}"?`
+        : `Archiviare la task "${task.title}"?`
+    );
+    if (!ok) return;
+    const nextStatus = isArchived ? "todo" : "archived";
+    await updateTaskMeta(
+      { status: nextStatus },
+      { successMessage: isArchived ? "Task ripristinata" : "Task archiviata" }
+    );
+    if (!isArchived) {
+      // normalmente le task archiviate spariscono dalla lista: chiudiamo il drawer per coerenza
+      onClose();
     }
   };
 
@@ -574,6 +643,9 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       toast.success("Dipendenza aggiunta");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore aggiunta dipendenza");
+      if (selectedSubtask?.id) {
+        void fetchSubtaskDetails(selectedSubtask.id);
+      }
     }
   };
 
@@ -602,6 +674,9 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       toast.success("Dipendenza rimossa");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore rimozione dipendenza");
+      if (selectedSubtask?.id) {
+        void fetchSubtaskDetails(selectedSubtask.id);
+      }
     }
   };
 
@@ -630,8 +705,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
   const addSubtaskComment = async () => {
     if (!selectedSubtask) return;
+    if (!canWriteTask) {
+      toast.error("Non hai permessi per commentare");
+      return;
+    }
     const contentHtml = subtaskNewCommentHtml.trim();
-    if (!contentHtml) return;
+    if (!contentHtml || isEffectivelyEmptyRichHtmlClient(contentHtml)) return;
     try {
       const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/comments`, {
         method: "POST",
@@ -652,18 +731,20 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const startEditSubtaskComment = (c: SubtaskComment) => {
     setEditingSubtaskCommentId(c.id);
     setEditingSubtaskCommentHtml(c.content || "");
+    setEditingSubtaskMentionedUserIds([]);
   };
 
   const cancelEditSubtaskComment = () => {
     setEditingSubtaskCommentId(null);
     setEditingSubtaskCommentHtml("");
+    setEditingSubtaskMentionedUserIds([]);
   };
 
   const saveSubtaskCommentEdit = async () => {
     if (!selectedSubtask) return;
     if (!editingSubtaskCommentId) return;
     const contentHtml = editingSubtaskCommentHtml.trim();
-    if (!contentHtml) return;
+    if (!contentHtml || isEffectivelyEmptyRichHtmlClient(contentHtml)) return;
     setSavingSubtaskCommentEdit(true);
     try {
       const res = await fetch(
@@ -671,7 +752,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: contentHtml }),
+          body: JSON.stringify({ content: contentHtml, mentionedUserIds: editingSubtaskMentionedUserIds }),
         }
       );
       const data = await res.json().catch(() => ({}));
@@ -730,6 +811,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   useEffect(() => {
     if (!task) return;
     setDraftAssigneeIds(currentAssigneeIds);
+    setTaskDraftTitle(String(task?.title || ""));
+    setIsEditingTaskTitle(false);
     try {
       const parsed = typeof task?.tags === "string" ? JSON.parse(task.tags) : [];
       setDraftTags(Array.isArray(parsed) ? parsed.map(String) : []);
@@ -741,7 +824,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   if (loading) {
     return (
       <Sheet open={open} onOpenChange={onClose}>
-        <SheetContent side="right" className="w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-hidden p-0">
+        <SheetContent side="right" className="w-[95vw] sm:max-w-5xl max-h-[90vh] max-h-[90dvh] overflow-hidden p-0">
           <div className="flex items-center justify-center p-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
           </div>
@@ -798,6 +881,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       case "done": return "bg-green-100 text-green-700";
       case "in_progress": return "bg-orange-100 text-orange-700";
       case "todo": return "bg-gray-100 text-gray-700";
+      case "archived": return "bg-muted text-muted-foreground";
       default: return "bg-gray-100 text-gray-700";
     }
   };
@@ -815,6 +899,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       {task.status === "todo" && "Da Fare"}
                       {task.status === "in_progress" && "In Corso"}
                       {task.status === "done" && "Completato"}
+                      {task.status === "archived" && "Archiviata"}
                     </Badge>
                     {task.taskList?.name || task.list ? (
                       <Badge variant="outline" className="flex items-center gap-1">
@@ -828,7 +913,67 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       {task.priority === "low" && "Bassa"}
                     </Badge>
                   </div>
-                  <div className="text-2xl font-bold pr-10 truncate">{task.title}</div>
+                  <div className="flex items-start justify-between gap-2">
+                    {isEditingTaskTitle ? (
+                      <div className="flex-1 flex items-start gap-2">
+                        <Input
+                          value={taskDraftTitle}
+                          onChange={(e) => setTaskDraftTitle(e.target.value)}
+                          disabled={!canEditMeta || isSavingMeta || savingTaskTitle}
+                          className="h-10"
+                        />
+                        <Button
+                          type="button"
+                          onClick={saveTaskTitle}
+                          disabled={!canEditMeta || isSavingMeta || savingTaskTitle || !taskDraftTitle.trim()}
+                        >
+                          Salva
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            setIsEditingTaskTitle(false);
+                            setTaskDraftTitle(String(task?.title || ""));
+                          }}
+                          disabled={savingTaskTitle}
+                        >
+                          Annulla
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-2xl font-bold pr-2 truncate">{task.title}</div>
+                        {canEditMeta ? (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() => {
+                                setTaskDraftTitle(String(task?.title || ""));
+                                setIsEditingTaskTitle(true);
+                              }}
+                              aria-label="Modifica titolo task"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9"
+                              onClick={() => void toggleArchiveTask()}
+                              aria-label={task.status === "archived" ? "Ripristina task" : "Archivia task"}
+                            >
+                              <Archive className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
                   {task.description ? (
                     <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{task.description}</p>
                   ) : null}
@@ -1116,11 +1261,25 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       {task.status === "todo" && "Da Fare"}
                       {task.status === "in_progress" && "In Corso"}
                       {task.status === "done" && "Completato"}
+                      {task.status === "archived" && "Archiviata"}
                     </Badge>
                     <Select
                       value={task.status}
-                      onValueChange={(v) => updateTaskMeta({ status: v })}
-                      disabled={!canEditStatus || isSavingMeta}
+                      onValueChange={(v) => {
+                        if (v === "archived" && !canEditMeta) {
+                          toast.error("Solo admin o project owner/manager possono archiviare.");
+                          return;
+                        }
+                        if (task.status === "archived" && v !== "archived" && !canEditMeta) {
+                          toast.error("Solo admin o project owner/manager possono ripristinare.");
+                          return;
+                        }
+                        updateTaskMeta(
+                          { status: v },
+                          { successMessage: v === "archived" ? "Task archiviata" : "Aggiornato" }
+                        );
+                      }}
+                      disabled={!canEditStatus || isSavingMeta || (task.status === "archived" && !canEditMeta)}
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Stato" />
@@ -1129,6 +1288,9 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         <SelectItem value="todo">Da Fare</SelectItem>
                         <SelectItem value="in_progress">In Corso</SelectItem>
                         <SelectItem value="done">Completato</SelectItem>
+                        <SelectItem value="archived" disabled={!canEditMeta}>
+                          Archiviata
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1252,23 +1414,37 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     {attachments.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nessun allegato.</div>
                     ) : null}
-                    {attachments.map((attachment) => (
-                      <a
-                        key={attachment.id}
-                        href={attachment.filePath}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
-                      >
-                        <Paperclip className="w-4 h-4 text-muted-foreground" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{attachment.fileName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(attachment.fileSize / 1024).toFixed(2)} KB
-                          </p>
-                        </div>
-                      </a>
-                    ))}
+                    {attachments.map((attachment) => {
+                      const href = getHrefForFilePath(attachment.filePath) || "#";
+                      const isImg = isProbablyImageFile(attachment.fileName, attachment.mimeType);
+                      const previewSrc = isImg ? getImageSrcForFilePath(attachment.filePath) : null;
+                      return (
+                        <a
+                          key={attachment.id}
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
+                        >
+                          {previewSrc ? (
+                            <img
+                              src={previewSrc}
+                              alt={attachment.fileName}
+                              className="h-9 w-9 rounded object-cover border bg-muted"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <Paperclip className="w-4 h-4 text-muted-foreground" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(attachment.fileSize / 1024).toFixed(2)} KB
+                            </p>
+                          </div>
+                        </a>
+                      );
+                    })}
 
                     <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-muted-foreground/30 rounded-lg cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors">
                       <Upload className="w-4 h-4" />
@@ -1674,7 +1850,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           <Separator />
 
           <div className="space-y-2">
-            <div className="font-semibold">Checklists</div>
             {selectedSubtask ? (
               <SubtaskChecklists
                 taskId={taskId}
@@ -1711,18 +1886,35 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
               <div className="text-sm text-muted-foreground">Nessun allegato.</div>
             ) : (
               <div className="space-y-2">
-                {subtaskAttachments.map((a) => (
-                  <a
-                    key={a.id}
-                    href={a.filePath}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block border rounded-lg p-2 hover:bg-muted/30"
-                  >
-                    <div className="text-sm font-medium">{a.fileName}</div>
-                    <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
-                  </a>
-                ))}
+                {subtaskAttachments.map((a) => {
+                  const href = getHrefForFilePath(a.filePath) || "#";
+                  const isImg = isProbablyImageFile(a.fileName, a.mimeType);
+                  const previewSrc = isImg ? getImageSrcForFilePath(a.filePath) : null;
+                  return (
+                    <a
+                      key={a.id}
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-3 border rounded-lg p-2 hover:bg-muted/30"
+                    >
+                      {previewSrc ? (
+                        <img
+                          src={previewSrc}
+                          alt={a.fileName}
+                          className="h-9 w-9 rounded object-cover border bg-muted"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <Paperclip className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-medium truncate">{a.fileName}</div>
+                        <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
+                      </div>
+                    </a>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1773,14 +1965,18 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       <div className="mt-2 space-y-2">
                         <RichTextEditor
                           valueHtml={editingSubtaskCommentHtml}
-                          onChange={(html) => setEditingSubtaskCommentHtml(html)}
+                          onChange={(html, ids) => {
+                            setEditingSubtaskCommentHtml(html);
+                            setEditingSubtaskMentionedUserIds(ids);
+                          }}
                           mentionUsers={mentionUsers}
                           placeholder="Modifica commento…"
                           disabled={savingSubtaskCommentEdit}
                           onUploadImage={async (file) => {
                             const uploaded = await uploadSubtaskAttachment(file);
                             if (!uploaded) throw new Error("Upload fallito");
-                            return { src: uploaded.filePath, alt: uploaded.fileName };
+                            const src = getImageSrcForFilePath(uploaded.filePath) || uploaded.filePath;
+                            return { src, alt: uploaded.fileName };
                           }}
                         />
                         <div className="flex justify-end gap-2">
@@ -1795,7 +1991,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           <Button
                             type="button"
                             onClick={saveSubtaskCommentEdit}
-                            disabled={savingSubtaskCommentEdit || !editingSubtaskCommentHtml.trim()}
+                            disabled={
+                              savingSubtaskCommentEdit ||
+                              !editingSubtaskCommentHtml.trim() ||
+                              isEffectivelyEmptyRichHtmlClient(editingSubtaskCommentHtml)
+                            }
                           >
                             Salva
                           </Button>
@@ -1819,18 +2019,25 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                   setSubtaskMentionedUserIds(ids);
                 }}
                 mentionUsers={mentionUsers}
-                disabled={!selectedSubtask}
+                disabled={!selectedSubtask || !canWriteTask || savingSubtaskCommentEdit}
                 placeholder="Scrivi un commento…"
                 onUploadImage={async (file) => {
                   const uploaded = await uploadSubtaskAttachment(file);
                   if (!uploaded) throw new Error("Upload fallito");
-                  return { src: uploaded.filePath, alt: uploaded.fileName };
+                  const src = getImageSrcForFilePath(uploaded.filePath) || uploaded.filePath;
+                  return { src, alt: uploaded.fileName };
                 }}
               />
               <div className="flex justify-end">
                 <Button
                   onClick={addSubtaskComment}
-                  disabled={!selectedSubtask || !subtaskNewCommentHtml.trim()}
+                  disabled={
+                    !selectedSubtask ||
+                    !canWriteTask ||
+                    savingSubtaskCommentEdit ||
+                    !subtaskNewCommentHtml.trim() ||
+                    isEffectivelyEmptyRichHtmlClient(subtaskNewCommentHtml)
+                  }
                 >
                   Invia
                 </Button>
