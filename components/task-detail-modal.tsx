@@ -155,6 +155,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [activityEvents, setActivityEvents] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"subtasks" | "attachments" | "comments" | "activity">("subtasks");
   const [isSavingMeta, setIsSavingMeta] = useState(false);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [draftAssigneeIds, setDraftAssigneeIds] = useState<string[]>([]);
   const [tagsPickerOpen, setTagsPickerOpen] = useState(false);
@@ -364,6 +365,25 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     if (!isArchived) {
       // normalmente le task archiviate spariscono dalla lista: chiudiamo il drawer per coerenza
       onClose();
+    }
+  };
+
+  const deleteThisTask = async () => {
+    if (!task) return;
+    const ok = confirm(`Eliminare definitivamente la task "${task.title}"?`);
+    if (!ok) return;
+    setIsDeletingTask(true);
+    try {
+      const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Eliminazione fallita");
+      toast.success("Task eliminata");
+      onUpdate?.();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Eliminazione fallita");
+    } finally {
+      setIsDeletingTask(false);
     }
   };
 
@@ -968,6 +988,17 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               aria-label={task.status === "archived" ? "Ripristina task" : "Archivia task"}
                             >
                               <Archive className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 text-destructive"
+                              onClick={() => void deleteThisTask()}
+                              disabled={isDeletingTask}
+                              aria-label="Elimina task"
+                            >
+                              {isDeletingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                             </Button>
                           </div>
                         ) : null}

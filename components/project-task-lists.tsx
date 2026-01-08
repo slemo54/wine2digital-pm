@@ -41,7 +41,24 @@ function statusBadge(status: string): { label: string; variant: "secondary" | "o
   }
 }
 
-export function ProjectTaskLists({ projectId }: { projectId: string }) {
+export function ProjectTaskLists(props: {
+  projectId: string;
+  sessionUserId?: string | null;
+  sessionGlobalRole?: string | null;
+  projectMembers?: any[];
+}) {
+  const { projectId, sessionUserId, sessionGlobalRole, projectMembers } = props;
+  const meId = sessionUserId ? String(sessionUserId) : null;
+  const globalRole = String(sessionGlobalRole || "member");
+  const myMembership = meId && Array.isArray(projectMembers)
+    ? projectMembers.find((m: any) => m?.userId === meId) || null
+    : null;
+  const isProjectMember = Boolean(myMembership);
+  const myProjectRole = myMembership?.role ? String(myMembership.role) : "";
+  const isProjectManager = myProjectRole === "owner" || myProjectRole === "manager";
+  const canManageTasks = globalRole === "admin" || isProjectManager || (globalRole === "manager" && isProjectMember);
+  const noPermissionHint = "Solo admin o project owner/manager possono modificare o eliminare le task.";
+
   const [lists, setLists] = useState<ListDto[]>([]);
   const [tasks, setTasks] = useState<TaskDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +78,10 @@ export function ProjectTaskLists({ projectId }: { projectId: string }) {
   const [renameValue, setRenameValue] = useState("");
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState("");
+  const [savingTaskTitle, setSavingTaskTitle] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [defaultListIdForNewTask, setDefaultListIdForNewTask] = useState<string | undefined>(undefined);
 
@@ -206,6 +227,79 @@ export function ProjectTaskLists({ projectId }: { projectId: string }) {
     }
   };
 
+  const startEditTaskTitle = (t: TaskDto) => {
+    if (!canManageTasks) {
+      toast.error(noPermissionHint);
+      return;
+    }
+    setEditingTaskId(t.id);
+    setEditingTaskTitle(t.title || "");
+  };
+
+  const cancelEditTaskTitle = () => {
+    setEditingTaskId(null);
+    setEditingTaskTitle("");
+  };
+
+  const saveEditedTaskTitle = async () => {
+    if (!editingTaskId) return;
+    if (!canManageTasks) {
+      toast.error(noPermissionHint);
+      return;
+    }
+    const title = editingTaskTitle.trim();
+    if (!title) return;
+    setSavingTaskTitle(true);
+    try {
+      const res = await fetch(`/api/tasks/${encodeURIComponent(editingTaskId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Impossibile aggiornare titolo");
+      setTasks((prev) => prev.map((t) => (t.id === editingTaskId ? { ...t, title } : t)));
+      toast.success("Titolo aggiornato");
+      cancelEditTaskTitle();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossibile aggiornare titolo");
+    } finally {
+      setSavingTaskTitle(false);
+    }
+  };
+
+  const deleteTask = async (t: TaskDto) => {
+    if (!canManageTasks) {
+      toast.error(noPermissionHint);
+      return;
+    }
+    if (!confirm(`Eliminare la task “${t.title}”?`)) return;
+    setDeletingTaskId(t.id);
+    try {
+      const res = await fetch(`/api/tasks/${encodeURIComponent(t.id)}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Impossibile eliminare task");
+
+      setTasks((prev) => prev.filter((x) => x.id !== t.id));
+      setTasksTotal((prev) => Math.max(0, prev - 1));
+      if (t.listId) {
+        setLists((prev) =>
+          prev.map((l) =>
+            l.id === t.listId
+              ? { ...l, _count: l._count ? { tasks: Math.max(0, (l._count.tasks || 0) - 1) } : l._count }
+              : l
+          )
+        );
+      }
+      if (selectedTaskId === t.id) setSelectedTaskId(null);
+      toast.success("Task eliminata");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossibile eliminare task");
+    } finally {
+      setDeletingTaskId(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
@@ -306,30 +400,104 @@ export function ProjectTaskLists({ projectId }: { projectId: string }) {
                   <div className="space-y-2">
                     {listTasks.map((t) => {
                       const sb = statusBadge(t.status);
+                      const isEditing = editingTaskId === t.id;
+                      const isDeleting = deletingTaskId === t.id;
+                      const disableRowOpen = isEditing;
                       return (
-                        <button
+                        <div
                           key={t.id}
-                          type="button"
-                          className="w-full text-left border rounded-lg p-3 hover:bg-muted/30 transition-colors"
-                          onClick={() => setSelectedTaskId(t.id)}
+                          role="button"
+                          tabIndex={0}
+                          className="w-full text-left border rounded-lg p-3 hover:bg-muted/30 transition-colors group"
+                          onClick={() => {
+                            if (disableRowOpen) return;
+                            setSelectedTaskId(t.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (disableRowOpen) return;
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              setSelectedTaskId(t.id);
+                            }
+                          }}
                         >
                           <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="font-medium truncate">{t.title}</div>
-                              {t.description ? (
-                                <div className="text-xs text-muted-foreground line-clamp-2 mt-1">{t.description}</div>
-                              ) : null}
+                            <div className="min-w-0 flex-1">
+                              {isEditing ? (
+                                <div className="flex items-start gap-2" onClick={(e) => e.stopPropagation()}>
+                                  <Input
+                                    value={editingTaskTitle}
+                                    onChange={(e) => setEditingTaskTitle(e.target.value)}
+                                    disabled={!canManageTasks || savingTaskTitle}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape") {
+                                        e.preventDefault();
+                                        cancelEditTaskTitle();
+                                      }
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        void saveEditedTaskTitle();
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    onClick={() => void saveEditedTaskTitle()}
+                                    disabled={!canManageTasks || savingTaskTitle || !editingTaskTitle.trim()}
+                                  >
+                                    {savingTaskTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salva"}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={cancelEditTaskTitle}
+                                    disabled={savingTaskTitle}
+                                  >
+                                    Annulla
+                                  </Button>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="font-medium truncate">{t.title}</div>
+                                  {t.description ? (
+                                    <div className="text-xs text-muted-foreground line-clamp-2 mt-1">{t.description}</div>
+                                  ) : null}
+                                </>
+                              )}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                               <Badge variant={sb.variant} className="capitalize">
                                 {sb.label}
                               </Badge>
                               {t.dueDate ? (
                                 <Badge variant="outline">{new Date(t.dueDate).toLocaleDateString()}</Badge>
                               ) : null}
+
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8"
+                                  onClick={() => startEditTaskTitle(t)}
+                                  disabled={!canManageTasks || isEditing}
+                                  title={canManageTasks ? "Modifica titolo" : noPermissionHint}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-destructive"
+                                  onClick={() => void deleteTask(t)}
+                                  disabled={!canManageTasks || isDeleting || isEditing}
+                                  title={canManageTasks ? "Elimina task" : noPermissionHint}
+                                >
+                                  {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>

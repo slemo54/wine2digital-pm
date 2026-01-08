@@ -101,7 +101,7 @@ export default function ProjectPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -112,7 +112,7 @@ export default function ProjectPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100">
+    <div className="min-h-screen min-h-[100dvh] bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-background dark:via-background dark:to-background">
       {/* Project Info */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Card className="mb-6">
@@ -173,7 +173,7 @@ export default function ProjectPage() {
 
         {/* Project Tabs */}
         <Tabs defaultValue={tabFromHash === "files" ? "files" : "tasks"} className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 lg:w-[520px]">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:w-[520px]">
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
             <TabsTrigger value="files">Files</TabsTrigger>
@@ -182,7 +182,12 @@ export default function ProjectPage() {
           
           <TabsContent value="tasks" className="space-y-4">
             <h2 className="text-2xl font-bold text-gray-900">Tasks</h2>
-            <ProjectTaskLists projectId={project?.id} />
+            <ProjectTaskLists
+              projectId={project.id}
+              sessionUserId={sessionUserId || null}
+              sessionGlobalRole={sessionGlobalRole || null}
+              projectMembers={project.members || []}
+            />
           </TabsContent>
           
           <TabsContent value="chat">
