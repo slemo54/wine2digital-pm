@@ -31,8 +31,26 @@ export function parseEurToCents(input: string): number | null {
   let normalized = raw;
 
   if (hasComma && hasDot) {
-    // Assume Italian format: thousands '.' and decimal ','
-    normalized = normalized.replace(/\./g, "").replace(/,/g, ".");
+    // Decide decimal separator by the rightmost occurrence.
+    // - Italian: 1.234.567,89  -> decimal "," thousands "."
+    // - US:      1,234,567.89  -> decimal "." thousands ","
+    const lastComma = normalized.lastIndexOf(",");
+    const lastDot = normalized.lastIndexOf(".");
+    if (lastDot > lastComma) {
+      // Decimal '.'; remove commas (thousands) then normalize dots (keep last as decimal)
+      normalized = normalized.replace(/,/g, "");
+      const parts = normalized.split(".");
+      if (parts.length > 2) {
+        const last = parts.pop() || "";
+        normalized = `${parts.join("")}.${last}`;
+      }
+    } else {
+      // Decimal ','; remove dots (thousands) then normalize commas (keep last as decimal)
+      normalized = normalized.replace(/\./g, "");
+      const parts = normalized.split(",");
+      const last = parts.pop() || "";
+      normalized = `${parts.join("")}.${last}`;
+    }
   } else if (hasComma) {
     if (isThousandsSeparatedSingle(",", normalized)) {
       // e.g. 1,234 -> 1234
