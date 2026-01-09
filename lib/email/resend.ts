@@ -10,7 +10,7 @@ export function isEmailNotificationsEnabled(): boolean {
 }
 
 export function getResendFrom(): string {
-  return String(process.env.RESEND_FROM || "it@mammajumboshrimp.com").trim();
+  return String(process.env.RESEND_FROM || "pm@justdothework.it").trim();
 }
 
 export type SendEmailResult =

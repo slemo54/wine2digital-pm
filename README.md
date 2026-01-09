@@ -34,7 +34,7 @@ Impostare in `.env` locale e su Vercel:
 Per inviare email (oltre alle notifiche in-app) per menzioni/chat/assenze:
 - `EMAIL_NOTIFICATIONS_ENABLED=true`
 - `RESEND_API_KEY` – API key Resend
-- `RESEND_FROM=it@mammajumboshrimp.com` – mittente (dominio deve essere verificato su Resend)
+- `RESEND_FROM=pm@justdothework.it` – mittente (dominio deve essere verificato su Resend)
 
 ## Setup locale
 ```bash
