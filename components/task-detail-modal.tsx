@@ -45,6 +45,7 @@ import type { MentionUser } from "@/components/ui/rich-text-editor";
 import { RichTextViewer } from "@/components/ui/rich-text-viewer";
 import { SubtaskChecklists } from "@/components/subtask-checklists";
 import { getHrefForFilePath, getImageSrcForFilePath } from "@/lib/drive-links";
+import { formatEurCents, parseEurToCents } from "@/lib/money";
 
 const RichTextEditor = dynamic(
   () => import("@/components/ui/rich-text-editor").then((m) => m.RichTextEditor),
@@ -159,8 +160,15 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [draftAssigneeIds, setDraftAssigneeIds] = useState<string[]>([]);
   const [tagsPickerOpen, setTagsPickerOpen] = useState(false);
-  const [draftTags, setDraftTags] = useState<string[]>([]);
-  const [draftTagInput, setDraftTagInput] = useState("");
+  const [projectTags, setProjectTags] = useState<Array<{ id: string; name: string }>>([]);
+  const [tagQuery, setTagQuery] = useState("");
+  const [draftTagIds, setDraftTagIds] = useState<string[]>([]);
+  const [newTagName, setNewTagName] = useState("");
+  const [renamingTagId, setRenamingTagId] = useState<string | null>(null);
+  const [renamingTagName, setRenamingTagName] = useState("");
+  const [tagMutationBusy, setTagMutationBusy] = useState(false);
+  const [amountPickerOpen, setAmountPickerOpen] = useState(false);
+  const [draftAmountInput, setDraftAmountInput] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
   const [newCommentHtml, setNewCommentHtml] = useState("");
   const [isSendingComment, setIsSendingComment] = useState(false);
@@ -284,17 +292,35 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const effectiveProjectId = taskProjectId || (projectId && projectId !== "_global" ? projectId : "");
       if (!effectiveProjectId) {
         setProjectLists([]);
+        setProjectTags([]);
       } else {
         try {
-          const listsRes = await fetch(`/api/projects/${effectiveProjectId}/lists`, { cache: "no-store" });
-          const listsData = await listsRes.json().catch(() => ({}));
+          const [listsRes, tagsRes] = await Promise.all([
+            fetch(`/api/projects/${effectiveProjectId}/lists`, { cache: "no-store" }),
+            fetch(`/api/projects/${effectiveProjectId}/tags`, { cache: "no-store" }),
+          ]);
+
+          const [listsData, tagsData] = await Promise.all([
+            listsRes.json().catch(() => ({})),
+            tagsRes.json().catch(() => ({})),
+          ]);
+
           if (listsRes.ok && Array.isArray((listsData as any)?.lists)) {
             setProjectLists((listsData as any).lists.map((l: any) => ({ id: String(l.id), name: String(l.name) })));
           } else {
             setProjectLists([]);
           }
+
+          if (tagsRes.ok && Array.isArray((tagsData as any)?.tags)) {
+            setProjectTags(
+              (tagsData as any).tags.map((t: any) => ({ id: String(t.id), name: String(t.name) }))
+            );
+          } else {
+            setProjectTags([]);
+          }
         } catch {
           setProjectLists([]);
+          setProjectTags([]);
         }
       }
     } catch (error) {
@@ -837,12 +863,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     setDraftAssigneeIds(currentAssigneeIds);
     setTaskDraftTitle(String(task?.title || ""));
     setIsEditingTaskTitle(false);
-    try {
-      const parsed = typeof task?.tags === "string" ? JSON.parse(task.tags) : [];
-      setDraftTags(Array.isArray(parsed) ? parsed.map(String) : []);
-    } catch {
-      setDraftTags([]);
-    }
   }, [taskId, task?.updatedAt, currentAssigneeKey, task]);
 
   if (loading) {
@@ -882,14 +902,31 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const canAssignSubtask = globalRole === "admin" || isMeProjectManager;
   const canManageSubtaskChecklists = globalRole === "admin" || isMeProjectManager;
 
-  const tags: string[] = (() => {
+  const canManageProjectTags = globalRole === "admin" || isMeProjectManager;
+  const currentProjectId = String(task?.project?.id || task?.projectId || "");
+
+  const legacyTags: string[] = (() => {
     try {
-      const parsed = typeof task?.tags === "string" ? JSON.parse(task.tags) : [];
+      const parsed = typeof task?.legacyTags === "string" ? JSON.parse(task.legacyTags) : [];
       return Array.isArray(parsed) ? parsed.map(String) : [];
     } catch {
       return [];
     }
   })();
+
+  const selectedTags: Array<{ id: string; name: string }> = Array.isArray(task?.tags)
+    ? task.tags.map((t: any) => ({ id: String(t?.id || ""), name: String(t?.name || "") })).filter((t: any) => t.id && t.name)
+    : [];
+  const displayTagNames: string[] =
+    selectedTags.length > 0 ? selectedTags.map((t) => t.name) : legacyTags;
+
+  const amountLabel = typeof task?.amountCents === "number" ? formatEurCents(task.amountCents) : null;
+
+  const filteredProjectTags = projectTags.filter((t) => {
+    const q = tagQuery.trim().toLowerCase();
+    if (!q) return true;
+    return String(t.name || "").toLowerCase().includes(q);
+  });
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -908,6 +945,139 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       case "archived": return "bg-muted text-muted-foreground";
       default: return "bg-gray-100 text-gray-700";
     }
+  };
+
+  const normalizeProjectTagName = (input: string): string =>
+    String(input || "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toUpperCase();
+
+  const refreshTags = async () => {
+    if (!currentProjectId) return;
+    const res = await fetch(`/api/projects/${currentProjectId}/tags`, { cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && Array.isArray((data as any)?.tags)) {
+      setProjectTags((data as any).tags.map((t: any) => ({ id: String(t.id), name: String(t.name) })));
+    }
+  };
+
+  const createTag = async () => {
+    if (!currentProjectId) return;
+    if (!canManageProjectTags) {
+      toast.error("Solo admin o project owner/manager possono creare tag.");
+      return;
+    }
+    const name = normalizeProjectTagName(newTagName);
+    if (!name) return;
+    setTagMutationBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${currentProjectId}/tags`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        await refreshTags();
+        const existing = projectTags.find((t) => t.name === name);
+        if (existing) setDraftTagIds((prev) => (prev.includes(existing.id) ? prev : [...prev, existing.id]));
+        toast.success("Tag già presente");
+        setNewTagName("");
+        return;
+      }
+      if (!res.ok) throw new Error((data as any)?.error || "Impossibile creare tag");
+      const created = (data as any)?.tag;
+      if (created?.id) {
+        const tag = { id: String(created.id), name: String(created.name || name) };
+        setProjectTags((prev) => [...prev, tag].sort((a, b) => a.name.localeCompare(b.name)));
+        setDraftTagIds((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]));
+      } else {
+        await refreshTags();
+      }
+      setNewTagName("");
+      toast.success("Tag creato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossibile creare tag");
+    } finally {
+      setTagMutationBusy(false);
+    }
+  };
+
+  const startRenameTag = (tagId: string) => {
+    const t = projectTags.find((x) => x.id === tagId);
+    if (!t) return;
+    setRenamingTagId(tagId);
+    setRenamingTagName(t.name);
+  };
+
+  const saveRenameTag = async () => {
+    if (!currentProjectId || !renamingTagId) return;
+    if (!canManageProjectTags) return;
+    const name = normalizeProjectTagName(renamingTagName);
+    if (!name) return;
+    setTagMutationBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${currentProjectId}/tags/${renamingTagId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Impossibile rinominare tag");
+      setProjectTags((prev) => prev.map((t) => (t.id === renamingTagId ? { ...t, name } : t)).sort((a, b) => a.name.localeCompare(b.name)));
+      setRenamingTagId(null);
+      setRenamingTagName("");
+      toast.success("Tag aggiornato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossibile rinominare tag");
+    } finally {
+      setTagMutationBusy(false);
+    }
+  };
+
+  const deleteTag = async (tagId: string) => {
+    if (!currentProjectId) return;
+    if (!canManageProjectTags) return;
+    const t = projectTags.find((x) => x.id === tagId);
+    if (!t) return;
+    if (!confirm(`Eliminare il tag “${t.name}”? Verrà rimosso anche dalle task.`)) return;
+    setTagMutationBusy(true);
+    try {
+      const res = await fetch(`/api/projects/${currentProjectId}/tags/${tagId}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Impossibile eliminare tag");
+      setProjectTags((prev) => prev.filter((x) => x.id !== tagId));
+      setDraftTagIds((prev) => prev.filter((x) => x !== tagId));
+      toast.success("Tag eliminato");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossibile eliminare tag");
+    } finally {
+      setTagMutationBusy(false);
+    }
+  };
+
+  const saveSelectedTags = async () => {
+    await updateTaskMeta(
+      { tagIds: draftTagIds, tags: null },
+      { successMessage: "Tags aggiornati" }
+    );
+  };
+
+  const saveAmount = async () => {
+    const raw = draftAmountInput.trim();
+    if (!raw) {
+      await updateTaskMeta({ amountCents: null }, { successMessage: "Importo rimosso" });
+      setAmountPickerOpen(false);
+      return;
+    }
+    const cents = parseEurToCents(raw);
+    if (cents === null) {
+      toast.error("Importo non valido");
+      return;
+    }
+    await updateTaskMeta({ amountCents: cents }, { successMessage: "Importo aggiornato" });
+    setAmountPickerOpen(false);
   };
 
   return (
@@ -1143,13 +1313,15 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     Tags
                   </Label>
                   <div className="flex flex-wrap gap-1">
-                    {tags.length === 0 ? <span className="text-sm text-muted-foreground">Add</span> : null}
-                    {tags.slice(0, 6).map((t) => (
+                    {displayTagNames.length === 0 ? <span className="text-sm text-muted-foreground">Add</span> : null}
+                    {displayTagNames.slice(0, 6).map((t) => (
                       <Badge key={t} variant="secondary">
                         {t}
                       </Badge>
                     ))}
-                    {tags.length > 6 ? <Badge variant="outline">+{tags.length - 6}</Badge> : null}
+                    {displayTagNames.length > 6 ? (
+                      <Badge variant="outline">+{displayTagNames.length - 6}</Badge>
+                    ) : null}
                   </div>
 
                   {canEditMeta ? (
@@ -1159,8 +1331,225 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         onOpenChange={(o) => {
                           setTagsPickerOpen(o);
                           if (o) {
-                            setDraftTags(tags);
-                            setDraftTagInput("");
+                            const currentIds = selectedTags.map((t) => t.id);
+                            if (currentIds.length > 0) {
+                              setDraftTagIds(currentIds);
+                            } else if (legacyTags.length > 0) {
+                              const mapped = legacyTags
+                                .map((name) => {
+                                  const n = normalizeProjectTagName(String(name));
+                                  return projectTags.find((t) => t.name === n)?.id || null;
+                                })
+                                .filter(Boolean) as string[];
+                              setDraftTagIds(Array.from(new Set(mapped)));
+                            } else {
+                              setDraftTagIds([]);
+                            }
+                            setTagQuery("");
+                            setNewTagName("");
+                            setRenamingTagId(null);
+                            setRenamingTagName("");
+                          }
+                        }}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" disabled={isSavingMeta}>
+                            Modifica
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-96 p-3" align="start">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="text-sm font-medium">Tags</div>
+                            {!canManageProjectTags ? (
+                              <Badge variant="outline" className="text-[10px]">
+                                Solo owner/admin può creare
+                              </Badge>
+                            ) : null}
+                          </div>
+
+                          <Input
+                            value={tagQuery}
+                            onChange={(e) => setTagQuery(e.target.value)}
+                            placeholder="Cerca tag…"
+                            className="h-9"
+                          />
+
+                          <div className="mt-2 max-h-56 overflow-auto space-y-1">
+                            {filteredProjectTags.length === 0 ? (
+                              <div className="text-xs text-muted-foreground py-2">Nessun tag</div>
+                            ) : (
+                              filteredProjectTags.map((t) => {
+                                const checked = draftTagIds.includes(t.id);
+                                const isRenaming = renamingTagId === t.id;
+                                return (
+                                  <div
+                                    key={t.id}
+                                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1 hover:bg-muted/30"
+                                  >
+                                    <label className="flex items-center gap-2 text-sm cursor-pointer min-w-0">
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={(e) => {
+                                          setDraftTagIds((prev) =>
+                                            e.target.checked
+                                              ? Array.from(new Set([...prev, t.id]))
+                                              : prev.filter((x) => x !== t.id)
+                                          );
+                                        }}
+                                      />
+                                      {isRenaming ? (
+                                        <Input
+                                          value={renamingTagName}
+                                          onChange={(e) => setRenamingTagName(e.target.value)}
+                                          className="h-8"
+                                          disabled={tagMutationBusy}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Escape") {
+                                              e.preventDefault();
+                                              setRenamingTagId(null);
+                                              setRenamingTagName("");
+                                            }
+                                            if (e.key === "Enter") {
+                                              e.preventDefault();
+                                              void saveRenameTag();
+                                            }
+                                          }}
+                                        />
+                                      ) : (
+                                        <span className="truncate">{t.name}</span>
+                                      )}
+                                    </label>
+
+                                    {canManageProjectTags ? (
+                                      isRenaming ? (
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            onClick={() => void saveRenameTag()}
+                                            disabled={tagMutationBusy || !normalizeProjectTagName(renamingTagName)}
+                                          >
+                                            Salva
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => {
+                                              setRenamingTagId(null);
+                                              setRenamingTagName("");
+                                            }}
+                                            disabled={tagMutationBusy}
+                                          >
+                                            Annulla
+                                          </Button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1">
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-8 w-8"
+                                            onClick={() => startRenameTag(t.id)}
+                                            disabled={tagMutationBusy}
+                                            aria-label="Rinomina tag"
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-8 w-8 text-destructive"
+                                            onClick={() => void deleteTag(t.id)}
+                                            disabled={tagMutationBusy}
+                                            aria-label="Elimina tag"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                      )
+                                    ) : null}
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {canManageProjectTags ? (
+                            <div className="mt-3 border-t pt-3">
+                              <div className="text-xs font-semibold text-muted-foreground mb-2">Crea nuovo tag</div>
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={newTagName}
+                                  onChange={(e) => setNewTagName(e.target.value)}
+                                  placeholder="Es. PAGATO"
+                                  className="h-9"
+                                  disabled={tagMutationBusy}
+                                  onKeyDown={(e) => {
+                                    if (e.key !== "Enter") return;
+                                    e.preventDefault();
+                                    void createTag();
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => void createTag()}
+                                  disabled={tagMutationBusy || !normalizeProjectTagName(newTagName)}
+                                >
+                                  {tagMutationBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crea"}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <div className="mt-3 flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={isSavingMeta}
+                              onClick={() => {
+                                setTagsPickerOpen(false);
+                              }}
+                            >
+                              Annulla
+                            </Button>
+                            <Button
+                              size="sm"
+                              disabled={isSavingMeta}
+                              onClick={() => void saveSelectedTags().then(() => setTagsPickerOpen(false))}
+                            >
+                              Salva
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Importo */}
+                <div className="rounded-lg border bg-muted/20 p-4">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1 mb-2">
+                    <Hash className="w-3 h-3" />
+                    Importo
+                  </Label>
+                  <div className="space-y-2">
+                    {amountLabel ? (
+                      <Badge variant="outline" className="text-sm">
+                        {amountLabel}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">Add</span>
+                    )}
+
+                    {canEditMeta ? (
+                      <Popover
+                        open={amountPickerOpen}
+                        onOpenChange={(o) => {
+                          setAmountPickerOpen(o);
+                          if (o) {
+                            setDraftAmountInput(amountLabel || "");
                           }
                         }}
                       >
@@ -1170,81 +1559,51 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 p-3" align="start">
-                          <div className="text-sm font-medium mb-2">Tags</div>
-                          <div className="flex flex-wrap gap-1">
-                            {draftTags.map((t) => (
-                              <span
-                                key={t}
-                                className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
-                              >
-                                {t}
-                                <button
-                                  type="button"
-                                  className="opacity-70 hover:opacity-100"
-                                  onClick={() => setDraftTags((prev) => prev.filter((x) => x !== t))}
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </span>
-                            ))}
-                            {draftTags.length === 0 ? (
-                              <span className="text-xs text-muted-foreground">Nessun tag</span>
-                    ) : null}
-                  </div>
-
-                          <div className="mt-3 flex items-center gap-2">
-                            <Input
-                              value={draftTagInput}
-                              onChange={(e) => setDraftTagInput(e.target.value)}
-                              placeholder="Nuovo tag…"
-                              onKeyDown={(e) => {
-                                if (e.key !== "Enter") return;
+                          <div className="text-sm font-medium mb-2">Importo (EUR)</div>
+                          <Input
+                            value={draftAmountInput}
+                            onChange={(e) => setDraftAmountInput(e.target.value)}
+                            placeholder="Es. 1.234,56"
+                            disabled={isSavingMeta}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
                                 e.preventDefault();
-                                const next = draftTagInput.trim();
-                                if (!next) return;
-                                setDraftTags((prev) => (prev.includes(next) ? prev : [...prev, next]));
-                                setDraftTagInput("");
-                              }}
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => {
-                                const next = draftTagInput.trim();
-                                if (!next) return;
-                                setDraftTags((prev) => (prev.includes(next) ? prev : [...prev, next]));
-                                setDraftTagInput("");
-                              }}
-                            >
-                              Add
-                            </Button>
-                          </div>
-
-                          <div className="mt-3 flex items-center justify-end gap-2">
+                                void saveAmount();
+                              }
+                            }}
+                          />
+                          <div className="mt-3 flex items-center justify-between gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
                               disabled={isSavingMeta}
                               onClick={() => {
-                                setDraftTags(tags);
-                                setDraftTagInput("");
-                                setTagsPickerOpen(false);
+                                setDraftAmountInput("");
+                                void updateTaskMeta({ amountCents: null }, { successMessage: "Importo rimosso" }).then(() =>
+                                  setAmountPickerOpen(false)
+                                );
                               }}
                             >
-                              Annulla
+                              Rimuovi
                             </Button>
-                            <Button
-                              size="sm"
-                              disabled={isSavingMeta}
-                              onClick={() => updateTaskMeta({ tags: draftTags }).then(() => setTagsPickerOpen(false))}
-                            >
-                              Salva
-                            </Button>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isSavingMeta}
+                                onClick={() => setAmountPickerOpen(false)}
+                              >
+                                Annulla
+                              </Button>
+                              <Button size="sm" disabled={isSavingMeta} onClick={() => void saveAmount()}>
+                                Salva
+                              </Button>
+                            </div>
                           </div>
                         </PopoverContent>
                       </Popover>
-                </div>
-              ) : null}
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* List/Category */}
