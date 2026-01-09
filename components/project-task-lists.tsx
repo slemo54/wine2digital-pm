@@ -24,6 +24,9 @@ type TaskDto = {
   dueDate: string | null;
   listId: string | null;
   taskList: { id: string; name: string } | null;
+  legacyTags?: string | null;
+  tags?: Array<{ id: string; name: string }>;
+  amountCents?: number | null;
 };
 
 const DEFAULT_LIST_NAME = "Untitled list";
@@ -39,6 +42,30 @@ function statusBadge(status: string): { label: string; variant: "secondary" | "o
     default:
       return { label: status, variant: "outline" };
   }
+}
+
+function parseLegacyTags(legacyTags: string | null | undefined): string[] {
+  if (!legacyTags) return [];
+  try {
+    const parsed = JSON.parse(String(legacyTags));
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function getDisplayTagNames(t: TaskDto): string[] {
+  const rel = Array.isArray(t.tags) ? t.tags.map((x) => String(x?.name || "").trim()).filter(Boolean) : [];
+  if (rel.length > 0) return rel;
+  return parseLegacyTags(t.legacyTags);
+}
+
+function getTagBadgeClass(tagName: string): string {
+  const n = String(tagName || "").trim().toUpperCase();
+  if (n === "PAGATO") return "bg-emerald-500 text-white border-emerald-600/20";
+  if (n === "STAND BY") return "bg-orange-500 text-white border-orange-600/20";
+  if (n === "FATTURA EMESSA") return "bg-sky-500 text-white border-sky-600/20";
+  return "bg-primary text-primary-foreground border-primary/20";
 }
 
 export function ProjectTaskLists(props: {
@@ -400,6 +427,9 @@ export function ProjectTaskLists(props: {
                   <div className="space-y-2">
                     {listTasks.map((t) => {
                       const sb = statusBadge(t.status);
+                      const tagNames = getDisplayTagNames(t);
+                      const primaryTag = tagNames[0] || null;
+                      const extraTagCount = tagNames.length > 1 ? tagNames.length - 1 : 0;
                       const isEditing = editingTaskId === t.id;
                       const isDeleting = deletingTaskId === t.id;
                       const disableRowOpen = isEditing;
@@ -466,6 +496,20 @@ export function ProjectTaskLists(props: {
                               )}
                             </div>
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              {primaryTag ? (
+                                <Badge
+                                  variant="default"
+                                  className={`rounded-md px-4 py-1 text-[11px] font-semibold uppercase tracking-wide min-w-[140px] justify-center ${getTagBadgeClass(primaryTag)}`}
+                                  title={tagNames.join(", ")}
+                                >
+                                  {primaryTag}
+                                </Badge>
+                              ) : null}
+                              {extraTagCount > 0 ? (
+                                <Badge variant="outline" title={tagNames.join(", ")}>
+                                  +{extraTagCount}
+                                </Badge>
+                              ) : null}
                               <Badge variant={sb.variant} className="capitalize">
                                 {sb.label}
                               </Badge>
