@@ -127,6 +127,8 @@ function buildMentionSuggestion(users: MentionUser[]) {
           if (props.event.key === "Enter") {
             const u = currentItems[selectedIndex];
             if (u) {
+              props.event.preventDefault();
+              props.event.stopPropagation();
               currentCommand?.({ id: u.id, label: u.label });
               return true;
             }

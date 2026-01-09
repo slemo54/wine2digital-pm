@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -482,13 +483,48 @@ export default function CalendarPage() {
                         required
                       />
                     </div>
+
+                    <div className="flex items-center justify-between py-2">
+                      <Label htmlFor="isFullDay" className="cursor-pointer">Tutto il giorno</Label>
+                      <Switch
+                        id="isFullDay"
+                        checked={newAbsence.isFullDay}
+                        onCheckedChange={(checked) => setNewAbsence({ ...newAbsence, isFullDay: checked })}
+                      />
+                    </div>
+
+                    {!newAbsence.isFullDay && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="startTime">Ora Inizio</Label>
+                          <Input
+                            id="startTime"
+                            type="time"
+                            value={newAbsence.startTime}
+                            onChange={(e) => setNewAbsence({ ...newAbsence, startTime: e.target.value })}
+                            required={!newAbsence.isFullDay}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="endTime">Ora Fine</Label>
+                          <Input
+                            id="endTime"
+                            type="time"
+                            value={newAbsence.endTime}
+                            onChange={(e) => setNewAbsence({ ...newAbsence, endTime: e.target.value })}
+                            required={!newAbsence.isFullDay}
+                          />
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid gap-2">
-                      <Label htmlFor="reason">Reason (Optional)</Label>
+                      <Label htmlFor="reason">Note / Dettagli (Opzionale)</Label>
                       <Textarea
                         id="reason"
                         value={newAbsence.reason}
                         onChange={(e) => setNewAbsence({ ...newAbsence, reason: e.target.value })}
-                        placeholder="Provide a reason for your absence..."
+                        placeholder="Dettagli aggiuntivi..."
                         rows={3}
                       />
                     </div>

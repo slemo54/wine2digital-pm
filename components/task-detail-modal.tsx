@@ -163,6 +163,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [draftTagInput, setDraftTagInput] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
   const [newCommentHtml, setNewCommentHtml] = useState("");
+  const [isSendingComment, setIsSendingComment] = useState(false);
   const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentHtml, setEditingCommentHtml] = useState<string>("");
@@ -451,6 +452,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     const contentHtml = newCommentHtml.trim();
     if (!contentHtml) return;
 
+    setIsSendingComment(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}/comments`, {
         method: "POST",
@@ -465,6 +467,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       toast.success("Commento aggiunto");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Errore durante l'aggiunta del commento");
+    } finally {
+      setIsSendingComment(false);
     }
   };
 
@@ -1602,10 +1606,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         }}
                         mentionUsers={mentionUsers}
                         placeholder="Scrivi un commento…"
-                        disabled={!canWriteTask}
+                        disabled={!canWriteTask || isSendingComment}
                       />
-                      <Button onClick={addComment} className="w-full" disabled={!canWriteTask || !newCommentHtml.trim()}>
-                        Invia
+                      <Button onClick={addComment} className="w-full" disabled={!canWriteTask || !newCommentHtml.trim() || isSendingComment}>
+                        {isSendingComment ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : "Invia"}
                       </Button>
                     </div>
                   </div>

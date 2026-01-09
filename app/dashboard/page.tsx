@@ -243,7 +243,11 @@ export default function DashboardPage() {
               ) : (
                 <div className="space-y-3">
                   {orderedTasks.slice(0, 8).map((t) => (
-                    <div key={t.id} className="border rounded-lg p-3 hover:bg-muted/30 transition-colors">
+                    <div
+                      key={t.id}
+                      className="border rounded-lg p-3 hover:bg-muted/30 transition-colors cursor-pointer"
+                      onClick={() => setSelectedTaskId(t.id)}
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="font-medium truncate">{t.title}</div>
@@ -421,6 +425,25 @@ export default function DashboardPage() {
         onClose={() => setShowCreateTaskDialog(false)}
         onSuccess={handleTaskCreated}
       />
+
+      {selectedTaskId && (
+        <TaskDetailModal
+          open={true}
+          onClose={() => {
+            setSelectedTaskId(null);
+            // Pulisce l'URL se era stato aperto via deep link
+            const params = new URLSearchParams(window.location.search);
+            if (params.has("task")) {
+              router.replace("/dashboard");
+            }
+          }}
+          taskId={selectedTaskId}
+          onUpdate={() => {
+            fetchMyTasks();
+            fetchActivity();
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -126,7 +126,8 @@ export function SubtasksTab({ taskId, subtasks, projectMembers, onUpdate, canEdi
                     className="flex-1"
                 />
                 <Button onClick={handleAddSubtask} disabled={!canEdit || isAdding}>
-                    <Plus className="w-4 h-4 mr-1" /> Aggiungi
+                    {isAdding ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Plus className="w-4 h-4 mr-1" />}
+                    Aggiungi
                 </Button>
             </div>
 

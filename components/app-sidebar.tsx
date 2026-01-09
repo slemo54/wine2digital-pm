@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -19,6 +20,7 @@ import {
   LogOut,
   Clock,
   Settings,
+  Bell,
 } from "lucide-react";
 
 type NavItem = {
@@ -26,6 +28,7 @@ type NavItem = {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   isActive?: (pathname: string) => boolean;
+  hasBadge?: boolean;
 };
 
 const NAV: NavItem[] = [
@@ -33,7 +36,7 @@ const NAV: NavItem[] = [
   { href: "/projects", label: "Progetti", icon: FolderKanban, isActive: (p) => p.startsWith("/projects") || p.startsWith("/project/") },
   { href: "/tasks", label: "Task", icon: CheckSquare, isActive: (p) => p.startsWith("/tasks") },
   { href: "/calendar", label: "Calendario", icon: CalendarDays, isActive: (p) => p.startsWith("/calendar") },
-
+  { href: "/notifications", label: "Notifiche", icon: Bell, isActive: (p) => p.startsWith("/notifications"), hasBadge: true },
   { href: "/files", label: "File", icon: FileText, isActive: (p) => p.startsWith("/files") },
   { href: "/profile", label: "Profilo", icon: User, isActive: (p) => p.startsWith("/profile") },
 ];
@@ -51,9 +54,20 @@ interface AppSidebarProps {
 export function AppSidebar({ className }: AppSidebarProps) {
   const pathname = usePathname() || "";
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const globalRole = (session?.user as any)?.role as string | undefined;
   const isAdmin = globalRole === "admin";
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (status === "authenticated") {
+      // Semplice fetch per il badge. In app reale usare SWR/React Query o Context.
+      fetch("/api/notifications")
+        .then((res) => res.json())
+        .then((data) => setUnreadCount(data.unreadCount || 0))
+        .catch(() => {});
+    }
+  }, [status, pathname]); // Aggiorna al cambio pagina
 
   return (
     <aside className={cn("w-64 shrink-0 border-r border-border bg-background sticky top-0 h-screen h-[100dvh]", className)}>
@@ -77,14 +91,17 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors relative",
                   active
                     ? "bg-accent text-foreground font-medium"
                     : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.hasBadge && unreadCount > 0 && (
+                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                )}
               </Link>
             );
           })}
