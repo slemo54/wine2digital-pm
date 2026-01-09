@@ -30,6 +30,12 @@ Impostare in `.env` locale e su Vercel:
 - `GOOGLE_ADMIN_EMAILS` – lista CSV di email admin
 - `GOOGLE_MANAGER_EMAILS` – lista CSV di email manager
 
+### Notifiche email (Resend)
+Per inviare email (oltre alle notifiche in-app) per menzioni/chat/assenze:
+- `EMAIL_NOTIFICATIONS_ENABLED=true`
+- `RESEND_API_KEY` – API key Resend
+- `RESEND_FROM=it@mammajumboshrimp.com` – mittente (dominio deve essere verificato su Resend)
+
 ## Setup locale
 ```bash
 npm install

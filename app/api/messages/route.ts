@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { sendEmail } from '@/lib/email/resend';
+import { buildChatEmail } from '@/lib/email/notifications';
 
 export const dynamic = 'force-dynamic';
 
@@ -189,6 +191,29 @@ export async function POST(req: NextRequest) {
         link: `/project/${projectId}`,
       })),
     });
+
+    // Best-effort email notifications (do not fail the request on email errors)
+    const recipientIds = projectMembers.map((m: { userId: string }) => String(m.userId || '')).filter(Boolean);
+    if (recipientIds.length > 0) {
+      const recipients = await prisma.user.findMany({
+        where: { id: { in: recipientIds } },
+        select: { email: true },
+      });
+      const authorLabel = String(message.user?.email || 'Un collega');
+      const projectName = String(project?.name || 'progetto');
+      const preview = text.length > 160 ? `${text.slice(0, 160)}…` : text;
+      const link = `/project/${projectId}`;
+      const email = buildChatEmail({ projectName, authorLabel, messagePreview: preview, link });
+      await Promise.allSettled(
+        recipients
+          .map((u) => String(u.email || '').trim())
+          .filter(Boolean)
+          .map(async (to) => {
+            const r = await sendEmail({ to, subject: email.subject, html: email.html, text: email.text });
+            if (!r.ok) console.error('Chat email failed:', r.error);
+          })
+      );
+    }
 
     return NextResponse.json({ message });
   } catch (error) {

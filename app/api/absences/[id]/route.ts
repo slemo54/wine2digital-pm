@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { sendEmail } from '@/lib/email/resend';
+import { buildAbsenceDecisionEmail } from '@/lib/email/notifications';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,6 +90,19 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
           link: '/calendar',
         },
       });
+
+      // Best-effort email notification (do not fail the request on email errors)
+      const to = String(absence.user?.email || '').trim();
+      if (to) {
+        const email = buildAbsenceDecisionEmail({
+          status,
+          startDateLabel: new Date(absence.startDate).toLocaleDateString(),
+          endDateLabel: new Date(absence.endDate).toLocaleDateString(),
+          link: '/calendar',
+        });
+        const r = await sendEmail({ to, subject: email.subject, html: email.html, text: email.text });
+        if (!r.ok) console.error('Absence email failed:', r.error);
+      }
     }
 
     return NextResponse.json({ absence });

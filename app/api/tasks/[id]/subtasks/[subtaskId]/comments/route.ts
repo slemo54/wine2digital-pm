@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getTaskAccessFlags } from "@/lib/task-access";
 import { prisma } from "@/lib/prisma";
+import { sendEmail } from "@/lib/email/resend";
+import { buildMentionEmail } from "@/lib/email/notifications";
 import {
   buildMentionNotifications,
   filterMentionedUserIdsToAllowed,
@@ -156,6 +158,24 @@ export async function POST(
           subtaskTitle,
         }),
       });
+
+      // Best-effort email notifications (do not fail the request on email errors)
+      const recipients = await prisma.user.findMany({
+        where: { id: { in: filteredMentioned } },
+        select: { email: true },
+      });
+
+      const link = `/tasks?taskId=${encodeURIComponent(params.id)}&subtaskId=${encodeURIComponent(params.subtaskId)}`;
+      const email = buildMentionEmail({ authorLabel, taskTitle, subtaskTitle, link });
+      await Promise.allSettled(
+        recipients
+          .map((u) => String(u.email || "").trim())
+          .filter(Boolean)
+          .map(async (to) => {
+            const r = await sendEmail({ to, subject: email.subject, html: email.html, text: email.text });
+            if (!r.ok) console.error("Mention email failed:", r.error);
+          })
+      );
     }
 
     return NextResponse.json(comment, { status: 201 });
