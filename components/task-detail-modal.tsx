@@ -1214,7 +1214,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             Modifica
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-72 p-3" align="start">
+                        <PopoverContent className="w-72 p-3" align="start" portalled={false}>
                           <div className="text-sm font-medium mb-2">Seleziona assignees</div>
                           <div className="max-h-56 overflow-auto space-y-2">
                             {memberUsers.map((u: any) => {
@@ -1357,7 +1357,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             Modifica
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-96 p-3" align="start">
+                        <PopoverContent className="w-96 p-3" align="start" portalled={false}>
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <div className="text-sm font-medium">Tags</div>
                             {!canManageProjectTags ? (
@@ -1558,7 +1558,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             Modifica
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-80 p-3" align="start">
+                        <PopoverContent className="w-80 p-3" align="start" portalled={false}>
                           <div className="text-sm font-medium mb-2">Importo (EUR)</div>
                           <Input
                             value={draftAmountInput}
