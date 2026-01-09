@@ -31,8 +31,8 @@ export function AbsenceFilters({
     onClear,
 }: AbsenceFiltersProps) {
     return (
-        <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center py-4">
-            <div className="relative flex-1 min-w-[200px]">
+        <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center py-4">
+            <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                     placeholder="Search by employee name..."
@@ -41,9 +41,9 @@ export function AbsenceFilters({
                     onChange={(e) => setSearchQuery(e.target.value)}
                 />
             </div>
-            <div className="flex gap-3 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-full sm:w-[140px]">
                         <SelectValue placeholder="Status" />
                     </SelectTrigger>
                     <SelectContent>
@@ -55,7 +55,7 @@ export function AbsenceFilters({
                 </Select>
 
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                    <SelectTrigger className="w-[140px]">
+                    <SelectTrigger className="w-full sm:w-[140px]">
                         <SelectValue placeholder="Type" />
                     </SelectTrigger>
                     <SelectContent>
@@ -66,7 +66,13 @@ export function AbsenceFilters({
                     </SelectContent>
                 </Select>
 
-                <Button variant="ghost" size="icon" onClick={onClear} title="Clear filters">
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="self-end sm:self-auto"
+                    onClick={onClear}
+                    title="Clear filters"
+                >
                     <FilterX className="h-4 w-4" />
                 </Button>
             </div>

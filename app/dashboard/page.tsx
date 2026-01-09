@@ -153,7 +153,7 @@ export default function DashboardPage() {
 
   if (status === "loading" || isLoadingProjects) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -194,16 +194,19 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-secondary">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary">
       <main className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="mb-8 flex items-start justify-between gap-6">
-          <div>
+        <div className="mb-8 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
+          <div className="min-w-0">
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2">
               {getGreeting()}, {getFirstName()}
             </h1>
             <p className="text-muted-foreground">Your workspace: focus on what needs attention now.</p>
           </div>
-          <Button onClick={() => setShowCreateTaskDialog(true)} className="bg-black text-white hover:bg-black/90 rounded-lg px-6">
+          <Button
+            onClick={() => setShowCreateTaskDialog(true)}
+            className="bg-black text-white hover:bg-black/90 rounded-lg px-6 w-full sm:w-auto"
+          >
             <Plus className="mr-2 h-4 w-4" />
             Crea Task
           </Button>
@@ -211,7 +214,7 @@ export default function DashboardPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* My Tasks */}
-          <Card className="bg-white lg:col-span-8">
+          <Card className="lg:col-span-8">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between gap-4">
                 <div>
@@ -268,7 +271,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Notifications */}
-          <Card className="bg-white lg:col-span-4">
+          <Card className="lg:col-span-4">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -335,7 +338,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Quick Actions */}
-          <Card className="bg-white lg:col-span-4">
+          <Card className="lg:col-span-4">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Quick Actions</CardTitle>
             </CardHeader>
@@ -364,7 +367,7 @@ export default function DashboardPage() {
           </Card>
 
           {/* Activity (placeholder until API is wired) */}
-          <Card className="bg-white lg:col-span-8">
+          <Card className="lg:col-span-8">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <Activity className="h-4 w-4" />

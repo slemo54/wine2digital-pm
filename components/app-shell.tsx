@@ -24,7 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!show) return <>{children}</>;
 
   return (
-    <div className="min-h-screen bg-secondary text-foreground flex flex-col md:flex-row">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary text-foreground flex flex-col md:flex-row">
       {/* Mobile Header */}
       <div className="md:hidden border-b bg-background p-4 flex items-center justify-between sticky top-0 z-50">
         <div className="font-semibold text-lg flex items-center gap-2">
@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Desktop Sidebar */}
       <AppSidebar className="hidden md:block" />
 
-      <main className="flex-1 min-w-0 flex flex-col min-h-screen">
+      <main className="flex-1 min-w-0 flex flex-col min-h-screen min-h-[100dvh]">
         <div className="flex-1">
           {children}
         </div>

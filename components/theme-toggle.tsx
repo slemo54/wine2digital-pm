@@ -10,7 +10,7 @@ import { getClientLocale, t } from "@/lib/i18n";
  * Toggle per il tema light/dark riutilizzabile nell'header.
  */
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -19,7 +19,7 @@ export function ThemeToggle() {
 
   if (!mounted) return null;
 
-  const isDark = theme === 'dark';
+  const isDark = resolvedTheme === 'dark';
   const locale = getClientLocale();
 
   return (

@@ -104,7 +104,7 @@ export default function AdminUsersPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -112,8 +112,8 @@ export default function AdminUsersPage() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
-        <Card className="bg-white">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
+        <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">Accesso negato.</CardContent>
         </Card>
       </div>
@@ -121,9 +121,9 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-secondary">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary">
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <Card className="bg-white">
+        <Card>
           <CardHeader className="pb-4">{header}</CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
@@ -168,7 +168,7 @@ export default function AdminUsersPage() {
               </div>
             ) : (
               <div className="border rounded-md overflow-hidden">
-                <div className="grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/50">
+                <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/50">
                   <div className="col-span-5">Utente</div>
                   <div className="col-span-3">Ruolo</div>
                   <div className="col-span-2">Attivo</div>
@@ -176,14 +176,19 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="divide-y">
                   {users.map((u) => (
-                    <div key={u.id} className="grid grid-cols-12 gap-3 px-4 py-3 items-center">
-                      <div className="col-span-5 min-w-0">
+                    <div
+                      key={u.id}
+                      className="px-4 py-3 flex flex-col gap-3 md:grid md:grid-cols-12 md:gap-3 md:items-center"
+                    >
+                      <div className="min-w-0 md:col-span-5">
                         <div className="font-medium truncate">{displayName(u)}</div>
                         <div className="text-xs text-muted-foreground truncate">{u.email}</div>
                       </div>
-                      <div className="col-span-3">
+
+                      <div className="md:col-span-3">
+                        <div className="text-xs text-muted-foreground md:hidden mb-1">Ruolo</div>
                         <Select value={u.role} onValueChange={(v) => updateUser(u.id, { role: v })}>
-                          <SelectTrigger className="h-9">
+                          <SelectTrigger className="h-9 w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -193,11 +198,19 @@ export default function AdminUsersPage() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="col-span-2">
+
+                      <div className="md:col-span-2">
+                        <div className="text-xs text-muted-foreground md:hidden mb-1">Attivo</div>
                         <Switch checked={u.isActive} onCheckedChange={(v) => updateUser(u.id, { isActive: v })} />
                       </div>
-                      <div className="col-span-2 text-right">
-                        <Button variant="ghost" size="sm" onClick={() => router.push(`/admin/audit?entityId=${u.id}`)}>
+
+                      <div className="md:col-span-2 md:text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full md:w-auto"
+                          onClick={() => router.push(`/admin/audit?entityId=${u.id}`)}
+                        >
                           Audit
                         </Button>
                       </div>

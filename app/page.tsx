@@ -13,15 +13,15 @@ export default async function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#ECECEC]">
+    <div className="min-h-screen min-h-[100dvh] bg-[#ECECEC] dark:bg-background">
       {/* Header */}
-      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50">
+      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
               <Briefcase className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900">Wine2Digital PM</h1>
+            <h1 className="text-xl font-bold text-foreground">Wine2Digital PM</h1>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/auth/login">
@@ -37,14 +37,14 @@ export default async function HomePage() {
           <Zap className="w-4 h-4" />
           <span>Workspace Aziendale</span>
         </div>
-        <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+        <h1 className="text-5xl md:text-6xl font-bold text-foreground mb-6">
           Gestisci i Tuoi Progetti
           <br />
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-orange-600">
             Con Efficienza
           </span>
         </h1>
-        <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
+        <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
           Ottimizza i flussi di lavoro, collabora in modo fluido e consegna i progetti in tempo con la nostra piattaforma di project management.
         </p>
         <div className="flex items-center justify-center gap-4">
@@ -65,32 +65,32 @@ export default async function HomePage() {
           Tutto Ciò di Cui Hai Bisogno per il Successo
         </h2>
         <div className="grid md:grid-cols-3 gap-8">
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="bg-card rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border">
             <div className="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center mb-4">
               <CheckCircle className="w-6 h-6 text-orange-600" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Kanban Board</h3>
-            <p className="text-gray-600">
+            <h3 className="text-xl font-bold text-foreground mb-3">Kanban Board</h3>
+            <p className="text-muted-foreground">
               Visualizza il tuo workflow con board Kanban drag-and-drop. Sposta i task da{" "}
               <span className="font-medium">Da Fare</span> a{" "}
               <span className="font-medium">Completato</span> in modo semplice.
             </p>
           </div>
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="bg-card rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border">
             <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center mb-4">
               <Users className="w-6 h-6 text-blue-600" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Collaborazione Team</h3>
-            <p className="text-gray-600">
+            <h3 className="text-xl font-bold text-foreground mb-3">Collaborazione Team</h3>
+            <p className="text-muted-foreground">
               Invita i membri del team, assegna task e collabora in tempo reale. Mantieni tutti sulla stessa pagina.
             </p>
           </div>
-          <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="bg-card rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow border">
             <div className="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center mb-4">
               <BarChart3 className="w-6 h-6 text-green-600" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">Tracking Progetti</h3>
-            <p className="text-gray-600">
+            <h3 className="text-xl font-bold text-foreground mb-3">Tracking Progetti</h3>
+            <p className="text-muted-foreground">
               Monitora il progresso dei progetti, imposta scadenze e prioritizza i task. Rimani organizzato e raggiungi i tuoi obiettivi.
             </p>
           </div>
@@ -113,8 +113,8 @@ export default async function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t bg-white/80 backdrop-blur-sm mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center text-gray-600">
+      <footer className="border-t bg-background/80 backdrop-blur-sm mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center text-muted-foreground">
           <p>© 2025 Wine2Digital PM. Tutti i diritti riservati.</p>
         </div>
       </footer>

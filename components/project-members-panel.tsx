@@ -277,19 +277,19 @@ export function ProjectMembersPanel(props: {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       <Badge variant="secondary" className="capitalize">
                         {m.role}
                       </Badge>
 
                       {canManage ? (
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           <Select
                             value={m.role}
                             onValueChange={(v) => updateMemberRole(m.userId, v as any)}
                             disabled={savingMemberId === m.userId || removingMemberId === m.userId}
                           >
-                            <SelectTrigger className="w-[140px]">
+                            <SelectTrigger className="w-full sm:w-[140px]">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>

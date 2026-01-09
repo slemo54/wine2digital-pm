@@ -496,7 +496,7 @@ export default function ProjectsPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -504,8 +504,8 @@ export default function ProjectsPage() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-secondary">
-        <div className="max-w-[1400px] mx-auto px-6 py-8">
+      <div className="min-h-screen min-h-[100dvh] bg-secondary">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
           {/* Header */}
           <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
             <div>
@@ -762,9 +762,9 @@ export default function ProjectsPage() {
                 {/* Desktop table */}
                 <div className="hidden sm:block overflow-x-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-50 border-b">
+                    <thead className="bg-muted/50 border-b">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                           <input
                             type="checkbox"
                             className="rounded border-gray-300"

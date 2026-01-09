@@ -41,7 +41,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#ECECEC] p-4">
+    <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-[#ECECEC] dark:bg-background p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 mb-4 shadow-lg">
@@ -61,17 +61,17 @@ export default function LoginPage() {
           
           <CardContent className="space-y-4">
             {errorMessage && (
-              <Alert className="border-red-200 bg-red-50">
+              <Alert className="border-red-200 bg-red-50 dark:bg-destructive/10 dark:border-destructive/30">
                 <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-sm text-red-700">
+                <AlertDescription className="text-sm text-red-700 dark:text-destructive-foreground">
                   {errorMessage}
                 </AlertDescription>
               </Alert>
             )}
             
-            <Alert className="border-orange-200 bg-orange-50">
+            <Alert className="border-orange-200 bg-orange-50 dark:bg-primary/10 dark:border-primary/30">
               <Shield className="h-4 w-4 text-orange-600" />
-              <AlertDescription className="text-sm text-gray-700">
+              <AlertDescription className="text-sm text-gray-700 dark:text-foreground">
                 <strong>Accesso riservato:</strong> Solo account <span className="font-mono text-orange-600">@mammajumboshrimp.com</span>
               </AlertDescription>
             </Alert>

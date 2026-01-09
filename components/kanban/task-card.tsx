@@ -120,7 +120,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         style={style}
         {...attributes}
         {...listeners}
-        className="cursor-grab active:cursor-grabbing hover:shadow-lg transition-all bg-white border-l-4 border-l-transparent hover:border-l-primary"
+        className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary"
       >
         <CardContent 
           className="p-4 space-y-3"
@@ -140,7 +140,11 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>

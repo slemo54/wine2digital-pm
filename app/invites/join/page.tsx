@@ -75,7 +75,7 @@ export default function JoinInvitePage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-background dark:via-background dark:to-background">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -86,7 +86,7 @@ export default function JoinInvitePage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
+    <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-background dark:via-background dark:to-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Project Invitation</CardTitle>
@@ -106,12 +106,12 @@ export default function JoinInvitePage() {
             )}
           </div>
           
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-700">
+          <div className="bg-blue-50 dark:bg-info/10 p-4 rounded-lg">
+            <p className="text-sm text-gray-700 dark:text-foreground">
               <strong>Role:</strong> {invite.role}
             </p>
             {invite.expiresAt && (
-              <p className="text-sm text-gray-700 mt-1">
+              <p className="text-sm text-gray-700 dark:text-foreground mt-1">
                 <strong>Expires:</strong> {new Date(invite.expiresAt).toLocaleString()}
               </p>
             )}

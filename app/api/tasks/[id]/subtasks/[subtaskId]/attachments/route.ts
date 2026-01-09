@@ -105,7 +105,8 @@ export async function POST(
       }
       throw e;
     }
-    const filePath = uploaded.webViewLink || uploaded.webContentLink || `gdrive:${uploaded.id}`;
+    // Standardizziamo: la UI costruisce link/preview da `gdrive:<id>`
+    const filePath = `gdrive:${uploaded.id}`;
 
     const attachment = await prisma.subtaskAttachment.create({
       data: {

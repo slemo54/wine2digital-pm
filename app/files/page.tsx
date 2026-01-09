@@ -49,7 +49,7 @@ export default function FilesPage() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -58,8 +58,8 @@ export default function FilesPage() {
   const filtered = projects.filter((p) => p.name.toLowerCase().includes(q.trim().toLowerCase()));
 
   return (
-    <div className="min-h-screen bg-secondary">
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
         <div className="mb-6">
           <Link href="/dashboard">
             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
@@ -69,16 +69,18 @@ export default function FilesPage() {
           </Link>
         </div>
 
-        <Card className="bg-white">
+        <Card>
           <CardHeader>
-            <div className="flex items-start justify-between gap-4">
-              <div>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="min-w-0">
                 <CardTitle className="text-2xl">File</CardTitle>
                 <div className="text-sm text-muted-foreground">
                   I file sono gestiti per-progetto. Seleziona un progetto e apri la tab “Files”.
                 </div>
               </div>
-              <Badge variant="secondary">{projects.length} progetti</Badge>
+              <Badge variant="secondary" className="self-start sm:self-auto shrink-0">
+                {projects.length} progetti
+              </Badge>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -100,7 +102,7 @@ export default function FilesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filtered.map((p) => (
                   <Link key={p.id} href={`/project/${p.id}#files`}>
-                    <Card className="hover:shadow-md transition-all cursor-pointer border bg-white">
+                    <Card className="hover:shadow-md transition-all cursor-pointer border">
                       <CardContent className="p-5">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">

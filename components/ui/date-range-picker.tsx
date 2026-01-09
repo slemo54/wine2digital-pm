@@ -1,3 +1,5 @@
+"use client";
+
 import * as React from "react";
 import { format } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
@@ -22,6 +24,24 @@ export function DateRangePicker({
   onChange,
   className,
 }: DateRangePickerProps) {
+  const [numberOfMonths, setNumberOfMonths] = React.useState(1);
+
+  React.useEffect(() => {
+    const mql = window.matchMedia("(min-width: 640px)");
+
+    const sync = () => setNumberOfMonths(mql.matches ? 2 : 1);
+    sync();
+
+    if (typeof mql.addEventListener === "function") {
+      mql.addEventListener("change", sync);
+      return () => mql.removeEventListener("change", sync);
+    }
+
+    // Safari < 14
+    mql.addListener(sync);
+    return () => mql.removeListener(sync);
+  }, []);
+
   return (
     <div className={cn("grid gap-2", className)}>
       <Popover>
@@ -30,7 +50,7 @@ export function DateRangePicker({
             id="date"
             variant={"outline"}
             className={cn(
-              "w-[300px] justify-start text-left font-normal",
+              "w-full sm:w-[300px] justify-start text-left font-normal",
               !value && "text-muted-foreground"
             )}
           >
@@ -49,14 +69,14 @@ export function DateRangePicker({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
+        <PopoverContent className="w-auto p-0 max-h-[calc(100dvh-8rem)] overflow-y-auto" align="start">
           <Calendar
             initialFocus
             mode="range"
             defaultMonth={value?.from}
             selected={value}
             onSelect={(value) => onChange(value as DateRange)}
-            numberOfMonths={2}
+            numberOfMonths={numberOfMonths}
           />
         </PopoverContent>
       </Popover>

@@ -36,7 +36,11 @@ function collectMentionedUserIds(doc: any): string[] {
 function buildMentionSuggestion(users: MentionUser[]) {
   return {
     items: ({ query }: { query: string }) => {
-      const q = (query || "").toLowerCase().trim();
+      const q = (query || "")
+        .toLowerCase()
+        .trim()
+        .replace(/^<+/, "")
+        .replace(/>+$/, "");
       if (!q) return users.slice(0, 8);
       return users
         .filter((u) => {
@@ -170,6 +174,12 @@ export function RichTextEditor({
 
   const editor = useEditor({
     editable: !disabled,
+    editorProps: {
+      attributes: {
+        class:
+          "min-h-[110px] outline-none cursor-text px-0 py-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_blockquote]:my-1",
+      },
+    },
     extensions: [
       StarterKit.configure({
         heading: false,
@@ -206,6 +216,11 @@ export function RichTextEditor({
     latestHtmlRef.current = valueHtml || "";
   }, [editor, valueHtml]);
 
+  useEffect(() => {
+    if (!editor) return;
+    editor.setEditable(!disabled);
+  }, [editor, disabled]);
+
   const pickImage = () => {
     if (!onUploadImage) return;
     fileRef.current?.click();
@@ -223,7 +238,13 @@ export function RichTextEditor({
   };
 
   return (
-    <div className={cn("rounded-lg border bg-background", className)}>
+    <div
+      className={cn("rounded-lg border bg-background", className)}
+      onMouseDown={() => {
+        if (!editor || disabled) return;
+        editor.chain().focus().run();
+      }}
+    >
       <div className="flex items-center justify-between px-2 py-1.5 border-b">
         <div className="text-xs text-muted-foreground">
           {uploading ? "Caricamento immagine…" : "@"}{" "}

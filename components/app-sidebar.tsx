@@ -56,7 +56,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const isAdmin = globalRole === "admin";
 
   return (
-    <aside className={cn("w-64 shrink-0 border-r border-border bg-background sticky top-0 h-screen", className)}>
+    <aside className={cn("w-64 shrink-0 border-r border-border bg-background sticky top-0 h-screen h-[100dvh]", className)}>
       <div className="h-full flex flex-col">
         <div className="px-4 py-4 border-b border-border flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2">

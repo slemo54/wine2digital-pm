@@ -59,7 +59,7 @@ export function KanbanColumn({ id, title, color, tasks, projectId, members, onTa
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${getStatusColor()}`}></div>
           <h3 className="font-semibold text-foreground text-sm">{title}</h3>
-          <span className="text-sm text-muted-foreground bg-white rounded-full px-2.5 py-0.5 border">
+          <span className="text-sm text-muted-foreground bg-background rounded-full px-2.5 py-0.5 border">
             {tasks?.length || 0}
           </span>
         </div>
@@ -84,7 +84,7 @@ export function KanbanColumn({ id, title, color, tasks, projectId, members, onTa
               const Icon =
                 empty.icon === "todo" ? ListTodo : empty.icon === "in_progress" ? Loader2 : CheckCircle2;
               return (
-                <div className="flex flex-col items-center justify-center text-center border border-dashed rounded-xl bg-white/60 px-6 py-10">
+                <div className="flex flex-col items-center justify-center text-center border border-dashed rounded-xl bg-muted/20 px-6 py-10">
                   <Icon className={`h-8 w-8 text-muted-foreground ${empty.icon === "in_progress" ? "animate-spin" : ""}`} />
                   <div className="mt-3 font-semibold text-sm">{t(locale, empty.titleKey)}</div>
                   <div className="mt-1 text-xs text-muted-foreground max-w-[240px]">

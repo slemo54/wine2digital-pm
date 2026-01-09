@@ -90,7 +90,7 @@ export default function AdminAuditPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -98,8 +98,8 @@ export default function AdminAuditPage() {
 
   if (!isAdmin) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
-        <Card className="bg-white">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
+        <Card>
           <CardContent className="p-6 text-sm text-muted-foreground">Accesso negato.</CardContent>
         </Card>
       </div>
@@ -107,9 +107,9 @@ export default function AdminAuditPage() {
   }
 
   return (
-    <div className="min-h-screen bg-secondary">
-      <div className="max-w-[1400px] mx-auto px-6 py-8 space-y-6">
-        <Card className="bg-white">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 space-y-6">
+        <Card>
           <CardHeader className="pb-4">{header}</CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
@@ -133,7 +133,7 @@ export default function AdminAuditPage() {
             ) : (
               <div className="space-y-2">
                 {logs.map((l) => (
-                  <div key={l.id} className="border rounded-md bg-white p-4">
+                  <div key={l.id} className="border rounded-md bg-card p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="font-medium truncate">{l.actionType}</div>
@@ -161,5 +161,7 @@ export default function AdminAuditPage() {
     </div>
   );
 }
+
+
 
 

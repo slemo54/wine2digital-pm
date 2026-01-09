@@ -2,6 +2,12 @@
 
 Applicazione Next.js 14 con NextAuth, Prisma/PostgreSQL (Supabase-compatible) e Tailwind. Questo README è pensato per handover e passaggio di consegne.
 
+## Documentazione (uso piattaforma)
+- `../GUIDA_UTILIZZO.md` – indice generale
+- `../GUIDA_UTILIZZO_COLLEGHI_SOLO_CALENDARIO.md` – guida per chi usa solo Calendario (assenze)
+- `../GUIDA_UTILIZZO_COLLEGHI_CALENDARIO_PM.md` – guida per chi usa Calendario + PM (task/progetti)
+- `../GUIDA_UTILIZZO_ADMIN.md` – guida amministratori
+
 ## Stack
 - Next.js 14 (app router, TypeScript)
 - NextAuth (Google OAuth + credenziali)

@@ -84,23 +84,27 @@ export default function ProjectWikiIndexPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-secondary">
-      <div className="max-w-[1200px] mx-auto px-6 py-8">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <Link href={`/project/${projectId}`}>
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary">
+      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 py-8">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <Link href={`/project/${projectId}`} className="w-full sm:w-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground w-full sm:w-auto justify-start"
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Torna al progetto
             </Button>
           </Link>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => setCreateOpen(true)} className="w-full sm:w-auto">
             <Plus className="h-4 w-4 mr-2" />
             Nuova pagina
           </Button>
@@ -167,5 +171,7 @@ export default function ProjectWikiIndexPage() {
     </div>
   );
 }
+
+
 
 

@@ -121,7 +121,7 @@ export default function ProjectWikiPage() {
 
   if (status === "loading" || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -130,21 +130,25 @@ export default function ProjectWikiPage() {
   if (!page) return null;
 
   return (
-    <div className="min-h-screen bg-secondary">
-      <div className="max-w-[1400px] mx-auto px-6 py-8">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <Link href={`/project/${projectId}/wiki`}>
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <Link href={`/project/${projectId}/wiki`} className="w-full sm:w-auto">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-foreground w-full sm:w-auto justify-start"
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Wiki
             </Button>
           </Link>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={remove} disabled={deleting}>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={remove} disabled={deleting} className="w-full sm:w-auto">
               <Trash2 className="h-4 w-4 mr-2" />
               {deleting ? "…" : "Archivia"}
             </Button>
-            <Button onClick={save} disabled={saving || !draftTitle.trim()}>
+            <Button onClick={save} disabled={saving || !draftTitle.trim()} className="w-full sm:w-auto">
               <Save className="h-4 w-4 mr-2" />
               {saving ? "Salvataggio…" : "Salva"}
             </Button>
@@ -216,5 +220,7 @@ export default function ProjectWikiPage() {
     </div>
   );
 }
+
+
 
 

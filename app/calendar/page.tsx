@@ -381,18 +381,18 @@ export default function CalendarPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-secondary">
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-secondary">
+    <div className="min-h-screen min-h-[100dvh] bg-secondary">
       {/* Main Content */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {loadError ? (
-          <Card className="bg-white border-l-4 border-l-destructive mb-6">
+          <Card className="border-l-4 border-l-destructive mb-6">
             <CardHeader>
               <CardTitle>Calendar temporarily unavailable</CardTitle>
               <CardDescription>{loadError}</CardDescription>
@@ -405,13 +405,13 @@ export default function CalendarPage() {
           </Card>
         ) : null}
         {/* Page Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
           <div>
             <h2 className="text-3xl font-bold text-foreground mb-1">Absence Management</h2>
             <p className="text-muted-foreground">Review and manage team absence requests</p>
           </div>
-          <div className="flex gap-2">
-            <div className="bg-white p-1 rounded-lg border shadow-sm flex items-center">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <div className="bg-white p-1 rounded-lg border shadow-sm flex items-center w-fit">
               <Button
                 variant={viewMode === "calendar" ? "secondary" : "ghost"}
                 size="sm"
@@ -432,7 +432,7 @@ export default function CalendarPage() {
 
             <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
               <DialogTrigger asChild>
-                <Button className="bg-primary hover:bg-primary/90">
+                <Button className="bg-primary hover:bg-primary/90 w-full sm:w-auto">
                   <Plus className="mr-2 h-4 w-4" />
                   Request Absence
                 </Button>
@@ -562,8 +562,8 @@ export default function CalendarPage() {
         {viewMode === "calendar" ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
             {/* Calendar Card */}
-            <Card className="bg-white lg:col-span-8 shadow-md border-none overflow-hidden">
-              <CardHeader className="bg-white/50 border-b">
+            <Card className="lg:col-span-8 shadow-md border-none overflow-hidden">
+              <CardHeader className="bg-muted/50 border-b">
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-xl">Team Calendar</CardTitle>
@@ -622,8 +622,8 @@ export default function CalendarPage() {
             </Card>
 
             {/* Details Card */}
-            <Card className="bg-white lg:col-span-4 shadow-md border-none flex flex-col">
-              <CardHeader className="bg-white/50 border-b">
+            <Card className="lg:col-span-4 shadow-md border-none flex flex-col">
+              <CardHeader className="bg-muted/50 border-b">
                 <CardTitle className="text-xl">
                   {selectedDay ? format(selectedDay, "MMMM d, yyyy") : "Details"}
                 </CardTitle>
@@ -685,7 +685,7 @@ export default function CalendarPage() {
           </div>
         ) : (
           <div className="space-y-4 mb-12">
-            <Card className="bg-white border-none shadow-sm">
+            <Card className="border-none shadow-sm">
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
                   <div>
