@@ -12,6 +12,13 @@ function isMissingTableError(err: unknown, table: string): boolean {
   return msg.includes(table) && msg.toLowerCase().includes("does not exist");
 }
 
+function normalizeTagName(input: string): string {
+  return String(input || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -33,6 +40,7 @@ export async function GET(req: NextRequest) {
     const dueTo = searchParams.get('dueTo');
     const q = searchParams.get('q');
     const tag = searchParams.get('tag');
+    const tagName = tag ? normalizeTagName(tag) : null;
 
     const page = Math.max(1, Number(searchParams.get('page') || 1));
     const pageSizeRaw = Number(searchParams.get('pageSize') || 50);
@@ -73,9 +81,12 @@ export async function GET(req: NextRequest) {
             ],
           }
           : {},
-        tag
+        tagName
           ? {
-            tags: { contains: `"${tag.replace(/"/g, '\\"')}"` },
+            OR: [
+              { tags: { some: { name: tagName } } },
+              { legacyTags: { contains: `"${tagName.replace(/"/g, '\\"')}"` } },
+            ],
           }
           : {},
       ],
@@ -91,6 +102,7 @@ export async function GET(req: NextRequest) {
         include: {
           project: { select: { id: true, name: true } },
           taskList: { select: { id: true, name: true } },
+          tags: { select: { id: true, name: true } },
           assignees: {
             include: {
               user: {
