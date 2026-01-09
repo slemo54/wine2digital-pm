@@ -65,6 +65,7 @@ export async function GET(
             },
           },
         },
+        tags: { select: { id: true, name: true } },
         taskList: { select: { id: true, name: true } },
         _count: { select: { comments: true, attachments: true, subtasks: true } },
       },
@@ -113,6 +114,7 @@ export async function PUT(
       include: {
         project: { select: { members: { select: { userId: true, role: true } } } },
         assignees: { select: { userId: true } },
+        tags: { select: { id: true } },
       },
     });
 
@@ -143,11 +145,13 @@ export async function PUT(
       dueDate,
       title,
       description,
-      tags,
+      tags: legacyTags,
       storyPoints,
       list,
       listId,
       assigneeIds,
+      tagIds,
+      amountCents,
     } = body || {};
 
     const statusStr = typeof status === "string" ? status.trim() : null;
@@ -181,8 +185,51 @@ export async function PUT(
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
 
-    const normalizedTags =
-      Array.isArray(tags) ? JSON.stringify(tags.map(String)) : typeof tags === "string" ? tags : undefined;
+    if (
+      (legacyTags !== undefined || tagIds !== undefined || amountCents !== undefined) &&
+      !canEditMeta
+    ) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
+    const normalizedLegacyTags =
+      Array.isArray(legacyTags)
+        ? JSON.stringify(legacyTags.map(String))
+        : typeof legacyTags === "string"
+          ? legacyTags
+          : undefined;
+
+    const normalizedTagIds = Array.isArray(tagIds)
+      ? Array.from(new Set(tagIds.map((x: any) => String(x || "").trim()).filter(Boolean)))
+      : tagIds === undefined
+        ? undefined
+        : null;
+    if (normalizedTagIds === null) {
+      return NextResponse.json({ error: "tagIds must be an array" }, { status: 400 });
+    }
+
+    const normalizedAmountCents =
+      amountCents === undefined
+        ? undefined
+        : amountCents === null
+          ? null
+          : typeof amountCents === "number" && Number.isFinite(amountCents) && Number.isInteger(amountCents) && amountCents >= 0
+            ? amountCents
+            : null;
+    if (amountCents !== undefined && normalizedAmountCents === null) {
+      return NextResponse.json({ error: "amountCents must be an integer >= 0 (or null)" }, { status: 400 });
+    }
+
+    const resolvedTags =
+      normalizedTagIds !== undefined
+        ? await prisma.projectTag.findMany({
+            where: { id: { in: normalizedTagIds }, projectId: existing.projectId },
+            select: { id: true },
+          })
+        : null;
+    if (normalizedTagIds !== undefined && resolvedTags && resolvedTags.length !== normalizedTagIds.length) {
+      return NextResponse.json({ error: "Invalid tagIds for project" }, { status: 400 });
+    }
 
     // Resolve listId (admin/manager only). Best-effort: if TaskList table missing, ignore.
     let resolvedListId: string | null | undefined = undefined;
@@ -234,11 +281,15 @@ export async function PUT(
         ...(typeof list === "string" ? { list } : {}),
         ...(resolvedListId !== undefined ? { listId: resolvedListId } : {}),
         ...(typeof storyPoints === "number" ? { storyPoints } : {}),
+        ...(normalizedAmountCents !== undefined ? { amountCents: normalizedAmountCents } : {}),
         ...(typeof dueDate === "string" || dueDate === null
           ? { dueDate: dueDate ? new Date(dueDate) : null }
           : {}),
-        ...(typeof normalizedTags === "string" || tags === null
-          ? { tags: tags === null ? null : normalizedTags }
+        ...(typeof normalizedLegacyTags === "string" || legacyTags === null
+          ? { legacyTags: legacyTags === null ? null : normalizedLegacyTags }
+          : {}),
+        ...(normalizedTagIds !== undefined
+          ? { tags: { set: resolvedTags?.map((t) => ({ id: t.id })) || [] } }
           : {}),
         ...(assigneeIds && Array.isArray(assigneeIds)
           ? {
@@ -252,6 +303,7 @@ export async function PUT(
       include: {
         project: { select: { id: true, name: true } },
         taskList: { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true } },
         assignees: {
           include: {
             user: {
@@ -298,6 +350,9 @@ export async function PUT(
     if (typeof storyPoints === "number" && storyPoints !== existing.storyPoints) {
       changes.push({ type: "task.story_points_changed", metadata: { from: existing.storyPoints, to: storyPoints } });
     }
+    if (normalizedAmountCents !== undefined && normalizedAmountCents !== existing.amountCents) {
+      changes.push({ type: "task.amount_changed", metadata: { from: existing.amountCents ?? null, to: normalizedAmountCents } });
+    }
     if (assigneeIds && Array.isArray(assigneeIds)) {
       const prev = existing.assignees.map((a) => a.userId).sort();
       const next = assigneeIds.map(String).sort();
@@ -305,12 +360,19 @@ export async function PUT(
         changes.push({ type: "task.assignees_changed", metadata: { from: prev, to: next } });
       }
     }
-    if (typeof normalizedTags === "string" || tags === null) {
-      if ((existing.tags || null) !== (tags === null ? null : normalizedTags || null)) {
+    if (typeof normalizedLegacyTags === "string" || legacyTags === null) {
+      if ((existing.legacyTags || null) !== (legacyTags === null ? null : normalizedLegacyTags || null)) {
         changes.push({
-          type: "task.tags_changed",
-          metadata: { from: existing.tags || null, to: tags === null ? null : normalizedTags || null },
+          type: "task.legacy_tags_changed",
+          metadata: { from: existing.legacyTags || null, to: legacyTags === null ? null : normalizedLegacyTags || null },
         });
+      }
+    }
+    if (normalizedTagIds !== undefined) {
+      const prev = Array.isArray(existing.tags) ? existing.tags.map((t: any) => t.id).sort() : [];
+      const next = normalizedTagIds.slice().sort();
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        changes.push({ type: "task.tags_changed", metadata: { from: prev, to: next } });
       }
     }
 
