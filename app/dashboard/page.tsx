@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Loader2, Plus, CalendarDays, Folder, CheckSquare, Bell, Activity } from
 import { toast } from "react-hot-toast";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
+import { TaskDetailModal } from "@/components/task-detail-modal";
 
 interface Project {
   id: string;
@@ -59,6 +60,7 @@ type ActivityEvent = {
 export default function DashboardPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
@@ -72,6 +74,12 @@ export default function DashboardPage() {
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const taskParam = searchParams?.get("task");
+    if (taskParam) setSelectedTaskId(taskParam);
+  }, [searchParams]);
 
   useEffect(() => {
     if (status === "unauthenticated") {

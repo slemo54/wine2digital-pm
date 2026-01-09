@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Calendar, Trash2, User, AlertCircle, Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { Calendar, Trash2, User, AlertCircle, Plus, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { toast } from "react-hot-toast";
