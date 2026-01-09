@@ -420,11 +420,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Errore aggiornamento subtask");
 
-      setSubtasks(subtasks.map(st =>
+        setSubtasks(subtasks.map(st => 
         st.id === subtaskId
           ? { ...st, completed, status: completed ? "done" : "todo" }
           : st
-      ));
+        ));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Errore durante l'aggiornamento del subtask");
     }
@@ -464,7 +464,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       setComments((prev) => [...prev, data as any]);
       setNewCommentHtml("");
       setMentionedUserIds([]);
-      toast.success("Commento aggiunto");
+        toast.success("Commento aggiunto");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Errore durante l'aggiunta del commento");
     } finally {
@@ -964,7 +964,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         >
                           Annulla
                         </Button>
-                      </div>
+                </div>
                     ) : (
                       <>
                         <div className="text-2xl font-bold pr-2 truncate">{task.title}</div>
@@ -1004,7 +1004,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             >
                               {isDeletingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                             </Button>
-                          </div>
+              </div>
                         ) : null}
                       </>
                     )}
@@ -1012,8 +1012,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                   {task.description ? (
                     <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{task.description}</p>
                   ) : null}
-                </div>
               </div>
+            </div>
 
               <div className="mt-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {/* Assignees */}
@@ -1034,7 +1034,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     {(!task.assignees || task.assignees.length === 0) ? (
                       <span className="text-sm text-muted-foreground">Add</span>
                     ) : null}
-                  </div>
+                        </div>
 
                   {canEditMeta ? (
                     <div className="mt-3">
@@ -1071,7 +1071,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             {memberUsers.length === 0 ? (
                               <p className="text-sm text-muted-foreground">Nessun membro progetto</p>
                             ) : null}
-                          </div>
+                      </div>
 
                           <div className="mt-3 flex items-center justify-end gap-2">
                             <Button
@@ -1096,11 +1096,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             >
                               Salva
                             </Button>
-                          </div>
+                    </div>
                         </PopoverContent>
                       </Popover>
-                    </div>
-                  ) : null}
+                </div>
+              ) : null}
                 </div>
 
                 {/* Dates */}
@@ -1133,8 +1133,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         }}
                       />
                     ) : null}
-                  </div>
-                </div>
+                        </div>
+                      </div>
 
                 {/* Tags */}
                 <div className="rounded-lg border bg-muted/20 p-4">
@@ -1189,8 +1189,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             ))}
                             {draftTags.length === 0 ? (
                               <span className="text-xs text-muted-foreground">Nessun tag</span>
-                            ) : null}
-                          </div>
+                    ) : null}
+                  </div>
 
                           <div className="mt-3 flex items-center gap-2">
                             <Input
@@ -1243,8 +1243,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           </div>
                         </PopoverContent>
                       </Popover>
-                    </div>
-                  ) : null}
+                </div>
+              ) : null}
                 </div>
 
                 {/* List/Category */}
@@ -1350,28 +1350,28 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
               {activeTab === "subtasks" ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-4">
-                    <h3 className="text-sm font-semibold flex items-center gap-2">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Subtasks
+                      <h3 className="text-sm font-semibold flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Subtasks
                       <span className="text-muted-foreground">
-                        {completedSubtasks} / {totalSubtasks}
-                      </span>
-                    </h3>
+                          {completedSubtasks} / {totalSubtasks}
+                        </span>
+                      </h3>
                     {totalSubtasks > 0 ? (
                       <div className="w-40 h-2 bg-muted rounded-full overflow-hidden">
-                        <div
+                          <div
                           className="h-full bg-success transition-all"
-                          style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
-                        />
-                      </div>
+                            style={{ width: `${(completedSubtasks / totalSubtasks) * 100}%` }}
+                          />
+                        </div>
                     ) : null}
-                  </div>
+                    </div>
 
-                  <div className="space-y-2">
+                    <div className="space-y-2">
                     {subtasks.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nessuna subtask.</div>
                     ) : null}
-                    {subtasks.map((subtask) => (
+                      {subtasks.map((subtask) => (
                       <div
                         key={subtask.id}
                         role="button"
@@ -1415,24 +1415,24 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             </Button>
                           </div>
                         ) : null}
-                      </div>
-                    ))}
+                        </div>
+                      ))}
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="Aggiungi un subtask..."
-                      value={newSubtask}
-                      onChange={(e) => setNewSubtask(e.target.value)}
+                        <Input
+                          placeholder="Aggiungi un subtask..."
+                          value={newSubtask}
+                          onChange={(e) => setNewSubtask(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && canWriteTask && addSubtask()}
-                      className="flex-1"
+                          className="flex-1"
                       disabled={!canWriteTask}
-                    />
+                        />
                     <Button onClick={addSubtask} size="sm" variant="outline" disabled={!canWriteTask}>
-                      <Plus className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
+                          <Plus className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
               ) : null}
 
               {activeTab === "attachments" ? (
@@ -1445,7 +1445,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     </h3>
                   </div>
 
-                  <div className="space-y-2">
+                    <div className="space-y-2">
                     {attachments.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nessun allegato.</div>
                     ) : null}
@@ -1482,42 +1482,42 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     })}
 
                     <label className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-muted-foreground/30 rounded-lg cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors">
-                      <Upload className="w-4 h-4" />
-                      <span className="text-sm">
-                        {uploading ? "Caricamento..." : "Trascina file o clicca per caricare"}
-                      </span>
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => e.target.files?.[0] && uploadAttachment(e.target.files[0])}
-                        disabled={uploading}
-                      />
-                    </label>
+                        <Upload className="w-4 h-4" />
+                        <span className="text-sm">
+                          {uploading ? "Caricamento..." : "Trascina file o clicca per caricare"}
+                        </span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => e.target.files?.[0] && uploadAttachment(e.target.files[0])}
+                          disabled={uploading}
+                        />
+                      </label>
+                    </div>
                   </div>
-                </div>
               ) : null}
 
               {activeTab === "comments" ? (
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4" />
-                    Commenti
+                      <MessageSquare className="w-4 h-4" />
+                      Commenti
                     <span className="text-muted-foreground">({comments.length})</span>
-                  </h3>
+                    </h3>
 
-                  <div className="space-y-3">
+                    <div className="space-y-3">
                     {comments.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nessun commento.</div>
                     ) : null}
-                    {comments.map((comment) => (
-                      <div key={comment.id} className="flex gap-3">
-                        <Avatar className="w-8 h-8">
-                          <AvatarImage src={comment.user.image || undefined} />
-                          <AvatarFallback>
-                            {comment.user.name?.[0] || comment.user.email[0].toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
+                      {comments.map((comment) => (
+                        <div key={comment.id} className="flex gap-3">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={comment.user.image || undefined} />
+                            <AvatarFallback>
+                              {comment.user.name?.[0] || comment.user.email[0].toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
                           <div className="bg-muted/30 rounded-lg p-3">
                             <div className="flex items-start justify-between gap-3">
                               <p className="text-sm font-medium">{comment.user.name || comment.user.email}</p>
@@ -1548,7 +1548,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                                     </Button>
                                   </>
                                 ) : null}
-                              </div>
+                            </div>
                             </div>
                             {editingCommentId === comment.id ? (
                               <div className="mt-2 space-y-2">
@@ -1591,11 +1591,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {format(new Date(comment.createdAt), "PPp", { locale: it })}
-                          </p>
+                              {format(new Date(comment.createdAt), "PPp", { locale: it })}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
 
                     <div className="space-y-2">
                       <RichTextEditor
@@ -1613,7 +1613,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       </Button>
                     </div>
                   </div>
-                </div>
+          </div>
               ) : null}
 
               {activeTab === "activity" ? (
@@ -1622,10 +1622,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     <div key={e.id} className="flex gap-3">
                       <Avatar className="w-8 h-8">
                         <AvatarImage src={e.actor?.image || undefined} />
-                        <AvatarFallback>
+                      <AvatarFallback>
                           {(e.actor?.name?.[0] || e.actor?.email?.[0] || "U").toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      </AvatarFallback>
+                    </Avatar>
                       <div className="flex-1">
                         <div className="bg-muted/30 rounded-lg p-3">
                           <p className="text-sm font-medium">
@@ -1645,8 +1645,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     <p className="text-sm text-muted-foreground">Nessuna attività.</p>
                   ) : null}
                 </div>
-              ) : null}
-            </div>
+                          ) : null}
+                        </div>
           </ScrollArea>
         </div>
       </SheetContent>
@@ -1671,7 +1671,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                   disabled={!selectedSubtask || !canWriteTask || savingSubtaskTitle}
                   className="h-10"
                 />
-                <Button
+                          <Button
                   type="button"
                   onClick={saveSubtaskTitle}
                   disabled={!selectedSubtask || !canWriteTask || savingSubtaskTitle || !subtaskDraftTitle.trim()}
@@ -1680,21 +1680,21 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                 </Button>
                 <Button
                   type="button"
-                  variant="ghost"
-                  onClick={() => {
+                            variant="ghost"
+                            onClick={() => {
                     setIsEditingSubtaskTitle(false);
                     setSubtaskDraftTitle(selectedSubtask?.title || "");
-                  }}
+                            }}
                   disabled={savingSubtaskTitle}
-                >
-                  Annulla
-                </Button>
+                          >
+                            Annulla
+                          </Button>
               </div>
             ) : (
               <>
                 <div className="text-xl font-semibold">{selectedSubtask?.title || ""}</div>
                 {selectedSubtask && canWriteTask ? (
-                  <Button
+                          <Button
                     type="button"
                     variant="ghost"
                     size="icon"
@@ -1706,12 +1706,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     aria-label="Modifica titolo subtask"
                   >
                     <Pencil className="h-4 w-4" />
-                  </Button>
+                          </Button>
                 ) : null}
               </>
             )}
-          </div>
-        </div>
+                        </div>
+                  </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           <div className="space-y-3">
@@ -1758,15 +1758,15 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
               <div className="space-y-1">
                 <Label>Due date</Label>
-                <Input
-                  type="date"
+                    <Input
+                      type="date"
                   value={
                     selectedSubtask?.dueDate
                       ? new Date(selectedSubtask.dueDate).toISOString().slice(0, 10)
                       : ""
                   }
-                  onChange={(e) => {
-                    const v = e.target.value;
+                      onChange={(e) => {
+                        const v = e.target.value;
                     updateSelectedSubtaskMeta({ dueDate: v ? new Date(v).toISOString() : null });
                   }}
                   disabled={!selectedSubtask || !canWriteTask}
@@ -1793,12 +1793,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-          </div>
+                </div>
+              </div>
 
           <Separator />
 
-          <div className="space-y-2">
+                <div className="space-y-2">
             <div className="flex items-center justify-between">
               <div className="font-semibold flex items-center gap-2">
                 <Link2 className="h-4 w-4" />
@@ -1837,7 +1837,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
             {selectedSubtask ? (
               <div className="space-y-2">
                 <Label>Aggiungi dipendenza</Label>
-                <Select
+                    <Select
                   value="__none__"
                   onValueChange={(v) => {
                     if (!selectedSubtask) return;
@@ -1845,11 +1845,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     void addSelectedSubtaskDependency(v);
                   }}
                   disabled={!canWriteTask}
-                >
-                  <SelectTrigger className="h-9">
+                    >
+                      <SelectTrigger className="h-9">
                     <SelectValue placeholder="Seleziona subtask" />
-                  </SelectTrigger>
-                  <SelectContent>
+                      </SelectTrigger>
+                      <SelectContent>
                     <SelectItem value="__none__">Seleziona…</SelectItem>
                     {subtasks
                       .filter((s) => s.id !== selectedSubtask.id)
@@ -1859,10 +1859,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           {s.title}
                         </SelectItem>
                       ))}
-                  </SelectContent>
-                </Select>
+                      </SelectContent>
+                    </Select>
               </div>
-            ) : null}
+                  ) : null}
           </div>
 
           <Separator />
@@ -1879,8 +1879,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
               <Button variant="outline" onClick={saveSubtaskDescription} disabled={!selectedSubtask}>
                 Salva descrizione
               </Button>
-            </div>
-          </div>
+                </div>
+              </div>
 
           <Separator />
 
@@ -1893,7 +1893,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                 disabled={!canManageSubtaskChecklists}
               />
             ) : null}
-          </div>
+                </div>
 
           <Separator />
 
@@ -1911,11 +1911,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                   }}
                 />
               </label>
-            </div>
+                  </div>
             {subtaskUploading ? (
               <div className="text-sm text-muted-foreground flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" /> Upload…
-              </div>
+                </div>
             ) : null}
             {subtaskAttachments.length === 0 ? (
               <div className="text-sm text-muted-foreground">Nessun allegato.</div>
@@ -1967,7 +1967,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     <div className="flex items-start justify-between gap-3">
                       <div className="text-xs text-muted-foreground">
                         {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
-                      </div>
+              </div>
                       {(canEditMeta || (meId && c.user?.id === meId)) ? (
                         <div className="flex items-center gap-1">
                           <Button
@@ -1992,9 +1992,9 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
-                        </div>
+            </div>
                       ) : null}
-                    </div>
+          </div>
 
                     {editingSubtaskCommentId === c.id ? (
                       <div className="mt-2 space-y-2">
@@ -2034,7 +2034,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           >
                             Salva
                           </Button>
-                        </div>
+        </div>
                       </div>
                     ) : (
                       <RichTextViewer

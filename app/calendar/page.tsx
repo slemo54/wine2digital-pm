@@ -96,7 +96,7 @@ export default function CalendarPage() {
   }, [status, router]);
 
   useEffect(() => {
-    fetchAbsences();
+      fetchAbsences();
   }, []);
 
   useEffect(() => {
@@ -236,7 +236,7 @@ export default function CalendarPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    
     if (!newAbsence.startDate || !newAbsence.endDate) {
       toast.error("Please select start and end dates");
       return;
@@ -432,57 +432,57 @@ export default function CalendarPage() {
             </div>
 
             <Dialog open={isDialogOpen} onOpenChange={handleDialogChange}>
-              <DialogTrigger asChild>
+            <DialogTrigger asChild>
                 <Button className="bg-primary hover:bg-primary/90 w-full sm:w-auto">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Request Absence
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <form onSubmit={handleSubmit}>
-                  <DialogHeader>
+                <Plus className="mr-2 h-4 w-4" />
+                Request Absence
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <form onSubmit={handleSubmit}>
+                <DialogHeader>
                     <DialogTitle>{editingAbsence ? "Edit Absence" : "Request Absence"}</DialogTitle>
-                    <DialogDescription>
+                  <DialogDescription>
                       {editingAbsence ? `Modify absence request for ${editingAbsence.user.firstName}` : "Submit a new absence request for approval"}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="type">Type</Label>
-                      <Select
-                        value={newAbsence.type}
-                        onValueChange={(value) => setNewAbsence({ ...newAbsence, type: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="vacation">Vacation</SelectItem>
-                          <SelectItem value="sick_leave">Sick Leave</SelectItem>
-                          <SelectItem value="personal">Personal</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="startDate">Start Date</Label>
-                      <Input
-                        id="startDate"
-                        type="date"
-                        value={newAbsence.startDate}
-                        onChange={(e) => setNewAbsence({ ...newAbsence, startDate: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="endDate">End Date</Label>
-                      <Input
-                        id="endDate"
-                        type="date"
-                        value={newAbsence.endDate}
-                        onChange={(e) => setNewAbsence({ ...newAbsence, endDate: e.target.value })}
-                        required
-                      />
-                    </div>
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="type">Type</Label>
+                    <Select
+                      value={newAbsence.type}
+                      onValueChange={(value) => setNewAbsence({ ...newAbsence, type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vacation">Vacation</SelectItem>
+                        <SelectItem value="sick_leave">Sick Leave</SelectItem>
+                        <SelectItem value="personal">Personal</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="startDate">Start Date</Label>
+                    <Input
+                      id="startDate"
+                      type="date"
+                      value={newAbsence.startDate}
+                      onChange={(e) => setNewAbsence({ ...newAbsence, startDate: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="endDate">End Date</Label>
+                    <Input
+                      id="endDate"
+                      type="date"
+                      value={newAbsence.endDate}
+                      onChange={(e) => setNewAbsence({ ...newAbsence, endDate: e.target.value })}
+                      required
+                    />
+                  </div>
 
                     <div className="flex items-center justify-between py-2">
                       <Label htmlFor="isFullDay" className="cursor-pointer">Tutto il giorno</Label>
@@ -518,28 +518,28 @@ export default function CalendarPage() {
                       </div>
                     )}
 
-                    <div className="grid gap-2">
+                  <div className="grid gap-2">
                       <Label htmlFor="reason">Note / Dettagli (Opzionale)</Label>
-                      <Textarea
-                        id="reason"
-                        value={newAbsence.reason}
-                        onChange={(e) => setNewAbsence({ ...newAbsence, reason: e.target.value })}
+                    <Textarea
+                      id="reason"
+                      value={newAbsence.reason}
+                      onChange={(e) => setNewAbsence({ ...newAbsence, reason: e.target.value })}
                         placeholder="Dettagli aggiuntivi..."
-                        rows={3}
-                      />
-                    </div>
+                      rows={3}
+                    />
                   </div>
-                  <DialogFooter>
+                </div>
+                <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => handleDialogChange(false)}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" className="bg-primary hover:bg-primary/90">
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="bg-primary hover:bg-primary/90">
                       {editingAbsence ? "Update Request" : "Submit Request"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
           </div>
         </div>
 
@@ -789,7 +789,7 @@ export default function CalendarPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Pending Column */}
+          {/* Pending Column */}
             <div className="space-y-4">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
@@ -797,76 +797,76 @@ export default function CalendarPage() {
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Pending</h3>
                 </div>
                 <span className="text-xs font-bold bg-warning/10 text-warning px-2 py-0.5 rounded-full">{counts.pending}</span>
-              </div>
+            </div>
               <div className="space-y-4">
-                {pendingAbsences.length === 0 ? (
+              {pendingAbsences.length === 0 ? (
                   <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
                     <CardContent className="p-6 sm:p-10 text-center text-muted-foreground text-xs font-medium">
                       No pending requests to review.
-                    </CardContent>
-                  </Card>
-                ) : (
-                  pendingAbsences.map((absence) => (
+                  </CardContent>
+                </Card>
+              ) : (
+                pendingAbsences.map((absence) => (
                     <Card key={absence.id} className="bg-white hover:shadow-lg transition-all duration-300 border-none shadow-sm">
                       <CardContent className="p-5">
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10 border-2 border-secondary">
                               <AvatarFallback className="bg-warning/10 text-warning text-xs font-bold">
-                                {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div>
+                              {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
                               <p className="text-sm font-bold text-foreground leading-tight">
-                                {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
-                              </p>
+                              {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                            </p>
                               <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
                             </div>
                           </div>
                           <Badge variant="outline" className="text-[10px] bg-warning/5 text-warning border-warning/30 font-bold px-2">
-                            {getTypeLabel(absence.type)}
-                          </Badge>
-                        </div>
-
+                          {getTypeLabel(absence.type)}
+                        </Badge>
+                      </div>
+                      
                         <div className="space-y-3 mb-5 pl-1">
                           <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
                             <CalendarIcon className="h-4 w-4 text-warning/60" />
-                            <span>{formatDate(absence.startDate)}</span>
+                          <span>{formatDate(absence.startDate)}</span>
                             <ChevronRight className="h-3 w-3 opacity-40" />
-                            <span>{formatDate(absence.endDate)}</span>
-                          </div>
-                          {absence.reason && (
+                          <span>{formatDate(absence.endDate)}</span>
+                        </div>
+                        {absence.reason && (
                             <p className="text-xs text-muted-foreground italic bg-secondary/30 p-2.5 rounded-lg border-l-2 border-warning/20">
                               &quot;{absence.reason}&quot;
-                            </p>
-                          )}
-                        </div>
-
-                        {isManagerOrAdmin && (
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              className="flex-1 bg-success hover:bg-success/90 text-white shadow-sm shadow-success/20 font-bold"
-                              onClick={() => handleApprove(absence.id)}
-                            >
-                              <Check className="h-4 w-4 mr-1.5" />
-                              Approve
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="flex-1 text-destructive border-destructive/30 hover:bg-destructive hover:text-white font-bold"
-                              onClick={() => handleReject(absence.id)}
-                            >
-                              <X className="h-4 w-4 mr-1.5" />
-                              Reject
-                            </Button>
-                          </div>
+                          </p>
                         )}
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
+                      </div>
+
+                      {isManagerOrAdmin && (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                              className="flex-1 bg-success hover:bg-success/90 text-white shadow-sm shadow-success/20 font-bold"
+                            onClick={() => handleApprove(absence.id)}
+                          >
+                              <Check className="h-4 w-4 mr-1.5" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                              className="flex-1 text-destructive border-destructive/30 hover:bg-destructive hover:text-white font-bold"
+                            onClick={() => handleReject(absence.id)}
+                          >
+                              <X className="h-4 w-4 mr-1.5" />
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))
+              )}
 
                 {pendingAbsences.length > 0 && pendingAbsences.length < counts.pending ? (
                   <Button
@@ -883,9 +883,9 @@ export default function CalendarPage() {
                   </Button>
                 ) : null}
               </div>
-            </div>
+          </div>
 
-            {/* Approved Column */}
+          {/* Approved Column */}
             <div className="space-y-4">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
@@ -893,15 +893,15 @@ export default function CalendarPage() {
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Approved</h3>
                 </div>
                 <span className="text-xs font-bold bg-success/10 text-success px-2 py-0.5 rounded-full">{counts.approved}</span>
-              </div>
+            </div>
               <div className="space-y-4 opacity-90">
-                {approvedAbsences.length === 0 ? (
+              {approvedAbsences.length === 0 ? (
                   <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
                     <CardContent className="p-6 sm:p-10 text-center text-muted-foreground text-xs font-medium">
                       No approved requests.
-                    </CardContent>
-                  </Card>
-                ) : (
+                  </CardContent>
+                </Card>
+              ) : (
                   <>
                     {approvedVisible.map((absence) => (
                       <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm group">
@@ -910,34 +910,34 @@ export default function CalendarPage() {
                             <div className="flex items-center gap-3">
                               <Avatar className="h-10 w-10">
                                 <AvatarFallback className="bg-success/10 text-success text-xs font-bold">
-                                  {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
+                              {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
                                 <p className="text-sm font-bold text-foreground">
-                                  {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
-                                </p>
+                              {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                            </p>
                                 <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
-                              </div>
-                            </div>
+                          </div>
+                        </div>
                             <Badge
                               variant="outline"
                               className="text-[10px] bg-success/5 text-success border-success/30 font-bold px-2"
                             >
-                              {getTypeLabel(absence.type)}
-                            </Badge>
-                          </div>
-
+                          {getTypeLabel(absence.type)}
+                        </Badge>
+                      </div>
+                      
                           <div className="pl-1">
                             <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
                               <CalendarIcon className="h-4 w-4 text-success/60" />
-                              <span>{formatDate(absence.startDate)}</span>
+                          <span>{formatDate(absence.startDate)}</span>
                               <ChevronRight className="h-3 w-3 opacity-40" />
-                              <span>{formatDate(absence.endDate)}</span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
+                          <span>{formatDate(absence.endDate)}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                     ))}
                     {approvedAbsences.length < counts.approved ? (
                       <Button
@@ -954,11 +954,11 @@ export default function CalendarPage() {
                       </Button>
                     ) : null}
                   </>
-                )}
-              </div>
+              )}
             </div>
+          </div>
 
-            {/* Rejected Column */}
+          {/* Rejected Column */}
             <div className="space-y-4">
               <div className="flex items-center justify-between px-1">
                 <div className="flex items-center gap-2">
@@ -966,15 +966,15 @@ export default function CalendarPage() {
                   <h3 className="text-sm font-bold text-foreground uppercase tracking-widest">Rejected</h3>
                 </div>
                 <span className="text-xs font-bold bg-destructive/10 text-destructive px-2 py-0.5 rounded-full">{counts.rejected}</span>
-              </div>
+            </div>
               <div className="space-y-4 opacity-80">
-                {rejectedAbsences.length === 0 ? (
+              {rejectedAbsences.length === 0 ? (
                   <Card className="bg-secondary/20 border-dashed border-2 shadow-none">
                     <CardContent className="p-6 sm:p-10 text-center text-muted-foreground text-xs font-medium">
                       No rejected requests.
-                    </CardContent>
-                  </Card>
-                ) : (
+                  </CardContent>
+                </Card>
+              ) : (
                   <>
                     {rejectedVisible.map((absence) => (
                       <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm">
@@ -983,34 +983,34 @@ export default function CalendarPage() {
                             <div className="flex items-center gap-3">
                               <Avatar className="h-10 w-10">
                                 <AvatarFallback className="bg-destructive/10 text-destructive text-xs font-bold">
-                                  {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
+                              {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
                                 <p className="text-sm font-bold text-foreground">
-                                  {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
-                                </p>
+                              {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                            </p>
                                 <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
-                              </div>
-                            </div>
+                          </div>
+                        </div>
                             <Badge
                               variant="outline"
                               className="text-[10px] bg-destructive/5 text-destructive border-destructive/30 font-bold px-2"
                             >
-                              {getTypeLabel(absence.type)}
-                            </Badge>
-                          </div>
-
+                          {getTypeLabel(absence.type)}
+                        </Badge>
+                      </div>
+                      
                           <div className="pl-1">
                             <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
                               <CalendarIcon className="h-4 w-4 text-destructive/60" />
-                              <span>{formatDate(absence.startDate)}</span>
+                          <span>{formatDate(absence.startDate)}</span>
                               <ChevronRight className="h-3 w-3 opacity-40" />
-                              <span>{formatDate(absence.endDate)}</span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
+                          <span>{formatDate(absence.endDate)}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                     ))}
                     {rejectedAbsences.length < counts.rejected ? (
                       <Button
