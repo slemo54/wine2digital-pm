@@ -12,6 +12,10 @@ import { Loader2, Plus, Pencil, Trash2, Search } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Download } from "lucide-react";
+import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate, safeFileStem } from "@/lib/export";
+import { formatEurCents } from "@/lib/money";
 
 type ListDto = { id: string; name: string; updatedAt: string; _count?: { tasks: number } };
 
@@ -111,6 +115,7 @@ export function ProjectTaskLists(props: {
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [defaultListIdForNewTask, setDefaultListIdForNewTask] = useState<string | undefined>(undefined);
+  const [isExporting, setIsExporting] = useState(false);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -166,6 +171,122 @@ export function ProjectTaskLists(props: {
       toast.error(e instanceof Error ? e.message : "Errore caricamento task");
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  const exportTasks = async (format: "csv" | "xls") => {
+    const MAX_EXPORT = 5000;
+    setIsExporting(true);
+    try {
+      const query = q.trim();
+      const base = new URLSearchParams();
+      base.set("projectId", projectId);
+      if (query) base.set("q", query);
+
+      // Fetch total first (pageSize is capped server-side to 200)
+      const firstRes = await fetch(`/api/tasks?${base.toString()}&page=1&pageSize=1`, { cache: "no-store" });
+      const firstData = await firstRes.json().catch(() => ({}));
+      if (!firstRes.ok) throw new Error(firstData?.error || "Export fallito");
+      const total = Number.isFinite(firstData?.total) ? Number(firstData.total) : 0;
+      if (!total) {
+        toast("Nessuna task da esportare");
+        return;
+      }
+      if (total > MAX_EXPORT) {
+        toast.error(`Troppe task da esportare (${total}). Usa la ricerca per ridurre i risultati.`);
+        return;
+      }
+
+      const pageSize = 200;
+      const pages = Math.ceil(total / pageSize);
+      const all: any[] = [];
+      for (let page = 1; page <= pages; page++) {
+        const params = new URLSearchParams(base.toString());
+        params.set("page", String(page));
+        params.set("pageSize", String(pageSize));
+        const res = await fetch(`/api/tasks?${params.toString()}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Export fallito");
+        const chunk = Array.isArray(data?.tasks) ? data.tasks : [];
+        all.push(...chunk);
+      }
+
+      const header = [
+        "projectId",
+        "projectName",
+        "category",
+        "taskId",
+        "title",
+        "description",
+        "status",
+        "priority",
+        "dueDate",
+        "amountEur",
+        "tags",
+        "assignees",
+        "commentsCount",
+        "attachmentsCount",
+        "subtasksTotal",
+        "subtasksDone",
+        "createdAt",
+        "updatedAt",
+      ];
+
+      const rows = all.map((t: any) => {
+        const category = String(t?.taskList?.name || DEFAULT_LIST_NAME);
+        const tags = Array.isArray(t?.tags) ? t.tags.map((x: any) => String(x?.name || "").trim()).filter(Boolean) : [];
+        const legacy = parseLegacyTags(t?.legacyTags);
+        const displayTags = tags.length > 0 ? tags : legacy;
+        const assignees = Array.isArray(t?.assignees)
+          ? t.assignees
+              .map((a: any) => String(a?.user?.email || "").trim())
+              .filter(Boolean)
+          : [];
+
+        const subtasksTotal = Number.isFinite(t?._count?.subtasks) ? Number(t._count.subtasks) : 0;
+        const subtasksDone = Array.isArray(t?.subtasks) ? t.subtasks.length : 0;
+
+        const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : "";
+
+        return [
+          String(t?.project?.id || projectId),
+          String(t?.project?.name || ""),
+          category,
+          String(t?.id || ""),
+          String(t?.title || ""),
+          String(t?.description || ""),
+          String(t?.status || ""),
+          String(t?.priority || ""),
+          isoDate(t?.dueDate),
+          amountEur,
+          displayTags.join(" | "),
+          assignees.join(" | "),
+          Number.isFinite(t?._count?.comments) ? Number(t._count.comments) : 0,
+          Number.isFinite(t?._count?.attachments) ? Number(t._count.attachments) : 0,
+          subtasksTotal,
+          subtasksDone,
+          isoDate(t?.createdAt),
+          isoDate(t?.updatedAt),
+        ];
+      });
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      const projLabel = safeFileStem(String((all[0] as any)?.project?.name || projectId));
+
+      if (format === "csv") {
+        const csv = buildDelimitedText({ header, rows });
+        downloadCsvFile(`tasks_${projLabel}_${stamp}.csv`, csv);
+        toast.success("Export CSV pronto");
+        return;
+      }
+
+      const html = buildXlsHtml({ header, rows, sheetName: "Tasks" });
+      downloadXlsFile(`tasks_${projLabel}_${stamp}.xls`, html);
+      toast.success("Export XLS pronto");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export fallito");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -357,6 +478,22 @@ export function ProjectTaskLists(props: {
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca task…" className="pl-9" />
         </div>
         <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={isExporting}>
+                <Download className="h-4 w-4 mr-2" />
+                {isExporting ? "Export…" : "Export"}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => void exportTasks("csv")} disabled={isExporting}>
+                Export CSV (task)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void exportTasks("xls")} disabled={isExporting}>
+                Export XLS (task)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" onClick={() => setShowCreateList(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Nuova categoria

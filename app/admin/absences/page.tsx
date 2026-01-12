@@ -35,9 +35,11 @@ import {
   Monitor,
   Lock,
   FileText,
-  Calendar as CalendarIcon
+  Calendar as CalendarIcon,
+  Download
 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { buildDelimitedText, downloadCsvFile, isoDate } from "@/lib/export";
 
 type AbsenceStatus = "pending" | "approved" | "rejected";
 
@@ -156,6 +158,7 @@ export default function AdminAbsencesArchivePage() {
   const [rows, setRows] = useState<AbsenceRow[]>([]);
   const [total, setTotal] = useState(0);
   const [counts, setCounts] = useState<Counts | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -200,6 +203,88 @@ export default function AdminAbsencesArchivePage() {
       toast.error(e instanceof Error ? e.message : "Errore caricamento archivio");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    const MAX_EXPORT = 5000;
+    if (!total || total <= 0) {
+      toast("Nessuna richiesta da esportare");
+      return;
+    }
+    if (total > MAX_EXPORT) {
+      toast.error(`Troppi record (${total}). Applica filtri e riprova.`);
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const base = new URLSearchParams();
+      if (q.trim()) base.set("q", q.trim());
+      if (statusFilter !== "all") base.set("status", statusFilter);
+      if (typeFilter !== "all") base.set("type", typeFilter);
+      if (from) base.set("from", new Date(from).toISOString());
+      if (to) base.set("to", new Date(to).toISOString());
+      if (createdFrom) base.set("createdFrom", new Date(createdFrom).toISOString());
+      if (createdTo) base.set("createdTo", new Date(createdTo).toISOString());
+
+      const take = 500;
+      const pages = Math.ceil(total / take);
+      const all: AbsenceRow[] = [];
+      for (let i = 0; i < pages; i++) {
+        const params = new URLSearchParams(base.toString());
+        params.set("take", String(take));
+        params.set("skip", String(i * take));
+        params.set("includeCounts", "false");
+        const res = await fetch(`/api/admin/absences?${params.toString()}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((data as any)?.error || "Export fallito");
+        const chunk = Array.isArray((data as any)?.absences) ? ((data as any).absences as AbsenceRow[]) : [];
+        all.push(...chunk);
+      }
+
+      const header = [
+        "id",
+        "user",
+        "email",
+        "type",
+        "status",
+        "startDate",
+        "endDate",
+        "isFullDay",
+        "startTime",
+        "endTime",
+        "reason",
+        "approvedBy",
+        "approvedAt",
+        "createdAt",
+      ];
+
+      const tableRows = all.map((r) => [
+        r.id,
+        displayName(r.user),
+        r.user.email,
+        getTypeLabel(r.type),
+        r.status,
+        isoDate(r.startDate),
+        isoDate(r.endDate),
+        r.isFullDay ? "true" : "false",
+        r.startTime || "",
+        r.endTime || "",
+        r.reason || "",
+        r.approvedBy || "",
+        r.approvedAt ? new Date(r.approvedAt).toISOString() : "",
+        r.createdAt ? new Date(r.createdAt).toISOString() : "",
+      ]);
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      const csv = buildDelimitedText({ header, rows: tableRows });
+      downloadCsvFile(`absences_archive_${stamp}.csv`, csv);
+      toast.success("Export CSV pronto");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export fallito");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -376,20 +461,32 @@ export default function AdminAbsencesArchivePage() {
           <CardContent className="p-0 space-y-6">
             
             {/* Filters Bar */}
-            <div className="flex flex-col lg:flex-row gap-4 p-4 rounded-xl border bg-card/80 backdrop-blur-sm shadow-sm">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input 
-                  value={q} 
-                  onChange={(e) => setQ(e.target.value)} 
-                  placeholder="Cerca per utente, email o causale..." 
-                  className="pl-9 bg-background/50 border-border/50 h-10"
-                />
+            <div className="p-4 rounded-xl border bg-card/80 backdrop-blur-sm shadow-sm space-y-4">
+              {/* Top Row: Search & Global Actions */}
+              <div className="flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                <div className="flex-1 w-full md:w-auto relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    value={q} 
+                    onChange={(e) => setQ(e.target.value)} 
+                    placeholder="Cerca per utente, email o causale..." 
+                    className="pl-9 bg-background/50 border-border/50 h-10 w-full"
+                  />
+                </div>
+                <div className="flex items-center gap-2 self-end md:self-auto">
+                  <Button variant="outline" onClick={handleExport} className="h-10 gap-2" disabled={isExporting || total <= 0}>
+                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export CSV
+                  </Button>
+                  <Button variant="ghost" size="icon" onClick={load} className="h-10 w-10 border border-border/50">
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
               
-              <div className="flex flex-wrap gap-2">
+              {/* Bottom Row: Detailed Filters */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                  <SelectTrigger className="w-[140px] bg-background/50 border-border/50 h-10">
+                  <SelectTrigger className="bg-background/50 border-border/50 h-10 w-full">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -401,7 +498,7 @@ export default function AdminAbsencesArchivePage() {
                 </Select>
 
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger className="w-[140px] bg-background/50 border-border/50 h-10">
+                  <SelectTrigger className="bg-background/50 border-border/50 h-10 w-full">
                     <SelectValue placeholder="Tipo" />
                   </SelectTrigger>
                   <SelectContent>
@@ -409,12 +506,28 @@ export default function AdminAbsencesArchivePage() {
                     <SelectItem value="vacation">Ferie</SelectItem>
                     <SelectItem value="sick_leave">Malattia</SelectItem>
                     <SelectItem value="personal">Permesso</SelectItem>
-                    <SelectItem value="remote">Smart Working</SelectItem>
                   </SelectContent>
                 </Select>
 
+                <div className="lg:col-span-2 grid grid-cols-2 gap-2">
+                  <Input 
+                    type="date" 
+                    value={from} 
+                    onChange={(e) => setFrom(e.target.value)} 
+                    className="bg-background/50 border-border/50 h-10"
+                    placeholder="Dal"
+                  />
+                  <Input 
+                    type="date" 
+                    value={to} 
+                    onChange={(e) => setTo(e.target.value)} 
+                    className="bg-background/50 border-border/50 h-10"
+                    placeholder="Al"
+                  />
+                </div>
+
                 <Select value={String(take)} onValueChange={(v) => setTake(Number(v))}>
-                  <SelectTrigger className="w-[120px] bg-background/50 border-border/50 h-10">
+                  <SelectTrigger className="bg-background/50 border-border/50 h-10 w-full">
                     <SelectValue placeholder="Per pagina" />
                   </SelectTrigger>
                   <SelectContent>
@@ -423,31 +536,12 @@ export default function AdminAbsencesArchivePage() {
                     <SelectItem value="100">100 per pagina</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
 
-              <div className="flex items-center gap-2 border-l pl-4 border-border/50">
-                <div className="grid grid-cols-2 gap-2">
-                  <Input 
-                    type="date" 
-                    value={from} 
-                    onChange={(e) => setFrom(e.target.value)} 
-                    className="w-[130px] bg-background/50 border-border/50 h-10"
-                  />
-                  <Input 
-                    type="date" 
-                    value={to} 
-                    onChange={(e) => setTo(e.target.value)} 
-                    className="w-[130px] bg-background/50 border-border/50 h-10"
-                  />
-                </div>
                 <Button 
                   onClick={() => setPage(0)} 
-                  className="bg-blue-600 hover:bg-blue-700 text-white h-10 px-6"
+                  className="bg-blue-600 hover:bg-blue-700 text-white h-10 w-full"
                 >
-                  <Filter className="w-4 h-4 mr-2" /> Applica
-                </Button>
-                <Button variant="ghost" size="icon" onClick={load} className="h-10 w-10">
-                  <RefreshCw className="w-4 h-4" />
+                  <Filter className="w-4 h-4 mr-2" /> Applica Filtri
                 </Button>
               </div>
             </div>

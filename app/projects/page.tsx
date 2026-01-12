@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { EditProjectDialog } from "@/components/edit-project-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate } from "@/lib/export";
 
 interface Project {
   id: string;
@@ -400,11 +401,28 @@ export default function ProjectsPage() {
       const now = new Date();
       const stamp = now.toISOString().slice(0, 10);
 
+      const getEmail = (m: any) => String(m?.user?.email || "").trim();
+      const members = (p: Project) => (Array.isArray(p.members) ? p.members : []);
+      const owners = (p: Project) => members(p).filter((m) => m?.role === "owner").map(getEmail).filter(Boolean);
+      const managers = (p: Project) => members(p).filter((m) => m?.role === "manager").map(getEmail).filter(Boolean);
+      const memberEmails = (p: Project) => members(p).filter((m) => m?.role === "member").map(getEmail).filter(Boolean);
+      const membersDetailed = (p: Project) =>
+        members(p)
+          .map((m) => {
+            const email = getEmail(m);
+            const role = String(m?.role || "").trim();
+            if (!email || !role) return "";
+            return `${email}:${role}`;
+          })
+          .filter(Boolean)
+          .join(" | ");
+
       if (format === "json") {
         const payload = rows.map((p) => ({
           id: p.id,
           name: p.name,
           status: p.status,
+          description: p.description ?? "",
           startDate: p.startDate ?? null,
           endDate: p.endDate ?? null,
           createdAt: p.createdAt,
@@ -412,7 +430,11 @@ export default function ProjectsPage() {
           tasksCompleted: p.tasksCompleted,
           tasksTotal: p.tasksTotal,
           creatorEmail: p.creator?.email ?? null,
-          membersCount: Array.isArray(p.members) ? p.members.length : 0,
+          owners: owners(p),
+          managers: managers(p),
+          members: memberEmails(p),
+          membersDetailed: membersDetailed(p),
+          membersCount: members(p).length,
         }));
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
         const url = URL.createObjectURL(blob);
@@ -427,11 +449,11 @@ export default function ProjectsPage() {
         return;
       }
 
-      const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
       const header = [
         "id",
         "name",
         "status",
+        "description",
         "startDate",
         "endDate",
         "createdAt",
@@ -439,34 +461,123 @@ export default function ProjectsPage() {
         "tasksCompleted",
         "tasksTotal",
         "creatorEmail",
+        "owners",
+        "managers",
+        "members",
+        "membersDetailed",
         "membersCount",
-      ].join(",");
-      const lines = rows.map((p) =>
-        [
-          esc(p.id),
-          esc(p.name),
-          esc(p.status),
-          esc(p.startDate ?? ""),
-          esc(p.endDate ?? ""),
-          esc(p.createdAt),
-          esc(p.completionRate),
-          esc(p.tasksCompleted),
-          esc(p.tasksTotal),
-          esc(p.creator?.email ?? ""),
-          esc(Array.isArray(p.members) ? p.members.length : 0),
-        ].join(",")
-      );
-      const csv = [header, ...lines].join("\n");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `projects_${stamp}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast.success("Export CSV pronto");
+      ];
+      const tableRows = rows.map((p) => [
+        p.id,
+        p.name,
+        p.status,
+        p.description ?? "",
+        isoDate(p.startDate ?? ""),
+        isoDate(p.endDate ?? ""),
+        isoDate(p.createdAt),
+        p.completionRate,
+        p.tasksCompleted,
+        p.tasksTotal,
+        p.creator?.email ?? "",
+        owners(p).join(" | "),
+        managers(p).join(" | "),
+        memberEmails(p).join(" | "),
+        membersDetailed(p),
+        members(p).length,
+      ]);
+
+      if (format === "csv") {
+        const csv = buildDelimitedText({ header, rows: tableRows });
+        downloadCsvFile(`projects_${stamp}.csv`, csv);
+        toast.success("Export CSV pronto");
+        return;
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportProjectsXls = async () => {
+    const total = pagination?.total ?? projects.length;
+    if (!total || total <= 0) return;
+
+    const MAX_EXPORT = 5000;
+    if (total > MAX_EXPORT) {
+      toast.error(`Troppi progetti da esportare (${total}). Applica filtri e riprova.`);
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const params = new URLSearchParams(queryString);
+      params.set("page", "1");
+      params.set("limit", String(total));
+      const res = await fetch(`/api/projects?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(String((data as any)?.error || "Export failed"));
+      const rows = Array.isArray((data as any)?.projects) ? ((data as any).projects as Project[]) : [];
+
+      const now = new Date();
+      const stamp = now.toISOString().slice(0, 10);
+
+      const getEmail = (m: any) => String(m?.user?.email || "").trim();
+      const members = (p: Project) => (Array.isArray(p.members) ? p.members : []);
+      const owners = (p: Project) => members(p).filter((m) => m?.role === "owner").map(getEmail).filter(Boolean);
+      const managers = (p: Project) => members(p).filter((m) => m?.role === "manager").map(getEmail).filter(Boolean);
+      const memberEmails = (p: Project) => members(p).filter((m) => m?.role === "member").map(getEmail).filter(Boolean);
+      const membersDetailed = (p: Project) =>
+        members(p)
+          .map((m) => {
+            const email = getEmail(m);
+            const role = String(m?.role || "").trim();
+            if (!email || !role) return "";
+            return `${email}:${role}`;
+          })
+          .filter(Boolean)
+          .join(" | ");
+
+      const header = [
+        "id",
+        "name",
+        "status",
+        "description",
+        "startDate",
+        "endDate",
+        "createdAt",
+        "completionRate",
+        "tasksCompleted",
+        "tasksTotal",
+        "creatorEmail",
+        "owners",
+        "managers",
+        "members",
+        "membersDetailed",
+        "membersCount",
+      ];
+      const tableRows = rows.map((p) => [
+        p.id,
+        p.name,
+        p.status,
+        p.description ?? "",
+        isoDate(p.startDate ?? ""),
+        isoDate(p.endDate ?? ""),
+        isoDate(p.createdAt),
+        p.completionRate,
+        p.tasksCompleted,
+        p.tasksTotal,
+        p.creator?.email ?? "",
+        owners(p).join(" | "),
+        managers(p).join(" | "),
+        memberEmails(p).join(" | "),
+        membersDetailed(p),
+        members(p).length,
+      ]);
+
+      const html = buildXlsHtml({ header, rows: tableRows, sheetName: "Projects" });
+      downloadXlsFile(`projects_${stamp}.xls`, html);
+      toast.success("Export XLS pronto");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Export failed");
     } finally {
@@ -529,6 +640,9 @@ export default function ProjectsPage() {
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => void exportProjects("csv")} disabled={isExporting}>
                     Export CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void exportProjectsXls()} disabled={isExporting}>
+                    Export XLS
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => void exportProjects("json")} disabled={isExporting}>
                     Export JSON
