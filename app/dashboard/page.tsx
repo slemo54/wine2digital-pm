@@ -234,202 +234,218 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* My Tasks */}
-          <Card className="lg:col-span-8">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <CardTitle className="text-base">My Tasks</CardTitle>
+          {/* Quick Actions */}
+          <div className="lg:col-span-12">
+            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Quick Actions
+            </h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Button 
+                onClick={() => setShowCreateTaskDialog(true)}
+                className="h-auto py-4 flex flex-col items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white border-none shadow-lg shadow-orange-900/20"
+              >
+                <Plus className="h-6 w-6" />
+                <span className="font-semibold">Create Task</span>
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                onClick={() => setShowCreateDialog(true)}
+                className="h-auto py-4 flex flex-col items-center gap-2 bg-card hover:bg-accent border-border shadow-sm"
+              >
+                <Folder className="h-6 w-6 text-blue-500" />
+                <span>Create Project</span>
+              </Button>
+
+              <Link href="/calendar" className="contents">
+                <Button 
+                  variant="outline" 
+                  className="h-auto py-4 flex flex-col items-center gap-2 bg-card hover:bg-accent border-border shadow-sm"
+                >
+                  <CalendarDays className="h-6 w-6 text-purple-500" />
+                  <span>Calendar</span>
+                </Button>
+              </Link>
+
+              <Link href="/tasks" className="contents">
+                <Button 
+                  variant="outline" 
+                  className="h-auto py-4 flex flex-col items-center gap-2 bg-card hover:bg-accent border-border shadow-sm"
+                >
+                  <CheckSquare className="h-6 w-6 text-green-500" />
+                  <span>My Tasks</span>
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* My Tasks & Notifications Grid */}
+          <div className="lg:col-span-8 space-y-6">
+            <Card className="border-border/50 bg-card/50 shadow-sm">
+              <CardHeader className="pb-3 border-b border-border/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckSquare className="h-5 w-5 text-foreground" />
+                    <CardTitle className="text-lg">My Tasks</CardTitle>
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {orderedTasks.filter(isOverdue).length} overdue • {orderedTasks.filter(isDueSoon).length} due soon
                   </div>
+                  <Link href="/tasks" className="text-xs text-primary hover:underline">
+                    View all &rarr;
+                  </Link>
                 </div>
-                <Link href="/tasks">
-                  <Button variant="outline" size="sm">
-                    <CheckSquare className="h-4 w-4 mr-2" />
-                    View all
-                  </Button>
-                </Link>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {isLoadingTasks ? (
-                <div className="text-sm text-muted-foreground flex items-center gap-2 py-6">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading tasks…
-                </div>
-              ) : orderedTasks.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-6">
-                  No assigned tasks yet. Use “Crea Task” to create one.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {orderedTasks.slice(0, 8).map((t) => (
+              </CardHeader>
+              <CardContent className="p-4 space-y-3">
+                {isLoadingTasks ? (
+                  <div className="text-sm text-muted-foreground flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading tasks…
+                  </div>
+                ) : orderedTasks.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-8 text-center bg-muted/20 rounded-lg border border-dashed">
+                    No assigned tasks yet.
+                  </div>
+                ) : (
+                  orderedTasks.slice(0, 5).map((t) => (
                     <div
                       key={t.id}
-                      className="border rounded-lg p-3 hover:bg-muted/30 transition-colors cursor-pointer"
+                      className="group flex items-center justify-between p-3 rounded-lg border border-border/40 bg-card hover:bg-accent/50 hover:border-primary/20 transition-all cursor-pointer"
                       onClick={() => setSelectedTaskId(t.id)}
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className={`mt-1 h-2 w-2 rounded-full ${isOverdue(t) ? 'bg-red-500' : 'bg-blue-500'}`} />
                         <div className="min-w-0">
-                          <div className="font-medium truncate">{t.title}</div>
-                          <div className="text-xs text-muted-foreground truncate">{t.project?.name}</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {isOverdue(t) ? (
-                            <Badge variant="destructive">Overdue</Badge>
-                          ) : isDueSoon(t) ? (
-                            <Badge variant="secondary">Due soon</Badge>
-                          ) : null}
-                          <Badge variant="outline" className="capitalize">
-                            {t.status}
-                          </Badge>
+                          <div className="font-medium truncate text-sm text-foreground group-hover:text-primary transition-colors">
+                            {t.title}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {t.project?.name}
+                            {t.dueDate && ` • Due: ${new Date(t.dueDate).toLocaleDateString()}`}
+                          </div>
                         </div>
                       </div>
-                      {t.dueDate ? (
-                        <div className="mt-2 text-xs text-muted-foreground">Due: {new Date(t.dueDate).toLocaleDateString()}</div>
-                      ) : null}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isOverdue(t) && (
+                          <Badge variant="destructive" className="text-[10px] h-5 px-1.5 uppercase">Overdue</Badge>
+                        )}
+                        <Badge variant="outline" className="text-[10px] h-5 px-1.5 uppercase bg-muted/50 border-border">
+                          {t.status.replace('_', ' ')}
+                        </Badge>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  ))
+                )}
+              </CardContent>
+            </Card>
 
-          {/* Notifications */}
-          <Card className="lg:col-span-4">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+            {/* Activity */}
+            <Card className="border-border/50 bg-card/50 shadow-sm">
+              <CardHeader className="pb-3 border-b border-border/50">
                 <div className="flex items-center gap-2">
-                  <Bell className="h-4 w-4" />
-                  <CardTitle className="text-base">Notifications</CardTitle>
+                  <Activity className="h-5 w-5 text-foreground" />
+                  <CardTitle className="text-lg">Recent Activity</CardTitle>
                 </div>
-                <Badge variant={unreadCount > 0 ? "default" : "secondary"}>{unreadCount} unread</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {isLoadingNotifications ? (
-                <div className="text-sm text-muted-foreground flex items-center gap-2 py-6">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-                </div>
-              ) : notifications.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-6">No notifications yet.</div>
-              ) : (
-                <div className="space-y-3">
-                  {notifications.slice(0, 6).map((n) => (
-                    <div key={n.id} className="border rounded-lg p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className={`font-medium text-sm ${n.isRead ? "text-muted-foreground" : ""}`}>{n.title}</div>
-                          <div className="text-xs text-muted-foreground line-clamp-2">{n.message}</div>
+              </CardHeader>
+              <CardContent className="p-4">
+                {isLoadingActivity ? (
+                  <div className="text-sm text-muted-foreground flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading…
+                  </div>
+                ) : activityEvents.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-8 text-center">No recent activity.</div>
+                ) : (
+                  <div className="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[1px] before:bg-border/50 pl-6">
+                    {activityEvents.slice(0, 5).map((e) => (
+                      <div key={e.id} className="relative">
+                        <div className="absolute -left-[29px] top-1.5 h-3 w-3 rounded-full bg-primary border-4 border-background" />
+                        <div className="flex justify-between items-start gap-4">
+                          <div>
+                            <p className="text-sm">
+                              <span className="font-semibold text-primary">{actorLabel(e.actor)}</span> <span className="text-muted-foreground">{e.message}</span>
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {e.task.projectName} • {e.task.title}
+                            </p>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {new Date(e.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                        {!n.isRead ? <Badge variant="outline">New</Badge> : null}
                       </div>
-                      {n.link ? (
-                        <div className="mt-2">
-                          <Button
-                            variant="link"
-                            className="h-auto p-0 text-xs"
-                            onClick={() => void openNotification(n)}
-                          >
-                            Open
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                  <Separator />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={async () => {
-                      try {
-                        const r = await markAllRead();
-                        if (!r.ok) throw new Error("Failed");
-                        fetchNotifications();
-                      } catch {
-                        toast.error("Failed to mark all read");
-                      }
-                    }}
-                    disabled={unreadCount === 0}
-                  >
-                    Mark all as read
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-          {/* Quick Actions */}
-          <Card className="lg:col-span-4">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0 space-y-2">
-              <Button className="w-full justify-start" onClick={() => setShowCreateTaskDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create task
-              </Button>
-              <Button variant="outline" className="w-full justify-start" onClick={() => setShowCreateDialog(true)}>
-                <Folder className="h-4 w-4 mr-2" />
-                Create project
-              </Button>
-              <Link href="/calendar" className="block">
-                <Button variant="outline" className="w-full justify-start">
-                  <CalendarDays className="h-4 w-4 mr-2" />
-                  Calendar
-                </Button>
-              </Link>
-              <Link href="/projects" className="block">
-                <Button variant="outline" className="w-full justify-start">
-                  <Folder className="h-4 w-4 mr-2" />
-                  Projects
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          {/* Activity (placeholder until API is wired) */}
-          <Card className="lg:col-span-8">
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Activity className="h-4 w-4" />
-                <CardTitle className="text-base">Activity</CardTitle>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {isLoadingActivity ? (
-                <div className="text-sm text-muted-foreground flex items-center gap-2 py-6">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          {/* Sidebar Right: Notifications */}
+          <div className="lg:col-span-4 space-y-6">
+            <Card className="border-border/50 bg-card/50 shadow-sm h-full">
+              <CardHeader className="pb-3 border-b border-border/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-foreground" />
+                    <CardTitle className="text-lg">Notifications</CardTitle>
+                  </div>
+                  {unreadCount > 0 && (
+                    <Badge variant="default" className="bg-orange-600 hover:bg-orange-700 text-white border-none">
+                      {unreadCount} UNREAD
+                    </Badge>
+                  )}
                 </div>
-              ) : activityEvents.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-6">No recent activity.</div>
-              ) : (
-                <div className="space-y-3">
-                  {activityEvents.slice(0, 10).map((e) => (
-                    <div key={e.id} className="border rounded-lg p-3">
-                      <div className="text-sm">
-                        <span className="font-medium">{actorLabel(e.actor)}</span> {e.message}
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground truncate">
-                        {e.task.projectName ? `${e.task.projectName} • ` : ""}{e.task.title}
-                      </div>
-                      <div className="mt-2 flex items-center justify-between">
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(e.createdAt).toLocaleString()}
+              </CardHeader>
+              <CardContent className="p-4">
+                {isLoadingNotifications ? (
+                  <div className="text-sm text-muted-foreground flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading…
+                  </div>
+                ) : notifications.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-8 text-center">All caught up!</div>
+                ) : (
+                  <div className="space-y-3">
+                    {notifications.slice(0, 5).map((n) => (
+                      <div key={n.id} className={`p-3 rounded-lg border ${n.isRead ? 'bg-muted/20 border-transparent' : 'bg-card border-l-2 border-l-orange-500 border-y border-r border-border shadow-sm'}`}>
+                        <div className="flex justify-between items-start gap-2 mb-1">
+                          <span className="font-semibold text-sm line-clamp-1">{n.title}</span>
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
                         </div>
-                        <Link href={e.href}>
-                          <Button variant="link" className="h-auto p-0 text-xs">
-                            Open
-                          </Button>
-                        </Link>
+                        <p className="text-xs text-muted-foreground line-clamp-2 mb-2">{n.message}</p>
+                        {n.link && (
+                          <div className="flex justify-end">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-6 text-[10px] text-orange-500 hover:text-orange-600 px-2"
+                              onClick={() => void openNotification(n)}
+                            >
+                              Open &rarr;
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                    ))}
+                    
+                    <Button 
+                      variant="outline" 
+                      className="w-full mt-2 border-dashed border-border text-muted-foreground hover:text-foreground"
+                      onClick={async () => {
+                        try {
+                          await markAllRead();
+                          fetchNotifications();
+                        } catch {}
+                      }}
+                      disabled={unreadCount === 0}
+                    >
+                      Mark all as read
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </main>
 

@@ -2,7 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
-import { buildMarkNotificationReadWhere, buildMarkTaskNotificationsReadWhere } from "./where";
+
+function buildMarkNotificationReadWhere(userId: string, notificationId: string) {
+  return { id: notificationId, userId } as const;
+}
+
+function buildMarkTaskNotificationsReadWhere(userId: string, taskId: string) {
+  const token = `taskId=${encodeURIComponent(taskId)}`;
+  return {
+    userId,
+    isRead: false,
+    link: { contains: token },
+  } as const;
+}
 
 export const dynamic = 'force-dynamic';
 
