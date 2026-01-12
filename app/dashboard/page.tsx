@@ -13,6 +13,7 @@ import { toast } from "react-hot-toast";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
+import { markAllRead, markNotificationRead } from "@/lib/notifications-client";
 
 interface Project {
   id: string;
@@ -131,6 +132,18 @@ export default function DashboardPage() {
       setUnreadCount(0);
     } finally {
       setIsLoadingNotifications(false);
+    }
+  };
+
+  const openNotification = async (n: NotificationItem) => {
+    if (!n?.link) return;
+    try {
+      const r = await markNotificationRead(n.id);
+      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
+      if (typeof r.unreadCount === "number") setUnreadCount(r.unreadCount);
+      else if (!n.isRead) setUnreadCount((prev) => Math.max(0, prev - 1));
+    } finally {
+      router.push(n.link);
     }
   };
 
@@ -313,11 +326,13 @@ export default function DashboardPage() {
                       </div>
                       {n.link ? (
                         <div className="mt-2">
-                          <Link href={n.link}>
-                            <Button variant="link" className="h-auto p-0 text-xs">
-                              Open
-                            </Button>
-                          </Link>
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 text-xs"
+                            onClick={() => void openNotification(n)}
+                          >
+                            Open
+                          </Button>
                         </div>
                       ) : null}
                     </div>
@@ -329,12 +344,8 @@ export default function DashboardPage() {
                     className="w-full"
                     onClick={async () => {
                       try {
-                        const res = await fetch("/api/notifications", {
-                          method: "PUT",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ markAllRead: true }),
-                        });
-                        if (!res.ok) throw new Error("Failed");
+                        const r = await markAllRead();
+                        if (!r.ok) throw new Error("Failed");
                         fetchNotifications();
                       } catch {
                         toast.error("Failed to mark all read");

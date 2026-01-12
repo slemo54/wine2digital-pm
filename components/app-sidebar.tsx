@@ -60,13 +60,28 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status !== "authenticated") return;
+    let cancelled = false;
+
+    const refresh = () => {
       // Semplice fetch per il badge. In app reale usare SWR/React Query o Context.
       fetch("/api/notifications")
         .then((res) => res.json())
-        .then((data) => setUnreadCount(data.unreadCount || 0))
+        .then((data) => {
+          if (cancelled) return;
+          setUnreadCount(data.unreadCount || 0);
+        })
         .catch(() => {});
-    }
+    };
+
+    refresh();
+
+    const onChanged = () => refresh();
+    window.addEventListener("notifications:changed", onChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("notifications:changed", onChanged);
+    };
   }, [status, pathname]); // Aggiorna al cambio pagina
 
   return (

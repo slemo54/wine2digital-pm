@@ -33,7 +33,7 @@ function collectMentionedUserIds(doc: any): string[] {
   return Array.from(ids);
 }
 
-function buildMentionSuggestion(users: MentionUser[]) {
+function buildMentionSuggestion(users: MentionUser[], getPortalContainer?: () => HTMLElement | null) {
   return {
     items: ({ query }: { query: string }) => {
       const q = (query || "")
@@ -97,7 +97,8 @@ function buildMentionSuggestion(users: MentionUser[]) {
         onStart: (props: any) => {
           container = document.createElement("div");
           container.className = "fixed z-[90]";
-          document.body.appendChild(container);
+          const parent = getPortalContainer?.() || document.body;
+          parent.appendChild(container);
           root = createRoot(container);
           selectedIndex = 0;
           currentItems = props.items || [];
@@ -170,9 +171,10 @@ export function RichTextEditor({
 }: Props) {
   const latestHtmlRef = useRef<string>(valueHtml);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  const suggestion = useMemo(() => buildMentionSuggestion(mentionUsers), [mentionUsers]);
+  const suggestion = useMemo(() => buildMentionSuggestion(mentionUsers, () => wrapperRef.current), [mentionUsers]);
 
   const editor = useEditor({
     editable: !disabled,
@@ -241,6 +243,7 @@ export function RichTextEditor({
 
   return (
     <div
+      ref={wrapperRef}
       className={cn("rounded-lg border bg-background", className)}
       onMouseDown={() => {
         if (!editor || disabled) return;

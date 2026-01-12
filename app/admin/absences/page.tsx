@@ -19,7 +19,24 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Shield, Trash2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { 
+  Loader2, 
+  Shield, 
+  Trash2, 
+  Clock, 
+  CheckCircle2, 
+  XCircle, 
+  Search, 
+  Filter, 
+  RefreshCw,
+  Briefcase,
+  CreditCard,
+  Monitor,
+  Lock,
+  FileText,
+  Calendar as CalendarIcon
+} from "lucide-react";
 import { toast } from "react-hot-toast";
 
 type AbsenceStatus = "pending" | "approved" | "rejected";
@@ -66,10 +83,43 @@ function formatDateTime(d: string): string {
   return date.toLocaleString();
 }
 
-function statusBadge(status: AbsenceStatus): { label: string; className: string } {
-  if (status === "pending") return { label: "pending", className: "bg-warning/10 text-warning border-warning" };
-  if (status === "approved") return { label: "approved", className: "bg-success/10 text-success border-success" };
-  return { label: "rejected", className: "bg-destructive/10 text-destructive border-destructive" };
+function statusBadge(status: AbsenceStatus): { label: string; className: string; icon: any } {
+  if (status === "pending") return { label: "In Attesa", className: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20", icon: Clock };
+  if (status === "approved") return { label: "Approvato", className: "bg-green-500/10 text-green-500 border-green-500/20", icon: CheckCircle2 };
+  return { label: "Rifiutato", className: "bg-red-500/10 text-red-500 border-red-500/20", icon: XCircle };
+}
+
+function getTypeIcon(type: string) {
+  switch (type) {
+    case "vacation":
+    case "sick_leave":
+    case "personal":
+      return { icon: Briefcase, color: "text-blue-400" };
+    case "late_entry":
+    case "early_exit":
+    case "overtime":
+      return { icon: Clock, color: "text-orange-400" };
+    case "transfer":
+    case "remote":
+      return { icon: Monitor, color: "text-purple-400" };
+    default:
+      return { icon: FileText, color: "text-gray-400" };
+  }
+}
+
+function getTypeLabel(type: string) {
+  const map: Record<string, string> = {
+    vacation: "Ferie",
+    sick_leave: "Malattia",
+    personal: "Permesso",
+    late_entry: "Ingresso in ritardo",
+    early_exit: "Uscita anticipata",
+    overtime: "Straordinario",
+    transfer: "Trasferta",
+    remote: "Smart Working",
+    ooo: "Fuori Ufficio"
+  };
+  return map[type] || type;
 }
 
 type ConfirmMode = "row" | "selected" | "before" | "createdRange";
@@ -229,27 +279,8 @@ export default function AdminAbsencesArchivePage() {
     }
   };
 
-  const header = useMemo(() => {
-    return (
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Shield className="h-5 w-5" /> Admin · Archivio richieste
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Ricerca, filtra e rimuovi richieste storiche (pending/approved/rejected).
-          </p>
-        </div>
-        {counts ? (
-          <div className="text-xs text-muted-foreground text-right">
-            <div>Pending: {counts.pending}</div>
-            <div>Approved: {counts.approved}</div>
-            <div>Rejected: {counts.rejected}</div>
-          </div>
-        ) : null}
-      </div>
-    );
-  }, [counts]);
+  // Header replaced inline
+  // const header removed
 
   if (status === "loading") {
     return (
@@ -274,241 +305,326 @@ export default function AdminAbsencesArchivePage() {
   const maxPage = Math.max(0, Math.ceil(total / take) - 1);
 
   return (
-    <div className="min-h-screen min-h-[100dvh] bg-secondary">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        <Card>
-          <CardHeader className="pb-4">{header}</CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-              <div className="md:col-span-4">
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca per utente o reason…" />
+    <div className="min-h-screen min-h-[100dvh] bg-background text-foreground">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 space-y-8">
+        
+        {/* Header & Stats */}
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Archivio Richieste</h1>
+            <p className="text-muted-foreground mt-1">
+              Gestisci, analizza e pulisci lo storico delle approvazioni aziendali.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="bg-card/50 border-border/50 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <Shield className="w-24 h-24" />
               </div>
-              <div className="md:col-span-2">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Shield className="w-4 h-4 text-blue-500" />
+                  <span className="text-sm font-medium text-muted-foreground">Totale Richieste</span>
+                </div>
+                <div className="text-3xl font-bold">{total}</div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border/50 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <Clock className="w-24 h-24" />
+              </div>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Clock className="w-4 h-4 text-yellow-500" />
+                  <span className="text-sm font-medium text-muted-foreground">In Attesa</span>
+                </div>
+                <div className="text-3xl font-bold text-yellow-500">{counts?.pending || 0}</div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border/50 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <CheckCircle2 className="w-24 h-24" />
+              </div>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  <span className="text-sm font-medium text-muted-foreground">Approvate</span>
+                </div>
+                <div className="text-3xl font-bold text-green-500">{counts?.approved || 0}</div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/50 border-border/50 shadow-sm relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10">
+                <XCircle className="w-24 h-24" />
+              </div>
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <XCircle className="w-4 h-4 text-red-500" />
+                  <span className="text-sm font-medium text-muted-foreground">Rifiutate</span>
+                </div>
+                <div className="text-3xl font-bold text-red-500">{counts?.rejected || 0}</div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <Card className="border-none shadow-none bg-transparent">
+          <CardContent className="p-0 space-y-6">
+            
+            {/* Filters Bar */}
+            <div className="flex flex-col lg:flex-row gap-4 p-4 rounded-xl border bg-card/80 backdrop-blur-sm shadow-sm">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  value={q} 
+                  onChange={(e) => setQ(e.target.value)} 
+                  placeholder="Cerca per utente, email o causale..." 
+                  className="pl-9 bg-background/50 border-border/50 h-10"
+                />
+              </div>
+              
+              <div className="flex flex-wrap gap-2">
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-[140px] bg-background/50 border-border/50 h-10">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutti gli status</SelectItem>
-                    <SelectItem value="pending">pending</SelectItem>
-                    <SelectItem value="approved">approved</SelectItem>
-                    <SelectItem value="rejected">rejected</SelectItem>
+                    <SelectItem value="pending">In Attesa</SelectItem>
+                    <SelectItem value="approved">Approvato</SelectItem>
+                    <SelectItem value="rejected">Rifiutato</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="md:col-span-2">
+
                 <Select value={typeFilter} onValueChange={setTypeFilter}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-[140px] bg-background/50 border-border/50 h-10">
                     <SelectValue placeholder="Tipo" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Tutti i tipi</SelectItem>
-                    <SelectItem value="vacation">vacation</SelectItem>
-                    <SelectItem value="sick_leave">sick_leave</SelectItem>
-                    <SelectItem value="personal">personal</SelectItem>
-                    <SelectItem value="late_entry">late_entry</SelectItem>
-                    <SelectItem value="early_exit">early_exit</SelectItem>
-                    <SelectItem value="overtime">overtime</SelectItem>
-                    <SelectItem value="transfer">transfer</SelectItem>
-                    <SelectItem value="remote">remote</SelectItem>
-                    <SelectItem value="ooo">ooo</SelectItem>
+                    <SelectItem value="vacation">Ferie</SelectItem>
+                    <SelectItem value="sick_leave">Malattia</SelectItem>
+                    <SelectItem value="personal">Permesso</SelectItem>
+                    <SelectItem value="remote">Smart Working</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="md:col-span-2">
-                <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Dal" />
-              </div>
-              <div className="md:col-span-2">
-                <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} placeholder="Al" />
-              </div>
 
-              <div className="md:col-span-2">
-                <Input
-                  type="date"
-                  value={createdFrom}
-                  onChange={(e) => setCreatedFrom(e.target.value)}
-                  placeholder="Creato dal"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <Input
-                  type="date"
-                  value={createdTo}
-                  onChange={(e) => setCreatedTo(e.target.value)}
-                  placeholder="Creato al"
-                />
-              </div>
-              <div className="md:col-span-2">
                 <Select value={String(take)} onValueChange={(v) => setTake(Number(v))}>
-                  <SelectTrigger>
+                  <SelectTrigger className="w-[120px] bg-background/50 border-border/50 h-10">
                     <SelectValue placeholder="Per pagina" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="25">25 / pagina</SelectItem>
-                    <SelectItem value="50">50 / pagina</SelectItem>
-                    <SelectItem value="100">100 / pagina</SelectItem>
+                    <SelectItem value="25">25 per pagina</SelectItem>
+                    <SelectItem value="50">50 per pagina</SelectItem>
+                    <SelectItem value="100">100 per pagina</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="md:col-span-2 flex items-center gap-2">
-                <Button variant="outline" onClick={() => setPage(0)}>
-                  Applica
+
+              <div className="flex items-center gap-2 border-l pl-4 border-border/50">
+                <div className="grid grid-cols-2 gap-2">
+                  <Input 
+                    type="date" 
+                    value={from} 
+                    onChange={(e) => setFrom(e.target.value)} 
+                    className="w-[130px] bg-background/50 border-border/50 h-10"
+                  />
+                  <Input 
+                    type="date" 
+                    value={to} 
+                    onChange={(e) => setTo(e.target.value)} 
+                    className="w-[130px] bg-background/50 border-border/50 h-10"
+                  />
+                </div>
+                <Button 
+                  onClick={() => setPage(0)} 
+                  className="bg-blue-600 hover:bg-blue-700 text-white h-10 px-6"
+                >
+                  <Filter className="w-4 h-4 mr-2" /> Applica
                 </Button>
-                <Button variant="outline" onClick={load}>
-                  Aggiorna
+                <Button variant="ghost" size="icon" onClick={load} className="h-10 w-10">
+                  <RefreshCw className="w-4 h-4" />
                 </Button>
               </div>
             </div>
 
-            {/* Bulk actions */}
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 rounded-md border bg-card p-3">
-              <div className="md:col-span-4 flex items-center gap-2">
-                <Button
-                  variant="destructive"
-                  disabled={!anySelected}
-                  onClick={() =>
-                    openConfirm({
-                      mode: "selected",
-                      title: "Elimina richieste selezionate",
-                      description: "Questa azione rimuove definitivamente le richieste selezionate.",
-                      payload: { ids: selectedIds },
-                    })
-                  }
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Elimina selezionate ({selectedIds.length})
-                </Button>
+            {/* Actions & Bulk */}
+            <div className="flex items-center justify-between px-1">
+              <div className="text-sm text-muted-foreground">
+                {selectedIds.length > 0 ? (
+                  <span className="text-primary font-medium">{selectedIds.length} righe selezionate</span>
+                ) : (
+                  <span>Totale: {total} risultati</span>
+                )}
               </div>
-
-              <div className="md:col-span-4 flex items-center gap-2">
-                <Input
-                  type="date"
-                  value={deleteBefore}
-                  onChange={(e) => setDeleteBefore(e.target.value)}
-                  placeholder="Prima di…"
-                />
-                <Button
-                  variant="outline"
-                  disabled={!deleteBefore}
-                  onClick={() =>
-                    openConfirm({
-                      mode: "before",
-                      title: "Elimina richieste create prima di…",
-                      description: "Verranno eliminate tutte le richieste create prima della data selezionata.",
-                      payload: { before: new Date(deleteBefore).toISOString() },
-                    })
-                  }
-                >
-                  DryRun + Elimina
-                </Button>
-              </div>
-
-              <div className="md:col-span-4 flex items-center gap-2">
-                <Input type="date" value={deleteRangeFrom} onChange={(e) => setDeleteRangeFrom(e.target.value)} />
-                <Input type="date" value={deleteRangeTo} onChange={(e) => setDeleteRangeTo(e.target.value)} />
-                <Button
-                  variant="outline"
-                  disabled={!deleteRangeFrom && !deleteRangeTo}
-                  onClick={() =>
-                    openConfirm({
-                      mode: "createdRange",
-                      title: "Elimina richieste nel range creazione",
-                      description: "Verranno eliminate le richieste con createdAt nel range indicato.",
-                      payload: {
-                        createdFrom: deleteRangeFrom ? new Date(deleteRangeFrom).toISOString() : undefined,
-                        createdTo: deleteRangeTo ? new Date(deleteRangeTo).toISOString() : undefined,
-                      },
-                    })
-                  }
-                >
-                  DryRun + Elimina
-                </Button>
+              
+              <div className="flex items-center gap-2">
+                {anySelected && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() =>
+                      openConfirm({
+                        mode: "selected",
+                        title: "Elimina selezionate",
+                        description: "Rimuovere le richieste selezionate?",
+                        payload: { ids: selectedIds },
+                      })
+                    }
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Elimina ({selectedIds.length})
+                  </Button>
+                )}
+                
+                <div className="flex items-center gap-2 bg-card/50 border rounded-lg p-1">
+                  <Input
+                    type="date"
+                    value={deleteBefore}
+                    onChange={(e) => setDeleteBefore(e.target.value)}
+                    className="h-8 w-[130px] border-none bg-transparent"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
+                    disabled={!deleteBefore}
+                    onClick={() =>
+                      openConfirm({
+                        mode: "before",
+                        title: "Pulizia Archivio",
+                        description: `Eliminare tutte le richieste antecedenti al ${deleteBefore}?`,
+                        payload: { before: new Date(deleteBefore).toISOString() },
+                      })
+                    }
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                    DryRun + Elimina
+                  </Button>
+                </div>
               </div>
             </div>
 
             {loading ? (
-              <div className="py-8 flex items-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Caricamento…
+              <div className="py-20 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p>Caricamento archivio...</p>
               </div>
             ) : (
-              <div className="border rounded-md overflow-hidden bg-white">
-                <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/50">
-                  <div className="col-span-1">
-                    <Checkbox checked={allChecked} onCheckedChange={(v) => toggleAllOnPage(Boolean(v))} />
-                  </div>
-                  <div className="col-span-3">Utente</div>
-                  <div className="col-span-2">Tipo</div>
-                  <div className="col-span-2">Periodo</div>
-                  <div className="col-span-2">Status</div>
-                  <div className="col-span-2 text-right">Azioni</div>
-                </div>
-                <div className="divide-y">
-                  {rows.map((r) => {
-                    const b = statusBadge(r.status);
-                    return (
-                      <div
-                        key={r.id}
-                        className="px-4 py-3 flex flex-col gap-3 md:grid md:grid-cols-12 md:gap-3 md:items-center"
-                      >
-                        <div className="md:col-span-1">
-                          <Checkbox checked={selectedIds.includes(r.id)} onCheckedChange={(v) => toggleOne(r.id, Boolean(v))} />
-                        </div>
-                        <div className="md:col-span-3 min-w-0">
-                          <div className="font-medium truncate">{displayName(r.user)}</div>
-                          <div className="text-xs text-muted-foreground truncate">{r.user.email}</div>
-                          <div className="text-[11px] text-muted-foreground truncate">Creato: {formatDateTime(r.createdAt)}</div>
-                        </div>
-                        <div className="md:col-span-2">
-                          <div className="text-xs text-muted-foreground md:hidden mb-1">Tipo</div>
-                          <div className="font-medium">{r.type}</div>
-                          {r.reason ? <div className="text-xs text-muted-foreground line-clamp-2">{r.reason}</div> : null}
-                        </div>
-                        <div className="md:col-span-2">
-                          <div className="text-xs text-muted-foreground md:hidden mb-1">Periodo</div>
-                          <div className="text-sm">
-                            {formatDate(r.startDate)} → {formatDate(r.endDate)}
-                          </div>
-                        </div>
-                        <div className="md:col-span-2">
-                          <Badge variant="outline" className={b.className}>
-                            {b.label}
-                          </Badge>
-                        </div>
-                        <div className="md:col-span-2 md:text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full md:w-auto text-destructive border-destructive hover:bg-destructive hover:text-white"
-                            onClick={() =>
-                              openConfirm({
-                                mode: "row",
-                                title: "Elimina richiesta",
-                                description: `Eliminare definitivamente la richiesta di ${displayName(r.user)} (${r.type})?`,
-                                payload: { rowId: r.id },
-                              })
-                            }
+              <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                <div className="w-full overflow-auto">
+                  <table className="w-full caption-bottom text-sm">
+                    <thead className="[&_tr]:border-b bg-muted/30">
+                      <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[50px]">
+                          <Checkbox checked={allChecked} onCheckedChange={(v) => toggleAllOnPage(Boolean(v))} />
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">UTENTE</th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">TIPO</th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">PERIODO / CAUSALE</th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">STATUS</th>
+                        <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground">AZIONI</th>
+                      </tr>
+                    </thead>
+                    <tbody className="[&_tr:last-child]:border-0">
+                      {rows.map((r) => {
+                        const b = statusBadge(r.status);
+                        const tInfo = getTypeIcon(r.type);
+                        const TypeIcon = tInfo.icon;
+                        const initial = (r.user.firstName?.[0] || r.user.email?.[0] || "U").toUpperCase();
+                        
+                        return (
+                          <tr
+                            key={r.id}
+                            className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                           >
-                            Elimina
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {rows.length === 0 ? (
-                    <div className="p-6 text-sm text-muted-foreground">Nessuna richiesta trovata.</div>
-                  ) : null}
+                            <td className="p-4 align-middle">
+                              <Checkbox checked={selectedIds.includes(r.id)} onCheckedChange={(v) => toggleOne(r.id, Boolean(v))} />
+                            </td>
+                            <td className="p-4 align-middle">
+                              <div className="flex items-center gap-3">
+                                <Avatar className="h-9 w-9 border">
+                                  <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                                    {initial}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <div className="font-semibold text-foreground">{displayName(r.user)}</div>
+                                  <div className="text-xs text-muted-foreground">{r.user.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-4 align-middle">
+                              <div className="flex items-center gap-2">
+                                <div className={`p-1.5 rounded-md bg-muted ${tInfo.color.replace('text-', 'bg-')}/10`}>
+                                  <TypeIcon className={`w-4 h-4 ${tInfo.color}`} />
+                                </div>
+                                <span className="font-medium">{getTypeLabel(r.type)}</span>
+                              </div>
+                            </td>
+                            <td className="p-4 align-middle">
+                              <div className="space-y-1">
+                                <div className="font-semibold">
+                                  {formatDate(r.startDate)} <span className="text-muted-foreground text-xs mx-1">➜</span> {formatDate(r.endDate)}
+                                </div>
+                                {r.reason && (
+                                  <div className="text-xs text-muted-foreground max-w-[300px] truncate" title={r.reason}>
+                                    {r.reason}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-4 align-middle">
+                              <Badge variant="outline" className={`px-2 py-1 gap-1.5 ${b.className}`}>
+                                <b.icon className="w-3.5 h-3.5" />
+                                {b.label}
+                              </Badge>
+                            </td>
+                            <td className="p-4 align-middle text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                onClick={() =>
+                                  openConfirm({
+                                    mode: "row",
+                                    title: "Elimina richiesta",
+                                    description: `Eliminare definitivamente la richiesta di ${displayName(r.user)}?`,
+                                    payload: { rowId: r.id },
+                                  })
+                                }
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {rows.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                            Nessuna richiesta trovata con i filtri correnti.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             )}
 
             {/* Pagination */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between border-t pt-4">
               <div className="text-xs text-muted-foreground">
-                Pagina {page + 1} / {maxPage + 1} · Totale risultati: {total}
+                Pagina {page + 1} di {maxPage + 1}
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" disabled={page <= 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-                  Prev
+                  Precedente
                 </Button>
                 <Button
                   variant="outline"
@@ -516,7 +632,7 @@ export default function AdminAbsencesArchivePage() {
                   disabled={page >= maxPage}
                   onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
                 >
-                  Next
+                  Successiva
                 </Button>
               </div>
             </div>

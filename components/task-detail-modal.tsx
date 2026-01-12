@@ -46,6 +46,7 @@ import { RichTextViewer } from "@/components/ui/rich-text-viewer";
 import { SubtaskChecklists } from "@/components/subtask-checklists";
 import { getHrefForFilePath, getImageSrcForFilePath } from "@/lib/drive-links";
 import { formatEurCents, parseEurToCents } from "@/lib/money";
+import { markTaskNotificationsRead } from "@/lib/notifications-client";
 
 const RichTextEditor = dynamic(
   () => import("@/components/ui/rich-text-editor").then((m) => m.RichTextEditor),
@@ -170,6 +171,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [amountPickerOpen, setAmountPickerOpen] = useState(false);
   const [draftAmountInput, setDraftAmountInput] = useState("");
   const [newSubtask, setNewSubtask] = useState("");
+  const [isCreatingSubtask, setIsCreatingSubtask] = useState(false);
   const [newCommentHtml, setNewCommentHtml] = useState("");
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [mentionedUserIds, setMentionedUserIds] = useState<string[]>([]);
@@ -184,14 +186,17 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [savingTaskTitle, setSavingTaskTitle] = useState(false);
   const [subtaskDetailOpen, setSubtaskDetailOpen] = useState(false);
   const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null);
+  const [isSavingSubtaskMeta, setIsSavingSubtaskMeta] = useState(false);
   const [subtaskAttachments, setSubtaskAttachments] = useState<SubtaskAttachment[]>([]);
   const [subtaskComments, setSubtaskComments] = useState<SubtaskComment[]>([]);
   const [subtaskUploading, setSubtaskUploading] = useState(false);
   const [subtaskDraftDescription, setSubtaskDraftDescription] = useState("");
+  const [isSavingSubtaskDescription, setIsSavingSubtaskDescription] = useState(false);
   const [isEditingSubtaskTitle, setIsEditingSubtaskTitle] = useState(false);
   const [subtaskDraftTitle, setSubtaskDraftTitle] = useState("");
   const [savingSubtaskTitle, setSavingSubtaskTitle] = useState(false);
   const [subtaskNewCommentHtml, setSubtaskNewCommentHtml] = useState("");
+  const [isSendingSubtaskComment, setIsSendingSubtaskComment] = useState(false);
   const [subtaskMentionedUserIds, setSubtaskMentionedUserIds] = useState<string[]>([]);
   const [editingSubtaskCommentId, setEditingSubtaskCommentId] = useState<string | null>(null);
   const [editingSubtaskCommentHtml, setEditingSubtaskCommentHtml] = useState<string>("");
@@ -199,6 +204,18 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [savingSubtaskCommentEdit, setSavingSubtaskCommentEdit] = useState(false);
 
   const didOpenInitialSubtaskRef = useRef<string | null>(null);
+  const didMarkTaskNotificationsReadRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      didMarkTaskNotificationsReadRef.current = null;
+      return;
+    }
+    if (!taskId) return;
+    if (didMarkTaskNotificationsReadRef.current === taskId) return;
+    didMarkTaskNotificationsReadRef.current = taskId;
+    void markTaskNotificationsRead(taskId).catch(() => {});
+  }, [open, taskId]);
 
   useEffect(() => {
     if (open && taskId) {
@@ -415,23 +432,29 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   };
 
   const addSubtask = async () => {
-    if (!newSubtask.trim()) return;
+    const title = newSubtask.trim();
+    if (!title) return;
+    if (!canWriteTask) {
+      toast.error("Non hai permessi per creare subtask");
+      return;
+    }
 
+    setIsCreatingSubtask(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}/subtasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newSubtask }),
+        body: JSON.stringify({ title }),
       });
-
-      if (res.ok) {
-        const subtask = await res.json();
-        setSubtasks([...subtasks, subtask]);
-        setNewSubtask("");
-        toast.success("Subtask aggiunto");
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore durante l'aggiunta del subtask");
+      setSubtasks((prev) => [...prev, data as any]);
+      setNewSubtask("");
+      toast.success("Subtask aggiunto");
     } catch (error) {
-      toast.error("Errore durante l'aggiunta del subtask");
+      toast.error(error instanceof Error ? error.message : "Errore durante l'aggiunta del subtask");
+    } finally {
+      setIsCreatingSubtask(false);
     }
   };
 
@@ -588,6 +611,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
   const saveSubtaskDescription = async () => {
     if (!selectedSubtask) return;
+    if (!canWriteTask) {
+      toast.error("Non hai permessi per modificare la subtask");
+      return;
+    }
+    setIsSavingSubtaskDescription(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}`, {
         method: "PUT",
@@ -603,12 +631,15 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       setSubtasks((prev) => prev.map((s) => (s.id === selectedSubtask.id ? { ...s, description: subtaskDraftDescription } : s)));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Salvataggio fallito");
+    } finally {
+      setIsSavingSubtaskDescription(false);
     }
   };
 
   const updateSelectedSubtaskMeta = async (patch: Record<string, any>) => {
     if (!selectedSubtask) return;
     const subtaskId = selectedSubtask.id;
+    setIsSavingSubtaskMeta(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}`, {
         method: "PUT",
@@ -642,6 +673,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       toast.success("Subtask aggiornata");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Aggiornamento fallito");
+    } finally {
+      setIsSavingSubtaskMeta(false);
     }
   };
 
@@ -761,6 +794,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     }
     const contentHtml = subtaskNewCommentHtml.trim();
     if (!contentHtml || isEffectivelyEmptyRichHtmlClient(contentHtml)) return;
+    setIsSendingSubtaskComment(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/comments`, {
         method: "POST",
@@ -775,6 +809,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       toast.success("Commento aggiunto");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Commento fallito");
+    } finally {
+      setIsSendingSubtaskComment(false);
     }
   };
 

@@ -11,6 +11,7 @@ import { toast } from "react-hot-toast";
 import Link from "next/link";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
+import { markAllRead, markNotificationRead } from "@/lib/notifications-client";
 
 interface Notification {
   id: string;
@@ -56,12 +57,8 @@ export default function NotificationsPage() {
   const markAllAsRead = async () => {
     setMarkingRead(true);
     try {
-      const res = await fetch("/api/notifications", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markAllRead: true }),
-      });
-      if (!res.ok) throw new Error("Errore");
+      const r = await markAllRead();
+      if (!r.ok) throw new Error("Errore");
       await fetchNotifications();
       toast.success("Tutte le notifiche segnate come lette");
     } catch {
@@ -128,11 +125,19 @@ export default function NotificationsPage() {
                       </p>
                     </div>
                     {n.link && (
-                      <Link href={n.link}>
-                        <Button variant="ghost" size="sm">
-                          Apri
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            await markNotificationRead(n.id);
+                          } finally {
+                            router.push(n.link!);
+                          }
+                        }}
+                      >
+                        Apri
+                      </Button>
                     )}
                   </div>
                 </CardContent>

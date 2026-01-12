@@ -5,6 +5,19 @@ import { prisma } from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
 
+export function buildMarkNotificationReadWhere(userId: string, notificationId: string) {
+  return { id: notificationId, userId } as const;
+}
+
+export function buildMarkTaskNotificationsReadWhere(userId: string, taskId: string) {
+  const token = `taskId=${encodeURIComponent(taskId)}`;
+  return {
+    userId,
+    isRead: false,
+    link: { contains: token },
+  } as const;
+}
+
 // GET - List user's notifications
 export async function GET(req: NextRequest) {
   try {
@@ -47,7 +60,7 @@ export async function PUT(req: NextRequest) {
 
     const userId = (session.user as any).id;
     const body = await req.json();
-    const { notificationId, markAllRead } = body;
+    const { notificationId, markAllRead, taskId } = body || {};
 
     if (markAllRead) {
       await prisma.notification.updateMany({
@@ -59,14 +72,27 @@ export async function PUT(req: NextRequest) {
           isRead: true,
         },
       });
-    } else if (notificationId) {
-      await prisma.notification.update({
-        where: { id: notificationId },
+    } else if (typeof notificationId === "string" && notificationId.trim()) {
+      // Safety: ensure we only update notifications owned by the current user
+      await prisma.notification.updateMany({
+        where: buildMarkNotificationReadWhere(userId, notificationId.trim()),
+        data: { isRead: true },
+      });
+    } else if (typeof taskId === "string" && taskId.trim()) {
+      await prisma.notification.updateMany({
+        where: buildMarkTaskNotificationsReadWhere(userId, taskId.trim()),
         data: { isRead: true },
       });
     }
 
-    return NextResponse.json({ message: 'Notification(s) marked as read' });
+    const unreadCount = await prisma.notification.count({
+      where: {
+        userId,
+        isRead: false,
+      },
+    });
+
+    return NextResponse.json({ message: 'Notification(s) marked as read', unreadCount });
   } catch (error) {
     console.error('Update notification error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
