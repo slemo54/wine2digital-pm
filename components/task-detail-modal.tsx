@@ -1300,6 +1300,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                                 )
                               }
                             >
+                              {isSavingMeta ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                               Salva
                             </Button>
                     </div>
@@ -1555,6 +1556,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               disabled={isSavingMeta}
                               onClick={() => void saveSelectedTags().then(() => setTagsPickerOpen(false))}
                             >
+                              {isSavingMeta ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                               Salva
                             </Button>
                           </div>
@@ -1632,6 +1634,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                                 Annulla
                               </Button>
                               <Button size="sm" disabled={isSavingMeta} onClick={() => void saveAmount()}>
+                                {isSavingMeta ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                                 Salva
                               </Button>
                             </div>
@@ -1819,12 +1822,22 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           placeholder="Aggiungi un subtask..."
                           value={newSubtask}
                           onChange={(e) => setNewSubtask(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && canWriteTask && addSubtask()}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return;
+                        if (!canWriteTask || isCreatingSubtask) return;
+                        e.preventDefault();
+                        void addSubtask();
+                      }}
                           className="flex-1"
-                      disabled={!canWriteTask}
+                      disabled={!canWriteTask || isCreatingSubtask}
                         />
-                    <Button onClick={addSubtask} size="sm" variant="outline" disabled={!canWriteTask}>
-                          <Plus className="w-4 h-4" />
+                    <Button
+                      onClick={() => void addSubtask()}
+                      size="sm"
+                      variant="outline"
+                      disabled={!canWriteTask || isCreatingSubtask || !newSubtask.trim()}
+                    >
+                      {isCreatingSubtask ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                         </Button>
                       </div>
                     </div>
@@ -2120,7 +2133,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     (selectedSubtask?.completed ? "done" : "todo")
                   }
                   onValueChange={(v) => updateSelectedSubtaskMeta({ status: v })}
-                  disabled={!selectedSubtask || !canWriteTask}
+                  disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskMeta}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Stato" />
@@ -2138,7 +2151,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                 <Select
                   value={selectedSubtask?.priority || "medium"}
                   onValueChange={(v) => updateSelectedSubtaskMeta({ priority: v })}
-                  disabled={!selectedSubtask || !canWriteTask}
+                  disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskMeta}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Priorità" />
@@ -2164,7 +2177,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         const v = e.target.value;
                     updateSelectedSubtaskMeta({ dueDate: v ? new Date(v).toISOString() : null });
                   }}
-                  disabled={!selectedSubtask || !canWriteTask}
+                  disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskMeta}
                 />
               </div>
 
@@ -2173,7 +2186,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                 <Select
                   value={selectedSubtask?.assigneeId || "__none__"}
                   onValueChange={(v) => updateSelectedSubtaskMeta({ assigneeId: v === "__none__" ? null : v })}
-                  disabled={!selectedSubtask || !canAssignSubtask}
+                  disabled={!selectedSubtask || !canAssignSubtask || isSavingSubtaskMeta}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Seleziona" />
@@ -2268,10 +2281,15 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
               value={subtaskDraftDescription}
               onChange={(e) => setSubtaskDraftDescription(e.target.value)}
               placeholder="Aggiungi una descrizione..."
-              disabled={!selectedSubtask}
+              disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskDescription || isSavingSubtaskMeta}
             />
             <div className="flex justify-end">
-              <Button variant="outline" onClick={saveSubtaskDescription} disabled={!selectedSubtask}>
+              <Button
+                variant="outline"
+                onClick={saveSubtaskDescription}
+                disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskDescription || isSavingSubtaskMeta}
+              >
+                {isSavingSubtaskDescription ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Salva descrizione
               </Button>
                 </div>
@@ -2449,7 +2467,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                   setSubtaskMentionedUserIds(ids);
                 }}
                 mentionUsers={mentionUsers}
-                disabled={!selectedSubtask || !canWriteTask || savingSubtaskCommentEdit}
+                disabled={!selectedSubtask || !canWriteTask || savingSubtaskCommentEdit || isSendingSubtaskComment}
                 placeholder="Scrivi un commento…"
                 onUploadImage={async (file) => {
                   const uploaded = await uploadSubtaskAttachment(file);
@@ -2465,10 +2483,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     !selectedSubtask ||
                     !canWriteTask ||
                     savingSubtaskCommentEdit ||
+                    isSendingSubtaskComment ||
                     !subtaskNewCommentHtml.trim() ||
                     isEffectivelyEmptyRichHtmlClient(subtaskNewCommentHtml)
                   }
                 >
+                  {isSendingSubtaskComment ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Invia
                 </Button>
               </div>
