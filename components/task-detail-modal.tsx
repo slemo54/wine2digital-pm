@@ -218,8 +218,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     if (!taskId) return;
     if (didMarkTaskNotificationsReadRef.current === taskId) return;
     didMarkTaskNotificationsReadRef.current = taskId;
-    // Mark as read when opening the task, but do NOT auto-read comment-mention notifications yet.
-    void markTaskNotificationsRead(taskId, { excludeTypes: ["subtask_mentioned", "task_mentioned"] }).catch(() => {});
+    // Auto-read on open (task-level). Do NOT auto-read subtask-specific mentions unless the subtask is opened.
+    void markTaskNotificationsRead(taskId, { excludeTypes: ["subtask_mentioned"] }).catch(() => {});
   }, [open, taskId]);
 
   useEffect(() => {
@@ -239,9 +239,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     const key = `${taskId}:${selectedSubtask.id}`;
     if (didMarkSubtaskMentionsReadRef.current === key) return;
     didMarkSubtaskMentionsReadRef.current = key;
-    void markTaskNotificationsRead(taskId, { subtaskId: selectedSubtask.id, types: ["subtask_mentioned"] }).catch(
-      () => {}
-    );
+    // Auto-read on open (subtask-level): mark anything linked to this subtask as read.
+    void markTaskNotificationsRead(taskId, { subtaskId: selectedSubtask.id }).catch(() => {});
   }, [open, taskId, subtaskDetailOpen, selectedSubtask?.id]);
 
   useEffect(() => {

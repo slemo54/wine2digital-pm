@@ -129,7 +129,8 @@ export default function DashboardPage() {
 
   const fetchMyTasks = async () => {
     try {
-      const response = await fetch("/api/tasks?scope=assigned&page=1&pageSize=25");
+      // Keep this aligned with /tasks?scope=assigned (pageSize=100)
+      const response = await fetch("/api/tasks?scope=assigned&page=1&pageSize=100");
       const data = await response.json();
       setMyTasks(Array.isArray(data?.tasks) ? data.tasks : []);
     } catch {
@@ -141,7 +142,8 @@ export default function DashboardPage() {
 
   const fetchMySubtasks = async () => {
     try {
-      const response = await fetch("/api/subtasks?scope=assigned&page=1&pageSize=25");
+      // Keep this aligned with /tasks?scope=assigned subtasks fetch (pageSize=100)
+      const response = await fetch("/api/subtasks?scope=assigned&page=1&pageSize=100");
       const data = await response.json();
       setMySubtasks(Array.isArray(data?.subtasks) ? data.subtasks : []);
     } catch {
