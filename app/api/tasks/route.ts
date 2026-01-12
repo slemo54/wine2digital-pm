@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
+import { buildTaskAssignedNotifications, normalizeUserIdList } from "@/lib/task-assignment-notifications";
 
 export const dynamic = 'force-dynamic';
 
@@ -153,6 +154,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let normalizedAssigneeIds: string[] | undefined = undefined;
+    if (assigneeIds !== undefined) {
+      const tmp = normalizeUserIdList(assigneeIds);
+      if (tmp === null) {
+        return NextResponse.json({ error: "assigneeIds must be an array" }, { status: 400 });
+      }
+      normalizedAssigneeIds = tmp;
+    }
+
     // Permissions: admin always; manager/member only if project member
     if (role !== 'admin') {
       const member = await prisma.projectMember.findUnique({
@@ -203,11 +213,9 @@ export async function POST(req: NextRequest) {
         status: status || 'todo',
         dueDate: dueDate ? new Date(dueDate) : null,
         ...(resolvedListId ? { listId: resolvedListId } : {}),
-        assignees: assigneeIds && Array.isArray(assigneeIds) && assigneeIds.length > 0
+        assignees: normalizedAssigneeIds && normalizedAssigneeIds.length > 0
           ? {
-            create: assigneeIds.map((userId: string) => ({
-              userId,
-            })),
+            create: normalizedAssigneeIds.map((uid: string) => ({ userId: uid })),
           }
           : undefined,
       },
@@ -227,6 +235,28 @@ export async function POST(req: NextRequest) {
         },
       },
     });
+
+    // In-app notifications for initial assignees (best-effort)
+    if (normalizedAssigneeIds && normalizedAssigneeIds.length > 0) {
+      const actorId = String(userId || "");
+      const added = normalizedAssigneeIds.filter((id) => id && id !== actorId);
+      if (added.length > 0) {
+        const actorLabel = String((session.user as any)?.name || (session.user as any)?.email || "Un collega");
+        const project = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }).catch(() => null);
+        const items = buildTaskAssignedNotifications({
+          assigneeIds: added,
+          actorLabel,
+          taskId: task.id,
+          taskTitle: String(task.title || "Task"),
+          projectName: project?.name ? String(project.name) : null,
+        });
+        try {
+          await prisma.notification.createMany({ data: items });
+        } catch (e) {
+          console.error("Task assignment notification failed:", e);
+        }
+      }
+    }
 
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
+import { buildTaskAssignedNotifications, getAddedAssigneeIds, normalizeUserIdList } from "@/lib/task-assignment-notifications";
 
 const DEFAULT_LIST_NAME = "Untitled list";
 
@@ -181,8 +182,17 @@ export async function PUT(
       }
     }
 
-    if (assigneeIds && role !== "admin" && role !== "manager" && !isProjectManager) {
+    if (assigneeIds !== undefined && role !== "admin" && role !== "manager" && !isProjectManager) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+    }
+
+    let normalizedAssigneeIds: string[] | undefined = undefined;
+    if (assigneeIds !== undefined) {
+      const tmp = normalizeUserIdList(assigneeIds);
+      if (tmp === null) {
+        return NextResponse.json({ error: "assigneeIds must be an array" }, { status: 400 });
+      }
+      normalizedAssigneeIds = tmp;
     }
 
     if (
@@ -291,11 +301,11 @@ export async function PUT(
         ...(normalizedTagIds !== undefined
           ? { tags: { set: resolvedTags?.map((t) => ({ id: t.id })) || [] } }
           : {}),
-        ...(assigneeIds && Array.isArray(assigneeIds)
+        ...(normalizedAssigneeIds !== undefined
           ? {
               assignees: {
                 deleteMany: {},
-                create: assigneeIds.map((uid: string) => ({ userId: uid })),
+                create: normalizedAssigneeIds.map((uid: string) => ({ userId: uid })),
               },
             }
           : {}),
@@ -353,13 +363,6 @@ export async function PUT(
     if (normalizedAmountCents !== undefined && normalizedAmountCents !== existing.amountCents) {
       changes.push({ type: "task.amount_changed", metadata: { from: existing.amountCents ?? null, to: normalizedAmountCents } });
     }
-    if (assigneeIds && Array.isArray(assigneeIds)) {
-      const prev = existing.assignees.map((a) => a.userId).sort();
-      const next = assigneeIds.map(String).sort();
-      if (JSON.stringify(prev) !== JSON.stringify(next)) {
-        changes.push({ type: "task.assignees_changed", metadata: { from: prev, to: next } });
-      }
-    }
     if (typeof normalizedLegacyTags === "string" || legacyTags === null) {
       if ((existing.legacyTags || null) !== (legacyTags === null ? null : normalizedLegacyTags || null)) {
         changes.push({
@@ -375,6 +378,13 @@ export async function PUT(
         changes.push({ type: "task.tags_changed", metadata: { from: prev, to: next } });
       }
     }
+    if (normalizedAssigneeIds !== undefined) {
+      const prevAssignees = existing.assignees.map((a) => a.userId).sort();
+      const nextAssignees = normalizedAssigneeIds.slice().sort();
+      if (JSON.stringify(prevAssignees) !== JSON.stringify(nextAssignees)) {
+        changes.push({ type: "task.assignees_changed", metadata: { from: prevAssignees, to: nextAssignees } });
+      }
+    }
 
     if (changes.length > 0) {
       await prisma.taskActivity.createMany({
@@ -385,6 +395,30 @@ export async function PUT(
           metadata: c.metadata,
         })),
       });
+    }
+
+    // In-app notifications: notify newly assigned users (best-effort)
+    if (normalizedAssigneeIds !== undefined) {
+      const added = getAddedAssigneeIds({
+        prevAssigneeIds: existing.assignees.map((a) => a.userId),
+        nextAssigneeIds: normalizedAssigneeIds,
+        actorUserId: userId,
+      });
+      if (added.length > 0) {
+        const actorLabel = String((session.user as any)?.name || (session.user as any)?.email || "Un collega");
+        const items = buildTaskAssignedNotifications({
+          assigneeIds: added,
+          actorLabel,
+          taskId: params.id,
+          taskTitle: String(updated.title || "Task"),
+          projectName: (updated as any)?.project?.name ? String((updated as any).project.name) : null,
+        });
+        try {
+          await prisma.notification.createMany({ data: items });
+        } catch (e) {
+          console.error("Task assignment notification failed:", e);
+        }
+      }
     }
 
     return NextResponse.json(updated);
