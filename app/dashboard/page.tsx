@@ -38,6 +38,16 @@ type TaskListItem = {
   project: { id: string; name: string };
 };
 
+type SubtaskListItem = {
+  id: string;
+  taskId: string;
+  title: string;
+  status: string;
+  priority: string;
+  dueDate: string | null;
+  task: { id: string; title: string; project: { id: string; name: string } };
+};
+
 type NotificationItem = {
   id: string;
   type: string;
@@ -65,9 +75,11 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
+  const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(true);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
 
   const [myTasks, setMyTasks] = useState<TaskListItem[]>([]);
+  const [mySubtasks, setMySubtasks] = useState<SubtaskListItem[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
@@ -76,10 +88,15 @@ export default function DashboardPage() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
 
   useEffect(() => {
-    const taskParam = searchParams?.get("task");
-    if (taskParam) setSelectedTaskId(taskParam);
+    const taskParam = searchParams?.get("taskId");
+    const subtaskParam = searchParams?.get("subtaskId");
+    if (taskParam) {
+      setSelectedTaskId(taskParam);
+      setSelectedSubtaskId(subtaskParam);
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -92,6 +109,7 @@ export default function DashboardPage() {
     if (status === "authenticated") {
       fetchProjects();
       fetchMyTasks();
+      fetchMySubtasks();
       fetchNotifications();
       fetchActivity();
     }
@@ -118,6 +136,18 @@ export default function DashboardPage() {
       setMyTasks([]);
     } finally {
       setIsLoadingTasks(false);
+    }
+  };
+
+  const fetchMySubtasks = async () => {
+    try {
+      const response = await fetch("/api/subtasks?scope=assigned&page=1&pageSize=25");
+      const data = await response.json();
+      setMySubtasks(Array.isArray(data?.subtasks) ? data.subtasks : []);
+    } catch {
+      setMySubtasks([]);
+    } finally {
+      setIsLoadingSubtasks(false);
     }
   };
 
@@ -166,6 +196,7 @@ export default function DashboardPage() {
 
   const handleTaskCreated = () => {
     fetchMyTasks();
+    fetchMySubtasks();
     fetchProjects();
     fetchNotifications();
     fetchActivity();
@@ -193,16 +224,41 @@ export default function DashboardPage() {
   };
 
   const now = new Date();
-  const isOverdue = (t: TaskListItem) =>
+  const isOverdue = (t: { dueDate: string | null; status: string }) =>
     !!t.dueDate && new Date(t.dueDate).getTime() < now.getTime() && t.status !== "done";
-  const isDueSoon = (t: TaskListItem) => {
+  const isDueSoon = (t: { dueDate: string | null; status: string }) => {
     if (!t.dueDate) return false;
     const due = new Date(t.dueDate).getTime();
     const diffDays = (due - now.getTime()) / (1000 * 60 * 60 * 24);
     return diffDays >= 0 && diffDays <= 7 && t.status !== "done";
   };
 
-  const orderedTasks = [...myTasks].sort((a, b) => {
+  const workItems = [
+    ...myTasks.map((t) => ({
+      kind: "task" as const,
+      taskId: t.id,
+      subtaskId: null as string | null,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      dueDate: t.dueDate,
+      projectName: t.project?.name || "",
+      taskTitle: t.title,
+    })),
+    ...mySubtasks.map((s) => ({
+      kind: "subtask" as const,
+      taskId: s.taskId,
+      subtaskId: s.id,
+      title: s.title,
+      status: s.status,
+      priority: s.priority,
+      dueDate: s.dueDate,
+      projectName: s.task?.project?.name || "",
+      taskTitle: s.task?.title || "",
+    })),
+  ];
+
+  const orderedWorkItems = [...workItems].sort((a, b) => {
     const aScore = (isOverdue(a) ? 100 : 0) + (isDueSoon(a) ? 50 : 0) + (a.priority === "high" ? 10 : 0);
     const bScore = (isOverdue(b) ? 100 : 0) + (isDueSoon(b) ? 50 : 0) + (b.priority === "high" ? 10 : 0);
     return bScore - aScore;
@@ -267,7 +323,7 @@ export default function DashboardPage() {
                 </Button>
               </Link>
 
-              <Link href="/tasks" className="contents">
+              <Link href="/tasks?scope=assigned" className="contents">
                 <Button 
                   variant="outline" 
                   className="h-auto py-4 flex flex-col items-center gap-2 bg-card hover:bg-accent border-border shadow-sm"
@@ -289,37 +345,45 @@ export default function DashboardPage() {
                     <CardTitle className="text-lg">My Tasks</CardTitle>
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {orderedTasks.filter(isOverdue).length} overdue • {orderedTasks.filter(isDueSoon).length} due soon
+                    {orderedWorkItems.filter(isOverdue).length} overdue • {orderedWorkItems.filter(isDueSoon).length} due soon
                   </div>
-                  <Link href="/tasks" className="text-xs text-primary hover:underline">
+                  <Link href="/tasks?scope=assigned" className="text-xs text-primary hover:underline">
                     View all &rarr;
                   </Link>
                 </div>
               </CardHeader>
               <CardContent className="p-4 space-y-3">
-                {isLoadingTasks ? (
+                {isLoadingTasks || isLoadingSubtasks ? (
                   <div className="text-sm text-muted-foreground flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading tasks…
                   </div>
-                ) : orderedTasks.length === 0 ? (
+                ) : orderedWorkItems.length === 0 ? (
                   <div className="text-sm text-muted-foreground py-8 text-center bg-muted/20 rounded-lg border border-dashed">
-                    No assigned tasks yet.
+                    No assigned tasks/subtasks yet.
                   </div>
                 ) : (
-                  orderedTasks.slice(0, 5).map((t) => (
+                  orderedWorkItems.slice(0, 5).map((t) => (
                     <div
-                      key={t.id}
+                      key={`${t.kind}:${t.subtaskId || t.taskId}`}
                       className="group flex items-center justify-between p-3 rounded-lg border border-border/40 bg-card hover:bg-accent/50 hover:border-primary/20 transition-all cursor-pointer"
-                      onClick={() => setSelectedTaskId(t.id)}
+                      onClick={() => {
+                        setSelectedTaskId(t.taskId);
+                        setSelectedSubtaskId(t.subtaskId);
+                        const params = new URLSearchParams(searchParams?.toString() || "");
+                        params.set("taskId", t.taskId);
+                        if (t.subtaskId) params.set("subtaskId", t.subtaskId);
+                        else params.delete("subtaskId");
+                        router.push(`/dashboard?${params.toString()}`);
+                      }}
                     >
                       <div className="flex items-start gap-3 min-w-0">
                         <div className={`mt-1 h-2 w-2 rounded-full ${isOverdue(t) ? 'bg-red-500' : 'bg-blue-500'}`} />
                         <div className="min-w-0">
                           <div className="font-medium truncate text-sm text-foreground group-hover:text-primary transition-colors">
-                            {t.title}
+                            {t.kind === "subtask" ? `↳ ${t.title}` : t.title}
                           </div>
                           <div className="text-xs text-muted-foreground truncate">
-                            {t.project?.name}
+                            {t.kind === "subtask" ? `${t.projectName} • ${t.taskTitle}` : t.projectName}
                             {t.dueDate && ` • Due: ${new Date(t.dueDate).toLocaleDateString()}`}
                           </div>
                         </div>
@@ -328,6 +392,11 @@ export default function DashboardPage() {
                         {isOverdue(t) && (
                           <Badge variant="destructive" className="text-[10px] h-5 px-1.5 uppercase">Overdue</Badge>
                         )}
+                        {t.kind === "subtask" ? (
+                          <Badge variant="secondary" className="text-[10px] h-5 px-1.5 uppercase">
+                            Subtask
+                          </Badge>
+                        ) : null}
                         <Badge variant="outline" className="text-[10px] h-5 px-1.5 uppercase bg-muted/50 border-border">
                           {t.status.replace('_', ' ')}
                         </Badge>
@@ -466,15 +535,18 @@ export default function DashboardPage() {
           open={true}
           onClose={() => {
             setSelectedTaskId(null);
+            setSelectedSubtaskId(null);
             // Pulisce l'URL se era stato aperto via deep link
             const params = new URLSearchParams(window.location.search);
-            if (params.has("task")) {
+            if (params.has("taskId") || params.has("subtaskId")) {
               router.replace("/dashboard");
             }
           }}
           taskId={selectedTaskId}
+          initialSubtaskId={selectedSubtaskId || undefined}
           onUpdate={() => {
             fetchMyTasks();
+            fetchMySubtasks();
             fetchActivity();
           }}
         />

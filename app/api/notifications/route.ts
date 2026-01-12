@@ -60,7 +60,22 @@ export async function PUT(req: NextRequest) {
 
     const userId = (session.user as any).id;
     const body = await req.json();
-    const { notificationId, markAllRead, taskId } = body || {};
+    const { notificationId, markAllRead, taskId, subtaskId, types, excludeTypes } = body || {};
+
+    const normalizeStringArray = (input: unknown): string[] | null => {
+      if (input === undefined) return [];
+      if (!Array.isArray(input)) return null;
+      return Array.from(new Set(input.map((x) => String(x ?? "").trim()).filter(Boolean)));
+    };
+
+    const normalizedTypes = types === undefined ? undefined : normalizeStringArray(types);
+    if (types !== undefined && normalizedTypes === null) {
+      return NextResponse.json({ error: "types must be an array of strings" }, { status: 400 });
+    }
+    const normalizedExcludeTypes = excludeTypes === undefined ? undefined : normalizeStringArray(excludeTypes);
+    if (excludeTypes !== undefined && normalizedExcludeTypes === null) {
+      return NextResponse.json({ error: "excludeTypes must be an array of strings" }, { status: 400 });
+    }
 
     if (markAllRead) {
       await prisma.notification.updateMany({
@@ -79,8 +94,23 @@ export async function PUT(req: NextRequest) {
         data: { isRead: true },
       });
     } else if (typeof taskId === "string" && taskId.trim()) {
+      const base = buildMarkTaskNotificationsReadWhere(userId, taskId.trim());
+      const and: any[] = [{ link: (base as any).link }];
+      if (typeof subtaskId === "string" && subtaskId.trim()) {
+        and.push({ link: { contains: `subtaskId=${encodeURIComponent(subtaskId.trim())}` } });
+      }
+      if (normalizedTypes && normalizedTypes.length > 0) {
+        and.push({ type: { in: normalizedTypes } });
+      }
+      if (normalizedExcludeTypes && normalizedExcludeTypes.length > 0) {
+        and.push({ type: { notIn: normalizedExcludeTypes } });
+      }
       await prisma.notification.updateMany({
-        where: buildMarkTaskNotificationsReadWhere(userId, taskId.trim()),
+        where: {
+          userId,
+          isRead: false,
+          AND: and,
+        },
         data: { isRead: true },
       });
     }

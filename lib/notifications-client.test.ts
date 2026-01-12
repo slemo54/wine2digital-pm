@@ -122,6 +122,36 @@ test("markTaskNotificationsRead: PUT /api/notifications with taskId and emits ev
   }
 });
 
+test("markTaskNotificationsRead: supports subtaskId/types/excludeTypes in body", async () => {
+  const g = globalThis as any;
+  const prevFetch = g.fetch;
+  const prevWindow = g.window;
+  try {
+    g.window = { dispatchEvent: () => true };
+    let called: any = null;
+    g.fetch = async (input: any, init: any) => {
+      called = { input, init };
+      return { ok: true, json: async () => ({ unreadCount: 9 }) } as any;
+    };
+    const r = await markTaskNotificationsRead("t1", {
+      subtaskId: "s1",
+      types: ["subtask_mentioned"],
+      excludeTypes: ["task_mentioned"],
+    });
+    assert.equal(r.ok, true);
+    assert.equal(r.unreadCount, 9);
+    assert.equal(called.input, "/api/notifications");
+    assert.equal(
+      called.init.body,
+      JSON.stringify({ taskId: "t1", subtaskId: "s1", types: ["subtask_mentioned"], excludeTypes: ["task_mentioned"] })
+    );
+  } finally {
+    g.fetch = prevFetch;
+    if (prevWindow === undefined) delete g.window;
+    else g.window = prevWindow;
+  }
+});
+
 test("markNotificationRead: returns ok=false for empty id without calling fetch", async () => {
   const g = globalThis as any;
   const prevFetch = g.fetch;

@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, Plus, Trash2, Archive, ChevronLeft, ChevronRight, SortAsc, SortDesc, Pencil, Download } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Archive, ChevronLeft, ChevronRight, SortAsc, SortDesc, Pencil, Download, Folder, PlayCircle, CheckCircle2, BarChart, ListTodo, Search, Filter, RefreshCw } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { cn } from "@/lib/utils";
@@ -88,6 +88,18 @@ export default function ProjectsPage() {
   const [isBulkLoading, setIsBulkLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const stats = useMemo(() => {
+    const totalProjects = pagination?.total ?? projects.length;
+    // Note: These stats are based on the current page. For global stats, a dedicated API endpoint is needed.
+    const running = projects.filter(p => p.status === 'running').length;
+    const avgCompletion = projects.length > 0
+      ? Math.round(projects.reduce((acc, p) => acc + p.completionRate, 0) / projects.length)
+      : 0;
+    const finishedTasks = projects.reduce((acc, p) => acc + p.tasksCompleted, 0);
+
+    return { totalProjects, running, avgCompletion, finishedTasks };
+  }, [projects, pagination]);
 
   // Filters & sorting from URL
   const page = parseInt(searchParams.get("page") || "1", 10);
@@ -615,496 +627,381 @@ export default function ProjectsPage() {
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen min-h-[100dvh] bg-secondary">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8">
+      <div className="min-h-screen min-h-[100dvh] bg-background text-foreground">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-8 space-y-8">
+          
           {/* Header */}
-          <div className="mb-6 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <Link href="/dashboard">
-                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-foreground mb-2">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Dashboard
-                </Button>
-              </Link>
-              <h1 className="text-3xl font-bold text-foreground">Projects</h1>
-              <p className="text-muted-foreground mt-1">Gestisci i progetti e lo stato di avanzamento.</p>
+              <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
+              <p className="text-muted-foreground mt-1">Manage your projects and their real-time progress efficiently.</p>
             </div>
             <div className="flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" disabled={isExporting || (pagination?.total ?? projects.length) === 0}>
                     <Download className="mr-2 h-4 w-4" />
-                    {isExporting ? "Export…" : "Export"}
+                    {isExporting ? "Export..." : "Export CSV"}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => void exportProjects("csv")} disabled={isExporting}>
-                    Export CSV
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void exportProjectsXls()} disabled={isExporting}>
-                    Export XLS
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void exportProjects("json")} disabled={isExporting}>
-                    Export JSON
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => toast("Exporta i risultati attualmente filtrati/ordinati.")}
-                    disabled
-                  >
-                    Usa i filtri per ridurre i dati
-                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void exportProjects("csv")} disabled={isExporting}>Export CSV</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void exportProjectsXls()} disabled={isExporting}>Export XLS</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void exportProjects("json")} disabled={isExporting}>Export JSON</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button onClick={() => setShowCreateDialog(true)} className="bg-primary hover:bg-primary/90 text-white">
-                <Plus className="mr-2 h-4 w-4" />
-                Add Project
+              <Button onClick={() => setShowCreateDialog(true)} className="bg-orange-600 hover:bg-orange-700 text-white">
+                <Plus className="mr-2 h-4 w-4" /> New Project
               </Button>
             </div>
           </div>
 
-        {/* Filters */}
-        <Card className="mb-4">
-          <CardContent className="p-4 grid grid-cols-1 md:grid-cols-5 gap-3">
-            <div className="md:col-span-2">
-              <Input
-                placeholder="Search by name or description"
-                defaultValue={search}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    updateQuery({ search: (e.target as HTMLInputElement).value });
-                  }
-                }}
-              />
-            </div>
-            <div>
-              <select
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                value={statusFilter}
-                onChange={(e) => updateQuery({ status: e.target.value })}
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Input
-                type="date"
-                value={startDate}
-                onChange={(e) => updateQuery({ startDate: e.target.value })}
-              />
-            </div>
-            <div>
-              <Input
-                type="date"
-                value={endDate}
-                onChange={(e) => updateQuery({ endDate: e.target.value })}
-              />
-            </div>
-          </CardContent>
-        </Card>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="bg-card/50 border-border/50 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <Folder className="w-4 h-4 text-blue-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Projects</span>
+                </div>
+                <div className="text-3xl font-bold">{stats.totalProjects}</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/50 border-border/50 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <PlayCircle className="w-4 h-4 text-purple-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Running Now</span>
+                </div>
+                <div className="text-3xl font-bold text-purple-500">{stats.running}</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/50 border-border/50 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <BarChart className="w-4 h-4 text-orange-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Avg. Completion</span>
+                </div>
+                <div className="text-3xl font-bold text-orange-500">{stats.avgCompletion}%</div>
+              </CardContent>
+            </Card>
+            <Card className="bg-card/50 border-border/50 shadow-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Finished Tasks</span>
+                </div>
+                <div className="text-3xl font-bold text-green-500">{stats.finishedTasks}</div>
+              </CardContent>
+            </Card>
+          </div>
 
-        {/* Bulk actions */}
-        <div className="flex items-center gap-2 mb-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={selectedProjects.size === 0 || isBulkLoading}
-            onClick={() => bulkAction("archive")}
-          >
-            <Archive className="h-4 w-4 mr-2" />
-            Archive selected
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={selectedProjects.size === 0 || isBulkLoading}
-            onClick={() => bulkAction("delete")}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete selected
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            {selectedProjects.size} selected
-          </span>
-        </div>
-
-        {/* Projects Table */}
-        <Card className="bg-white">
-          <CardContent className="p-0">
-            {error && (
-              <div className="p-4 text-sm text-destructive">{error}</div>
-            )}
-            {projects.length === 0 && !error ? (
-              <div className="flex flex-col items-center justify-center py-16">
-                <p className="text-muted-foreground mb-4">No projects found</p>
-                <Button onClick={() => setShowCreateDialog(true)} variant="outline">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Your First Project
-                </Button>
+          <div className="space-y-4">
+            {/* Filters Bar */}
+            <div className="flex flex-col lg:flex-row gap-4 p-4 rounded-xl border bg-card/80 backdrop-blur-sm shadow-sm items-start lg:items-center justify-between">
+              <div className="relative flex-1 w-full lg:max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search projects..."
+                  defaultValue={search}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      updateQuery({ search: (e.target as HTMLInputElement).value });
+                    }
+                  }}
+                  className="pl-9 bg-background/50 border-border/50 h-10 w-full"
+                />
               </div>
-            ) : (
-              <>
-                {/* Mobile cards */}
-                <div className="sm:hidden divide-y">
-                  <div className="p-4 bg-gray-50 border-b flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      className="rounded border-gray-300"
-                      checked={isAllSelected}
-                      onChange={(e) => toggleSelectAll(e.target.checked)}
-                    />
-                    <div className="text-sm text-muted-foreground">Seleziona tutti</div>
-                  </div>
-
-                  {projects.map((project) => {
-                    const perms = getProjectPermissions(project);
-                    const editTooltip = perms.canEdit ? "Modifica progetto" : getPermissionTooltip("edit");
-                    const archiveTooltip =
-                      project.status === "archived"
-                        ? "Progetto già archiviato."
-                        : perms.canArchive
-                          ? "Archivia progetto"
-                          : getPermissionTooltip("archive");
-                    const deleteTooltip = perms.canDelete ? "Elimina progetto" : getPermissionTooltip("delete");
-
-                    return (
-                      <div key={project.id} className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-start gap-3 min-w-0">
-                            <input
-                              type="checkbox"
-                              className="mt-1 rounded border-gray-300"
-                              checked={selectedProjects.has(project.id)}
-                              onChange={(e) => toggleSelect(project.id, e.target.checked)}
-                            />
-                            <div className="min-w-0">
-                              <Link href={`/project/${project.id}`} className="hover:underline">
-                                <div className="text-sm font-medium text-foreground truncate">{project.name}</div>
-                              </Link>
-                              <div className="text-xs text-muted-foreground">Creato: {formatDate(project.createdAt)}</div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col items-end gap-2">
-                            {getStatusBadge(project.status)}
-                            <div className="flex items-center gap-1">
-                              <ActionIconButton
-                                tooltip={editTooltip}
-                                disabled={!perms.canEdit}
-                                onClick={() => openEditProject(project)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </ActionIconButton>
-                              <ActionIconButton
-                                tooltip={archiveTooltip}
-                                disabled={!perms.canArchive || project.status === "archived"}
-                                onClick={() => void archiveSingleProject(project)}
-                              >
-                                <Archive className="h-4 w-4" />
-                              </ActionIconButton>
-                              <ActionIconButton
-                                tooltip={deleteTooltip}
-                                disabled={!perms.canDelete}
-                                onClick={() => void deleteSingleProject(project)}
-                                className="text-destructive"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </ActionIconButton>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <div className="text-muted-foreground">Owner</div>
-                            <div className="text-foreground truncate">
-                              {project.creator?.name ||
-                                `${project.creator?.firstName || ""} ${project.creator?.lastName || ""}`.trim() ||
-                                project.creator?.email ||
-                                "—"}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-muted-foreground">Start</div>
-                            <div className="text-foreground">{formatDate(project.startDate)}</div>
-                          </div>
-                          <div>
-                            <div className="text-muted-foreground">End</div>
-                            <div className="text-foreground">{formatDate(project.endDate)}</div>
-                          </div>
-                          <div>
-                            <div className="text-muted-foreground">Completamento</div>
-                            <div className="text-foreground">{project.completionRate}%</div>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 flex items-center gap-2">
-                          <div className="flex-1">
-                            <Progress value={project.completionRate} className="h-2" />
-                            <div className="text-xs text-muted-foreground mt-1">
-                              {project.tasksCompleted}/{project.tasksTotal} tasks
-                            </div>
-                          </div>
-                          <div className="flex items-center -space-x-2">
-                            {project.members.slice(0, 4).map((member, idx) => (
-                              <Avatar
-                                key={member.user.id}
-                                className="h-8 w-8 border-2 border-white"
-                                style={{ zIndex: project.members.length - idx }}
-                              >
-                                <AvatarFallback className="bg-accent text-foreground text-xs">
-                                  {getInitials(member.user.name, member.user.firstName, member.user.lastName)}
-                                </AvatarFallback>
-                              </Avatar>
-                            ))}
-                            {project.members.length > 4 ? (
-                              <div className="h-8 w-8 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center text-xs text-gray-600 font-medium">
-                                +{project.members.length - 4}
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+              
+              <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                <select
+                  className="h-10 rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  value={statusFilter}
+                  onChange={(e) => updateQuery({ status: e.target.value })}
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => updateQuery({ startDate: e.target.value })}
+                    className="bg-background/50 border-border/50 h-10 w-auto"
+                  />
+                  <span className="text-muted-foreground">-</span>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => updateQuery({ endDate: e.target.value })}
+                    className="bg-background/50 border-border/50 h-10 w-auto"
+                  />
                 </div>
 
-                {/* Desktop table */}
-                <div className="hidden sm:block overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-muted/50 border-b">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                          <input
-                            type="checkbox"
-                            className="rounded border-gray-300"
-                            checked={isAllSelected}
-                            onChange={(e) => toggleSelectAll(e.target.checked)}
-                          />
-                        </th>
-                        {columns.map((col) => (
-                          <th
-                            key={col.key}
-                            className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider select-none"
-                          >
-                            <button
-                              type="button"
-                              className={cn(
-                                "flex items-center gap-1",
-                                col.sortable ? "hover:text-foreground text-muted-foreground" : "text-muted-foreground cursor-default"
-                              )}
-                              onClick={col.sortable ? () => handleSort(col.key as OrderBy) : undefined}
-                              disabled={!col.sortable}
-                            >
-                              {col.label}
-                              {col.sortable && sortIcon(col.key as OrderBy)}
-                            </button>
-                          </th>
-                        ))}
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {projects.map((project) => {
-                        const perms = getProjectPermissions(project);
-                        const editTooltip = perms.canEdit ? "Modifica progetto" : getPermissionTooltip("edit");
-                        const archiveTooltip =
-                          project.status === "archived"
-                            ? "Progetto già archiviato."
-                            : perms.canArchive
-                              ? "Archivia progetto"
-                              : getPermissionTooltip("archive");
-                        const deleteTooltip = perms.canDelete ? "Elimina progetto" : getPermissionTooltip("delete");
+                <div className="flex items-center gap-2 ml-auto">
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    disabled={selectedProjects.size === 0 || isBulkLoading}
+                    onClick={() => bulkAction("delete")}
+                    className="h-10 w-10"
+                    title="Delete Selected"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    disabled={selectedProjects.size === 0 || isBulkLoading}
+                    onClick={() => bulkAction("archive")}
+                    className="h-10 w-10 border-border/50"
+                    title="Archive Selected"
+                  >
+                    <Archive className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
 
-                        return (
-                          <tr key={project.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-4 whitespace-nowrap">
+            {/* Projects Table */}
+            <Card className="border-border/50 bg-card/50 shadow-sm overflow-hidden">
+              <CardContent className="p-0">
+                {error && (
+                  <div className="p-4 text-sm text-destructive bg-destructive/10 border-b border-destructive/20">{error}</div>
+                )}
+                {projects.length === 0 && !error ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <Folder className="h-12 w-12 mb-4 opacity-20" />
+                    <p className="mb-4">No projects found</p>
+                    <Button onClick={() => setShowCreateDialog(true)} variant="outline">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Your First Project
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Desktop table */}
+                    <div className="w-full overflow-auto">
+                      <table className="w-full caption-bottom text-sm">
+                        <thead className="[&_tr]:border-b bg-muted/30">
+                          <tr className="border-b border-border/50 transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
+                            <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[50px]">
                               <input
                                 type="checkbox"
-                                className="rounded border-gray-300"
-                                checked={selectedProjects.has(project.id)}
-                                onChange={(e) => toggleSelect(project.id, e.target.checked)}
+                                className="rounded border-border/50 bg-background"
+                                checked={isAllSelected}
+                                onChange={(e) => toggleSelectAll(e.target.checked)}
                               />
-                            </td>
-                            <td className="px-4 py-4 align-top">
-                              <Link href={`/project/${project.id}`} className="hover:underline">
-                                <div className="text-sm font-medium text-foreground">{project.name}</div>
-                                <div className="text-xs text-muted-foreground">Created: {formatDate(project.createdAt)}</div>
-                              </Link>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap align-top">{getStatusBadge(project.status)}</td>
-                            <td className="px-4 py-4 whitespace-nowrap align-top">
-                              <div className="text-sm text-foreground">
-                                {project.creator?.name ||
-                                  `${project.creator?.firstName || ""} ${project.creator?.lastName || ""}`.trim() ||
-                                  project.creator?.email ||
-                                  "—"}
-                              </div>
-                              <div className="text-xs text-muted-foreground">{project.creator?.email || "—"}</div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap align-top">
-                              <div className="text-sm text-foreground">{formatDate(project.startDate)}</div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap align-top">
-                              <div className="text-sm text-foreground">{formatDate(project.endDate)}</div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap align-top">
-                              <div className="flex items-center gap-2">
-                                <div className="w-24">
-                                  <Progress value={project.completionRate} className="h-2" />
-                                </div>
-                                <span className="text-sm text-foreground font-medium min-w-[3rem]">
-                                  {project.completionRate}%
-                                </span>
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {project.tasksCompleted}/{project.tasksTotal} tasks
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 align-top">
-                              <div className="text-sm text-foreground line-clamp-2 max-w-xs">{project.description || "—"}</div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap align-top">
-                              <div className="flex items-center -space-x-2">
-                                {project.members.slice(0, 4).map((member, idx) => (
-                                  <Avatar
-                                    key={member.user.id}
-                                    className="h-8 w-8 border-2 border-white"
-                                    style={{ zIndex: project.members.length - idx }}
-                                  >
-                                    <AvatarFallback className="bg-accent text-foreground text-xs">
-                                      {getInitials(member.user.name, member.user.firstName, member.user.lastName)}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                ))}
-                                {project.members.length > 4 && (
-                                  <div className="h-8 w-8 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center text-xs text-gray-600 font-medium">
-                                    +{project.members.length - 4}
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-right align-top">
-                              <div className="flex justify-end gap-1">
-                                <ActionIconButton
-                                  tooltip={editTooltip}
-                                  disabled={!perms.canEdit}
-                                  onClick={() => openEditProject(project)}
+                            </th>
+                            {columns.map((col) => (
+                              <th
+                                key={col.key}
+                                className="h-12 px-4 text-left align-middle font-medium text-muted-foreground uppercase tracking-wider text-xs"
+                              >
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    "flex items-center gap-1 hover:text-foreground transition-colors",
+                                    !col.sortable && "cursor-default"
+                                  )}
+                                  onClick={col.sortable ? () => handleSort(col.key as OrderBy) : undefined}
+                                  disabled={!col.sortable}
                                 >
-                                  <Pencil className="h-4 w-4" />
-                                </ActionIconButton>
-                                <ActionIconButton
-                                  tooltip={archiveTooltip}
-                                  disabled={!perms.canArchive || project.status === "archived"}
-                                  onClick={() => void archiveSingleProject(project)}
-                                >
-                                  <Archive className="h-4 w-4" />
-                                </ActionIconButton>
-                                <ActionIconButton
-                                  tooltip={deleteTooltip}
-                                  disabled={!perms.canDelete}
-                                  onClick={() => void deleteSingleProject(project)}
-                                  className="text-destructive"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </ActionIconButton>
-                              </div>
-                            </td>
+                                  {col.label}
+                                  {col.sortable && sortIcon(col.key as OrderBy)}
+                                </button>
+                              </th>
+                            ))}
+                            <th className="h-12 px-4 text-right align-middle font-medium text-muted-foreground uppercase tracking-wider text-xs">
+                              Actions
+                            </th>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody className="[&_tr:last-child]:border-0">
+                          {projects.map((project) => {
+                            const perms = getProjectPermissions(project);
+                            const editTooltip = perms.canEdit ? "Modifica progetto" : getPermissionTooltip("edit");
+                            const archiveTooltip =
+                              project.status === "archived"
+                                ? "Progetto già archiviato."
+                                : perms.canArchive
+                                  ? "Archivia progetto"
+                                  : getPermissionTooltip("archive");
+                            const deleteTooltip = perms.canDelete ? "Elimina progetto" : getPermissionTooltip("delete");
 
-                {/* Pagination */}
-                {pagination && pagination.totalPages > 1 && (
-                  <div className="px-6 py-4 border-t bg-gray-50 flex items-center justify-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(page - 1)}
-                      disabled={!pagination.hasPrev}
-                    >
-                      <ChevronLeft className="h-4 w-4 mr-1" />
-                      Previous
-                    </Button>
-                    <div className="flex items-center gap-1">
-                      {Array.from({ length: Math.min(pagination.totalPages, 10) }, (_, i) => {
-                        let pageNum: number;
-                        if (pagination.totalPages <= 10) {
-                          pageNum = i + 1;
-                        } else if (page <= 5) {
-                          pageNum = i + 1;
-                        } else if (page >= pagination.totalPages - 4) {
-                          pageNum = pagination.totalPages - 9 + i;
-                        } else {
-                          pageNum = page - 4 + i;
-                        }
-
-                        if (i > 0 && i < 9 && pagination.totalPages > 10) {
-                          if (
-                            (page <= 5 && pageNum === 6) ||
-                            (page >= pagination.totalPages - 4 && pageNum === pagination.totalPages - 5) ||
-                            (pageNum === page - 5 || pageNum === page + 5)
-                          ) {
-                            return <span key={i} className="px-2">...</span>;
-                          }
-                        }
-
-                        return (
-                          <Button
-                            key={`${pageNum}-${i}`}
-                            variant={page === pageNum ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => handlePageChange(pageNum)}
-                            className="min-w-[2.5rem]"
-                          >
-                            {pageNum}
-                          </Button>
-                        );
-                      })}
+                            return (
+                              <tr key={project.id} className="border-b border-border/40 transition-colors hover:bg-muted/30">
+                                <td className="p-4 align-middle">
+                                  <input
+                                    type="checkbox"
+                                    className="rounded border-border/50 bg-background"
+                                    checked={selectedProjects.has(project.id)}
+                                    onChange={(e) => toggleSelect(project.id, e.target.checked)}
+                                  />
+                                </td>
+                                <td className="p-4 align-middle">
+                                  <Link href={`/project/${project.id}`} className="block hover:underline group">
+                                    <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{project.name}</div>
+                                    <div className="text-xs text-muted-foreground mt-0.5">Created: {formatDate(project.createdAt)}</div>
+                                  </Link>
+                                </td>
+                                <td className="p-4 align-middle">{getStatusBadge(project.status)}</td>
+                                <td className="p-4 align-middle">
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium text-foreground">
+                                      {project.creator?.name ||
+                                        `${project.creator?.firstName || ""} ${project.creator?.lastName || ""}`.trim() ||
+                                        project.creator?.email ||
+                                        "—"}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">{project.creator?.email || "—"}</span>
+                                  </div>
+                                </td>
+                                <td className="p-4 align-middle text-muted-foreground">{formatDate(project.startDate)}</td>
+                                <td className="p-4 align-middle text-muted-foreground">{formatDate(project.endDate)}</td>
+                                <td className="p-4 align-middle min-w-[180px]">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                      <div 
+                                        className="h-full bg-orange-500 rounded-full transition-all duration-500" 
+                                        style={{ width: `${project.completionRate}%` }} 
+                                      />
+                                    </div>
+                                    <span className="text-xs font-bold text-foreground w-[3ch] text-right">{project.completionRate}%</span>
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground mt-1">
+                                    {project.tasksCompleted}/{project.tasksTotal} tasks
+                                  </div>
+                                </td>
+                                <td className="p-4 align-middle max-w-xs">
+                                  <div className="text-sm text-muted-foreground truncate" title={project.description || ""}>
+                                    {project.description || "—"}
+                                  </div>
+                                </td>
+                                <td className="p-4 align-middle">
+                                  <div className="flex items-center -space-x-2">
+                                    {project.members.slice(0, 4).map((member, idx) => (
+                                      <Avatar
+                                        key={member.user.id}
+                                        className="h-8 w-8 border-2 border-background ring-1 ring-border/10"
+                                        style={{ zIndex: project.members.length - idx }}
+                                      >
+                                        <AvatarFallback className="bg-muted text-muted-foreground text-[10px] font-bold">
+                                          {getInitials(member.user.name, member.user.firstName, member.user.lastName)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                    ))}
+                                    {project.members.length > 4 && (
+                                      <div className="h-8 w-8 rounded-full bg-muted border-2 border-background flex items-center justify-center text-[10px] text-muted-foreground font-medium ring-1 ring-border/10">
+                                        +{project.members.length - 4}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="p-4 align-middle text-right">
+                                  <div className="flex justify-end gap-1 opacity-60 hover:opacity-100 transition-opacity">
+                                    <ActionIconButton
+                                      tooltip={editTooltip}
+                                      disabled={!perms.canEdit}
+                                      onClick={() => openEditProject(project)}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </ActionIconButton>
+                                    <ActionIconButton
+                                      tooltip={archiveTooltip}
+                                      disabled={!perms.canArchive || project.status === "archived"}
+                                      onClick={() => void archiveSingleProject(project)}
+                                    >
+                                      <Archive className="h-4 w-4" />
+                                    </ActionIconButton>
+                                    <ActionIconButton
+                                      tooltip={deleteTooltip}
+                                      disabled={!perms.canDelete}
+                                      onClick={() => void deleteSingleProject(project)}
+                                      className="text-destructive hover:bg-destructive/10"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </ActionIconButton>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(page + 1)}
-                      disabled={!pagination.hasNext}
-                    >
-                      Next
-                      <ChevronRight className="h-4 w-4 ml-1" />
-                    </Button>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Create Project Dialog */}
-      <CreateProjectDialog
-        open={showCreateDialog}
-        onClose={() => setShowCreateDialog(false)}
-        onSuccess={handleProjectCreated}
-      />
-      {/* Edit Project Dialog */}
-      <EditProjectDialog
-        open={showEditDialog}
-        project={editingProject}
-        onClose={() => {
-          setShowEditDialog(false);
-          setEditingProject(null);
-        }}
-        onSuccess={handleProjectUpdated}
-      />
-    </div>
+                    {/* Pagination */}
+                    {pagination && pagination.totalPages > 1 && (
+                      <div className="px-6 py-4 border-t border-border/40 flex items-center justify-end gap-2 bg-muted/10">
+                        <div className="text-xs text-muted-foreground mr-4">
+                          Showing {(page - 1) * 10 + 1} to {Math.min(page * 10, pagination.total)} of {pagination.total} projects
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(page - 1)}
+                          disabled={!pagination.hasPrev}
+                          className="h-8 border-border/50"
+                        >
+                          Previous
+                        </Button>
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
+                            // Simplified pagination logic for UI cleanup
+                            const pageNum = i + 1; 
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={page === pageNum ? "default" : "ghost"}
+                                size="sm"
+                                onClick={() => handlePageChange(pageNum)}
+                                className={cn("h-8 w-8 p-0", page === pageNum && "bg-orange-600 hover:bg-orange-700 text-white")}
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(page + 1)}
+                          disabled={!pagination.hasNext}
+                          className="h-8 border-border/50"
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* Create Project Dialog */}
+        <CreateProjectDialog
+          open={showCreateDialog}
+          onClose={() => setShowCreateDialog(false)}
+          onSuccess={handleProjectCreated}
+        />
+        {/* Edit Project Dialog */}
+        <EditProjectDialog
+          open={showEditDialog}
+          project={editingProject}
+          onClose={() => {
+            setShowEditDialog(false);
+            setEditingProject(null);
+          }}
+          onSuccess={handleProjectUpdated}
+        />
+      </div>
     </TooltipProvider>
   );
 }

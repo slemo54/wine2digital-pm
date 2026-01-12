@@ -76,11 +76,19 @@ export function AppSidebar({ className }: AppSidebarProps) {
 
     refresh();
 
-    const onChanged = () => refresh();
-    window.addEventListener("notifications:changed", onChanged);
+    const onChanged = (ev: Event) => {
+      const detail = (ev as any)?.detail;
+      const next = detail?.unreadCount;
+      if (typeof next === "number" && Number.isFinite(next)) {
+        setUnreadCount(next);
+        return;
+      }
+      refresh();
+    };
+    window.addEventListener("notifications:changed", onChanged as any);
     return () => {
       cancelled = true;
-      window.removeEventListener("notifications:changed", onChanged);
+      window.removeEventListener("notifications:changed", onChanged as any);
     };
   }, [status, pathname]); // Aggiorna al cambio pagina
 

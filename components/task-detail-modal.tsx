@@ -205,17 +205,44 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
   const didOpenInitialSubtaskRef = useRef<string | null>(null);
   const didMarkTaskNotificationsReadRef = useRef<string | null>(null);
+  const didMarkTaskCommentMentionsReadRef = useRef<string | null>(null);
+  const didMarkSubtaskMentionsReadRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!open) {
       didMarkTaskNotificationsReadRef.current = null;
+      didMarkTaskCommentMentionsReadRef.current = null;
+      didMarkSubtaskMentionsReadRef.current = null;
       return;
     }
     if (!taskId) return;
     if (didMarkTaskNotificationsReadRef.current === taskId) return;
     didMarkTaskNotificationsReadRef.current = taskId;
-    void markTaskNotificationsRead(taskId).catch(() => {});
+    // Mark as read when opening the task, but do NOT auto-read comment-mention notifications yet.
+    void markTaskNotificationsRead(taskId, { excludeTypes: ["subtask_mentioned", "task_mentioned"] }).catch(() => {});
   }, [open, taskId]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!taskId) return;
+    if (activeTab !== "comments") return;
+    const key = `${taskId}:task_comments`;
+    if (didMarkTaskCommentMentionsReadRef.current === key) return;
+    didMarkTaskCommentMentionsReadRef.current = key;
+    void markTaskNotificationsRead(taskId, { types: ["task_mentioned"] }).catch(() => {});
+  }, [open, taskId, activeTab]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (!taskId) return;
+    if (!subtaskDetailOpen || !selectedSubtask?.id) return;
+    const key = `${taskId}:${selectedSubtask.id}`;
+    if (didMarkSubtaskMentionsReadRef.current === key) return;
+    didMarkSubtaskMentionsReadRef.current = key;
+    void markTaskNotificationsRead(taskId, { subtaskId: selectedSubtask.id, types: ["subtask_mentioned"] }).catch(
+      () => {}
+    );
+  }, [open, taskId, subtaskDetailOpen, selectedSubtask?.id]);
 
   useEffect(() => {
     if (open && taskId) {
