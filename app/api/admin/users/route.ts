@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
         name: true,
         firstName: true,
         lastName: true,
+        department: true,
         role: true,
         isActive: true,
         disabledAt: true,

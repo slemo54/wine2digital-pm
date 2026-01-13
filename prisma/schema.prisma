@@ -54,6 +54,7 @@ model User {
   accounts    Account[]
   sessions    Session[]
   timeEntries TimeEntry[]
+  clockifyEntries ClockifyEntry[]
 }
 
 // Work Rules & Global Settings
@@ -87,6 +88,46 @@ model TimeEntry {
 
   @@unique([userId, date])
   @@index([userId, date])
+}
+
+// Clockify-style daily reporting (separate from PM Projects/Tasks)
+model ClockifyProject {
+  id       String @id @default(cuid())
+  name     String
+  client   String @default("")
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries ClockifyEntry[]
+
+  @@unique([name, client])
+  @@index([isActive])
+}
+
+model ClockifyEntry {
+  id          String   @id @default(cuid())
+  userId      String
+  projectId   String
+  workDate    DateTime // Only the date part is significant (daily report)
+  description String
+  task        String?
+  tags        String[] @default([])
+  billable    Boolean  @default(false)
+  startAt     DateTime
+  endAt       DateTime
+  durationMin Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project ClockifyProject @relation(fields: [projectId], references: [id], onDelete: Restrict)
+
+  @@index([userId, workDate])
+  @@index([projectId, workDate])
+  @@index([startAt])
 }
 
 model AuditLog {

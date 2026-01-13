@@ -17,6 +17,7 @@ type AdminUser = {
   name: string | null;
   firstName: string | null;
   lastName: string | null;
+  department: string | null;
   role: string;
   isActive: boolean;
   disabledAt: string | null;
@@ -72,7 +73,7 @@ export default function AdminUsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, isAdmin, q, roleFilter, activeFilter]);
 
-  const updateUser = async (id: string, patch: { role?: string; isActive?: boolean }) => {
+  const updateUser = async (id: string, patch: { role?: string; isActive?: boolean; department?: string | null }) => {
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: "PUT",
@@ -169,9 +170,10 @@ export default function AdminUsersPage() {
             ) : (
               <div className="border rounded-md overflow-hidden">
                 <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground bg-muted/50">
-                  <div className="col-span-5">Utente</div>
-                  <div className="col-span-3">Ruolo</div>
-                  <div className="col-span-2">Attivo</div>
+                  <div className="col-span-4">Utente</div>
+                  <div className="col-span-2">Ruolo</div>
+                  <div className="col-span-3">Reparto</div>
+                  <div className="col-span-1">Attivo</div>
                   <div className="col-span-2 text-right">Azioni</div>
                 </div>
                 <div className="divide-y">
@@ -180,12 +182,12 @@ export default function AdminUsersPage() {
                       key={u.id}
                       className="px-4 py-3 flex flex-col gap-3 md:grid md:grid-cols-12 md:gap-3 md:items-center"
                     >
-                      <div className="min-w-0 md:col-span-5">
+                      <div className="min-w-0 md:col-span-4">
                         <div className="font-medium truncate">{displayName(u)}</div>
                         <div className="text-xs text-muted-foreground truncate">{u.email}</div>
                       </div>
 
-                      <div className="md:col-span-3">
+                      <div className="md:col-span-2">
                         <div className="text-xs text-muted-foreground md:hidden mb-1">Ruolo</div>
                         <Select value={u.role} onValueChange={(v) => updateUser(u.id, { role: v })}>
                           <SelectTrigger className="h-9 w-full">
@@ -200,6 +202,19 @@ export default function AdminUsersPage() {
                       </div>
 
                       <div className="md:col-span-2">
+                        <div className="text-xs text-muted-foreground md:hidden mb-1">Reparto</div>
+                        <Input
+                          value={u.department || ""}
+                          placeholder="Es. Communication Dept."
+                          className="h-9"
+                          onChange={(e) =>
+                            setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, department: e.target.value } : x)))
+                          }
+                          onBlur={(e) => updateUser(u.id, { department: e.target.value })}
+                        />
+                      </div>
+
+                      <div className="md:col-span-1">
                         <div className="text-xs text-muted-foreground md:hidden mb-1">Attivo</div>
                         <Switch checked={u.isActive} onCheckedChange={(v) => updateUser(u.id, { isActive: v })} />
                       </div>

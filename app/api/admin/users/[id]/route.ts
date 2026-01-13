@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 type PatchBody = {
   role?: "admin" | "manager" | "member";
   isActive?: boolean;
+  department?: string | null;
 };
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
@@ -19,10 +20,17 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const body = (await req.json()) as PatchBody;
     const nextRole = body?.role;
     const nextActive = body?.isActive;
+    const nextDepartmentRaw = body?.department;
+    const nextDepartment =
+      nextDepartmentRaw === null
+        ? null
+        : typeof nextDepartmentRaw === "string"
+          ? nextDepartmentRaw.trim() || null
+          : undefined;
 
     const target = await prisma.user.findUnique({
       where: { id: params.id },
-      select: { id: true, role: true, isActive: true },
+      select: { id: true, role: true, isActive: true, department: true },
     });
     if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
@@ -41,6 +49,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         ...(typeof nextActive === "boolean"
           ? { isActive: nextActive, disabledAt: nextActive ? null : new Date() }
           : {}),
+        ...(nextDepartment !== undefined ? { department: nextDepartment } : {}),
       },
       select: {
         id: true,
@@ -48,6 +57,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         name: true,
         firstName: true,
         lastName: true,
+        department: true,
         role: true,
         isActive: true,
         disabledAt: true,
@@ -63,8 +73,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         entityType: "User",
         entityId: updated.id,
         metadata: {
-          from: { role: target.role, isActive: target.isActive },
-          to: { role: updated.role, isActive: updated.isActive },
+          from: { role: target.role, isActive: target.isActive, department: target.department },
+          to: { role: updated.role, isActive: updated.isActive, department: updated.department },
         },
       },
     });
@@ -72,7 +82,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     publishRealtimeEvent({
       channel: "admin",
       event: "admin.user.updated",
-      data: { userId: updated.id, role: updated.role, isActive: updated.isActive },
+      data: { userId: updated.id, role: updated.role, isActive: updated.isActive, department: updated.department },
     }).catch(() => {});
 
     return NextResponse.json({ user: updated });
