@@ -567,6 +567,7 @@ export function ProjectTaskLists(props: {
                       const tagNames = getDisplayTagNames(t);
                       const primaryTag = tagNames[0] || null;
                       const extraTagCount = tagNames.length > 1 ? tagNames.length - 1 : 0;
+                      const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : null;
                       const isEditing = editingTaskId === t.id;
                       const isDeleting = deletingTaskId === t.id;
                       const disableRowOpen = isEditing;
@@ -633,6 +634,15 @@ export function ProjectTaskLists(props: {
                               )}
                             </div>
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              {amountEur ? (
+                                <Badge
+                                  variant="outline"
+                                  className="rounded-md px-4 py-1 text-[11px] font-semibold min-w-[120px] justify-center"
+                                  title="Importo"
+                                >
+                                  {amountEur}
+                                </Badge>
+                              ) : null}
                               {primaryTag ? (
                                 <Badge
                                   variant="default"
