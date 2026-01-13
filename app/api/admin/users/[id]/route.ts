@@ -11,6 +11,8 @@ type PatchBody = {
   department?: string | null;
 };
 
+const ALLOWED_DEPARTMENTS = ["Backoffice", "IT", "Grafica", "Social"] as const;
+
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const me = await getSessionUser();
@@ -27,6 +29,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         : typeof nextDepartmentRaw === "string"
           ? nextDepartmentRaw.trim() || null
           : undefined;
+
+    if (nextDepartment !== undefined && nextDepartment !== null) {
+      const ok = (ALLOWED_DEPARTMENTS as readonly string[]).includes(nextDepartment);
+      if (!ok) {
+        return NextResponse.json({ error: "Invalid department" }, { status: 400 });
+      }
+    }
 
     const target = await prisma.user.findUnique({
       where: { id: params.id },

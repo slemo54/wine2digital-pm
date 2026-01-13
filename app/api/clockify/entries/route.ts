@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session-user";
 import { getClockifyVisibility, type GlobalRole } from "@/lib/clockify-scope";
+import { parseClockifyWorkDateFilter } from "./date-range";
 
 export const dynamic = "force-dynamic";
 
@@ -9,16 +10,6 @@ function normalizeRole(input: unknown): GlobalRole {
   const r = String(input || "");
   if (r === "admin" || r === "manager" || r === "member") return r;
   return "member";
-}
-
-function parseIsoDay(input: unknown): { workDate: Date } | { error: string } {
-  const s = String(input || "").trim();
-  if (!s) return { error: "Missing date" };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return { error: "Invalid date format (expected YYYY-MM-DD)" };
-  const workDate = new Date(`${s}T00:00:00`);
-  if (Number.isNaN(workDate.getTime())) return { error: "Invalid date" };
-  workDate.setHours(0, 0, 0, 0);
-  return { workDate };
 }
 
 function toStringArray(input: unknown): string[] {
@@ -55,13 +46,15 @@ export async function GET(req: NextRequest) {
     if (!meDb || meDb.isActive === false) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { searchParams } = new URL(req.url);
-    const date = searchParams.get("date") || "";
+    const date = searchParams.get("date");
+    const from = searchParams.get("from");
+    const to = searchParams.get("to");
     const q = String(searchParams.get("q") || "").trim();
     const projectId = String(searchParams.get("projectId") || "").trim();
     const userId = String(searchParams.get("userId") || "").trim();
 
-    const parsed = parseIsoDay(date);
-    if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const parsed = parseClockifyWorkDateFilter({ date, from, to });
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const visibility = getClockifyVisibility({
       globalRole: normalizeRole(meDb.role),
@@ -76,9 +69,14 @@ export async function GET(req: NextRequest) {
           ? { user: { department: visibility.department } }
           : { userId: visibility.userId };
 
+    const workDateWhere =
+      parsed.filter.kind === "day"
+        ? { workDate: parsed.filter.day }
+        : { workDate: { gte: parsed.filter.from, lte: parsed.filter.to } };
+
     const where: any = {
       ...scopeWhere,
-      workDate: parsed.workDate,
+      ...workDateWhere,
       ...(projectId ? { projectId } : {}),
       ...(userId ? { userId } : {}),
       ...(q

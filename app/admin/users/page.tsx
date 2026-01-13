@@ -11,6 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Shield } from "lucide-react";
 import { toast } from "react-hot-toast";
 
+const DEPARTMENTS = ["Backoffice", "IT", "Grafica", "Social"] as const;
+const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned__";
+
 type AdminUser = {
   id: string;
   email: string;
@@ -201,17 +204,38 @@ export default function AdminUsersPage() {
                         </Select>
                       </div>
 
-                      <div className="md:col-span-2">
+                      <div className="md:col-span-3">
                         <div className="text-xs text-muted-foreground md:hidden mb-1">Reparto</div>
-                        <Input
-                          value={u.department || ""}
-                          placeholder="Es. Communication Dept."
-                          className="h-9"
-                          onChange={(e) =>
-                            setUsers((prev) => prev.map((x) => (x.id === u.id ? { ...x, department: e.target.value } : x)))
-                          }
-                          onBlur={(e) => updateUser(u.id, { department: e.target.value })}
-                        />
+                        {(() => {
+                          const current = (u.department || "").trim();
+                          const isKnown = (DEPARTMENTS as readonly string[]).includes(current);
+                          const value = isKnown ? current : UNASSIGNED_DEPARTMENT_VALUE;
+                          return (
+                            <div>
+                              <Select
+                                value={value}
+                                onValueChange={(v) =>
+                                  updateUser(u.id, { department: v === UNASSIGNED_DEPARTMENT_VALUE ? null : v })
+                                }
+                              >
+                                <SelectTrigger className="h-9 w-full">
+                                  <SelectValue placeholder="Seleziona reparto" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={UNASSIGNED_DEPARTMENT_VALUE}>Non assegnato</SelectItem>
+                                  {DEPARTMENTS.map((d) => (
+                                    <SelectItem key={d} value={d}>
+                                      {d}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {!isKnown && current ? (
+                                <div className="mt-1 text-[11px] text-muted-foreground">Attuale (non standard): {current}</div>
+                              ) : null}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       <div className="md:col-span-1">
