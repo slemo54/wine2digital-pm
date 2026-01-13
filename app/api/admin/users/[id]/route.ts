@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session-user";
 import { publishRealtimeEvent } from "@/lib/realtime";
+import { normalizeDepartment } from "@/lib/departments";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,6 @@ type PatchBody = {
   isActive?: boolean;
   department?: string | null;
 };
-
-const ALLOWED_DEPARTMENTS = ["Backoffice", "IT", "Grafica", "Social"] as const;
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -31,10 +30,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
           : undefined;
 
     if (nextDepartment !== undefined && nextDepartment !== null) {
-      const ok = (ALLOWED_DEPARTMENTS as readonly string[]).includes(nextDepartment);
-      if (!ok) {
-        return NextResponse.json({ error: "Invalid department" }, { status: 400 });
-      }
+      if (!normalizeDepartment(nextDepartment)) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
     }
 
     const target = await prisma.user.findUnique({

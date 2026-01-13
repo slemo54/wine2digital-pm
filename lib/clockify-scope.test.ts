@@ -18,8 +18,8 @@ test("clockify scope: member sees self", () => {
 
 test("clockify scope: manager with department sees department", () => {
   assert.deepEqual(
-    getClockifyVisibility({ globalRole: "manager", userId: "u1", department: "Communication Dept." }),
-    { kind: "department", department: "Communication Dept." }
+    getClockifyVisibility({ globalRole: "manager", userId: "u1", department: "Grafica" }),
+    { kind: "department", department: "Grafica" }
   );
 });
 

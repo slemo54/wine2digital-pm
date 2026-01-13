@@ -23,6 +23,7 @@ import {
   Bell,
   Timer,
 } from "lucide-react";
+import { isClockifyEnabled } from "@/lib/feature-flags";
 
 type NavItem = {
   href: string;
@@ -37,7 +38,9 @@ const NAV: NavItem[] = [
   { href: "/projects", label: "Progetti", icon: FolderKanban, isActive: (p) => p.startsWith("/projects") || p.startsWith("/project/") },
   { href: "/tasks", label: "Task", icon: CheckSquare, isActive: (p) => p.startsWith("/tasks") },
   { href: "/calendar", label: "Calendario", icon: CalendarDays, isActive: (p) => p.startsWith("/calendar") },
-  { href: "/clockify", label: "Clockify", icon: Timer, isActive: (p) => p.startsWith("/clockify") },
+  ...(isClockifyEnabled()
+    ? [{ href: "/clockify", label: "Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify") }]
+    : []),
   { href: "/notifications", label: "Notifiche", icon: Bell, isActive: (p) => p.startsWith("/notifications"), hasBadge: true },
   { href: "/files", label: "File", icon: FileText, isActive: (p) => p.startsWith("/files") },
   { href: "/profile", label: "Profilo", icon: User, isActive: (p) => p.startsWith("/profile") },

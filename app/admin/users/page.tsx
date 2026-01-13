@@ -10,8 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Shield } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { DEPARTMENTS } from "@/lib/departments";
 
-const DEPARTMENTS = ["Backoffice", "IT", "Grafica", "Social"] as const;
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned__";
 
 type AdminUser = {
