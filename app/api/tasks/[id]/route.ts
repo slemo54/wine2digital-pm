@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 import { buildTaskAssignedNotifications, getAddedAssigneeIds, normalizeUserIdList } from "@/lib/task-assignment-notifications";
+import { MEMBER_TASK_EDITABLE_KEYS, validateMemberTaskUpdateKeys } from "@/lib/task-update-policy";
 
 const DEFAULT_LIST_NAME = "Untitled list";
 
@@ -171,12 +172,13 @@ export async function PUT(
 
     // Only plain members (non project-managers) can update status only
     if (role === "member" && !isProjectManager) {
-      const keys = Object.keys(body || {});
-      const allowed = new Set(["status"]);
-      const invalid = keys.filter((k) => !allowed.has(k));
-      if (invalid.length > 0) {
+      const validation = validateMemberTaskUpdateKeys(body);
+      if (!validation.ok) {
         return NextResponse.json(
-          { error: "Members can only update status", invalid },
+          {
+            error: `Members can only update: ${MEMBER_TASK_EDITABLE_KEYS.join(", ")}`,
+            invalid: validation.invalidKeys,
+          },
           { status: 400 }
         );
       }

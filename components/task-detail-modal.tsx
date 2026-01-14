@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   CheckCircle2, 
   Circle, 
@@ -24,6 +25,9 @@ import {
   Paperclip,
   MessageSquare,
   Plus,
+  Save,
+  Send,
+  ChevronDown,
   X,
   Upload,
   Users,
@@ -190,6 +194,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [subtaskAttachments, setSubtaskAttachments] = useState<SubtaskAttachment[]>([]);
   const [subtaskComments, setSubtaskComments] = useState<SubtaskComment[]>([]);
   const [subtaskUploading, setSubtaskUploading] = useState(false);
+  const [showAllSubtaskAttachments, setShowAllSubtaskAttachments] = useState(false);
+  const [subtaskAdvancedOpen, setSubtaskAdvancedOpen] = useState(false);
   const [subtaskDraftDescription, setSubtaskDraftDescription] = useState("");
   const [isSavingSubtaskDescription, setIsSavingSubtaskDescription] = useState(false);
   const [isEditingSubtaskTitle, setIsEditingSubtaskTitle] = useState(false);
@@ -294,6 +300,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     setSubtaskDraftDescription(selectedSubtask.description || "");
     setSubtaskDraftTitle(selectedSubtask.title || "");
     setIsEditingSubtaskTitle(false);
+    setShowAllSubtaskAttachments(false);
+    setSubtaskAdvancedOpen(false);
     setEditingSubtaskCommentId(null);
     setEditingSubtaskCommentHtml("");
     setEditingSubtaskMentionedUserIds([]);
@@ -637,7 +645,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
   const saveSubtaskDescription = async () => {
     if (!selectedSubtask) return;
-    if (!canWriteTask) {
+    if (!canWriteSelectedSubtask) {
       toast.error("Non hai permessi per modificare la subtask");
       return;
     }
@@ -960,6 +968,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     isMeProjectManager ||
     (globalRole === "manager" && isMeProjectMember) ||
     (globalRole === "member" && isMeAssignee);
+  const canEditTaskDetails = canWriteTask;
+
+  const isMeSelectedSubtaskAssignee =
+    Boolean(meId) && Boolean(selectedSubtask?.assigneeId) && selectedSubtask?.assigneeId === meId;
+  const canWriteSelectedSubtask = canWriteTask || (globalRole === "member" && isMeSelectedSubtaskAssignee);
   const canDeleteSubtask = globalRole === "admin" || isMeProjectManager;
   const canAssignSubtask = globalRole === "admin" || isMeProjectManager;
   const canManageSubtaskChecklists = globalRole === "admin" || isMeProjectManager;
@@ -1175,13 +1188,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         <Input
                           value={taskDraftTitle}
                           onChange={(e) => setTaskDraftTitle(e.target.value)}
-                          disabled={!canEditMeta || isSavingMeta || savingTaskTitle}
+                          disabled={!canEditTaskDetails || isSavingMeta || savingTaskTitle}
                           className="h-10"
                         />
                         <Button
                           type="button"
                           onClick={saveTaskTitle}
-                          disabled={!canEditMeta || isSavingMeta || savingTaskTitle || !taskDraftTitle.trim()}
+                          disabled={!canEditTaskDetails || isSavingMeta || savingTaskTitle || !taskDraftTitle.trim()}
                         >
                           Salva
                         </Button>
@@ -1200,8 +1213,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     ) : (
                       <>
                         <div className="text-2xl font-bold pr-2 truncate">{task.title}</div>
-                        {canEditMeta ? (
-                          <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1">
+                          {canEditTaskDetails ? (
                             <Button
                               type="button"
                               variant="ghost"
@@ -1215,6 +1228,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
+                          ) : null}
+                          {canEditMeta ? (
                             <Button
                               type="button"
                               variant="ghost"
@@ -1225,6 +1240,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             >
                               <Archive className="h-4 w-4" />
                             </Button>
+                          ) : null}
+                          {canEditMeta ? (
                             <Button
                               type="button"
                               variant="ghost"
@@ -1236,8 +1253,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             >
                               {isDeletingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                             </Button>
-              </div>
-                        ) : null}
+                          ) : null}
+                        </div>
                       </>
                     )}
                   </div>
@@ -1351,7 +1368,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       <span className="text-sm text-muted-foreground">Add</span>
                     )}
 
-                    {canEditMeta ? (
+                    {canEditTaskDetails ? (
                       <Input
                         type="date"
                         disabled={isSavingMeta}
@@ -1814,11 +1831,18 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         }}
                       >
                         <div onClick={(e) => e.stopPropagation()}>
-                          <Checkbox
-                            checked={subtask.completed}
-                            disabled={!canWriteTask}
-                            onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
-                          />
+                          {(() => {
+                            const canWriteThisSubtask =
+                              canWriteTask ||
+                              (globalRole === "member" && Boolean(meId) && subtask?.assigneeId === meId);
+                            return (
+                              <Checkbox
+                                checked={subtask.completed}
+                                disabled={!canWriteThisSubtask}
+                                onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
+                              />
+                            );
+                          })()}
                         </div>
                         <div className="flex-1 min-w-0 text-left">
                           <div className={subtask.completed ? "line-through text-muted-foreground" : ""}>
@@ -2094,254 +2118,266 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         contentClassName="z-[61] w-[95vw] sm:max-w-3xl h-full p-0 flex flex-col bg-background"
         overlayClassName="z-[60] bg-black/40"
       >
-        <div className="p-6 border-b">
-          <div className="text-xs text-muted-foreground">Subtask</div>
-          <div className="mt-2 flex items-start justify-between gap-2">
+        <div className="px-6 pt-5 pb-4 border-b bg-background">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="inline-flex items-center rounded-md bg-orange-500/10 text-orange-600 px-2 py-0.5 font-semibold">
+                  {selectedSubtask ? `ST-${selectedSubtask.position + 1}` : "ST"}
+                </span>
+                <span>•</span>
+                <span>Subtask</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {selectedSubtask && canDeleteSubtask ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 text-muted-foreground hover:text-destructive"
+                  onClick={() => void deleteSubtask(selectedSubtask.id)}
+                  aria-label="Elimina subtask"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 text-muted-foreground"
+                onClick={() => setSubtaskDetailOpen(false)}
+                aria-label="Chiudi"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-start justify-between gap-3">
             {isEditingSubtaskTitle ? (
               <div className="flex-1 flex items-start gap-2">
                 <Input
                   value={subtaskDraftTitle}
                   onChange={(e) => setSubtaskDraftTitle(e.target.value)}
-                  disabled={!selectedSubtask || !canWriteTask || savingSubtaskTitle}
-                  className="h-10"
+                  disabled={!selectedSubtask || !canWriteSelectedSubtask || savingSubtaskTitle}
+                  className="h-10 text-lg font-semibold"
                 />
-                          <Button
+                <Button
                   type="button"
                   onClick={saveSubtaskTitle}
-                  disabled={!selectedSubtask || !canWriteTask || savingSubtaskTitle || !subtaskDraftTitle.trim()}
+                  disabled={!selectedSubtask || !canWriteSelectedSubtask || savingSubtaskTitle || !subtaskDraftTitle.trim()}
+                  className="bg-orange-600 hover:bg-orange-700 text-white"
                 >
                   Salva
                 </Button>
                 <Button
                   type="button"
-                            variant="ghost"
-                            onClick={() => {
+                  variant="ghost"
+                  onClick={() => {
                     setIsEditingSubtaskTitle(false);
                     setSubtaskDraftTitle(selectedSubtask?.title || "");
-                            }}
+                  }}
                   disabled={savingSubtaskTitle}
-                          >
-                            Annulla
-                          </Button>
+                >
+                  Annulla
+                </Button>
               </div>
             ) : (
-              <>
-                <div className="text-xl font-semibold">{selectedSubtask?.title || ""}</div>
-                {selectedSubtask && canWriteTask ? (
-                          <Button
+              <div className="flex items-start gap-2 w-full">
+                <div className="flex-1 min-w-0 text-2xl font-bold leading-tight">
+                  {selectedSubtask?.title || ""}
+                </div>
+                {selectedSubtask && canWriteSelectedSubtask ? (
+                  <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-9 w-9"
+                    className="h-10 w-10"
                     onClick={() => {
                       setSubtaskDraftTitle(selectedSubtask.title || "");
                       setIsEditingSubtaskTitle(true);
                     }}
                     aria-label="Modifica titolo subtask"
                   >
-                    <Pencil className="h-4 w-4" />
-                          </Button>
+                    <Pencil className="h-5 w-5" />
+                  </Button>
                 ) : null}
-              </>
+              </div>
             )}
-                        </div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-6 space-y-10">
+            {/* Descrizione */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold">Descrizione Progetto</div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={saveSubtaskDescription}
+                  disabled={!selectedSubtask || !canWriteSelectedSubtask || isSavingSubtaskDescription || isSavingSubtaskMeta}
+                  className="border-orange-200 text-orange-600 hover:bg-orange-50"
+                >
+                  {isSavingSubtaskDescription ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salva
+                </Button>
+              </div>
+              <Textarea
+                value={subtaskDraftDescription}
+                onChange={(e) => setSubtaskDraftDescription(e.target.value)}
+                placeholder="Aggiungi una descrizione..."
+                className="min-h-[120px] rounded-xl bg-muted/10"
+                disabled={!selectedSubtask || !canWriteSelectedSubtask || isSavingSubtaskDescription || isSavingSubtaskMeta}
+              />
+            </div>
+
+            {/* Dettagli */}
+            <div className="space-y-3">
+              <div className="text-xs font-semibold tracking-[0.25em] text-muted-foreground">DETTAGLI</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="rounded-xl border bg-muted/10 p-4">
+                  <div className="text-[11px] font-semibold tracking-wide text-muted-foreground flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-orange-600" /> STATUS
                   </div>
+                  <div className="mt-2">
+                    <Select
+                      value={selectedSubtask?.status || (selectedSubtask?.completed ? "done" : "todo")}
+                      onValueChange={(v) => updateSelectedSubtaskMeta({ status: v })}
+                      disabled={!selectedSubtask || !canWriteSelectedSubtask || isSavingSubtaskMeta}
+                    >
+                      <SelectTrigger className="h-10 bg-background">
+                        <SelectValue placeholder="Stato" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todo">Da Fare</SelectItem>
+                        <SelectItem value="in_progress">In Corso</SelectItem>
+                        <SelectItem value="done">Completato</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="space-y-3">
-            <div className="font-semibold">Dettagli</div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label>Status</Label>
-                <Select
-                  value={
-                    selectedSubtask?.status ||
-                    (selectedSubtask?.completed ? "done" : "todo")
-                  }
-                  onValueChange={(v) => updateSelectedSubtaskMeta({ status: v })}
-                  disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskMeta}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Stato" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todo">Da Fare</SelectItem>
-                    <SelectItem value="in_progress">In Corso</SelectItem>
-                    <SelectItem value="done">Completato</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="rounded-xl border bg-muted/10 p-4">
+                  <div className="text-[11px] font-semibold tracking-wide text-muted-foreground flex items-center gap-2">
+                    <Hash className="h-4 w-4 text-orange-600" /> PRIORITÀ
+                  </div>
+                  <div className="mt-2">
+                    <Select
+                      value={selectedSubtask?.priority || "medium"}
+                      onValueChange={(v) => updateSelectedSubtaskMeta({ priority: v })}
+                      disabled={!selectedSubtask || !canWriteSelectedSubtask || isSavingSubtaskMeta}
+                    >
+                      <SelectTrigger className="h-10 bg-background">
+                        <SelectValue placeholder="Priorità" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Bassa</SelectItem>
+                        <SelectItem value="medium">Media</SelectItem>
+                        <SelectItem value="high">Alta</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-              <div className="space-y-1">
-                <Label>Priorità</Label>
-                <Select
-                  value={selectedSubtask?.priority || "medium"}
-                  onValueChange={(v) => updateSelectedSubtaskMeta({ priority: v })}
-                  disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskMeta}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Priorità" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Bassa</SelectItem>
-                    <SelectItem value="medium">Media</SelectItem>
-                    <SelectItem value="high">Alta</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1">
-                <Label>Due date</Label>
+                <div className="rounded-xl border bg-muted/10 p-4">
+                  <div className="text-[11px] font-semibold tracking-wide text-muted-foreground flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-orange-600" /> DEADLINE
+                  </div>
+                  <div className="mt-2">
                     <Input
                       type="date"
-                  value={
-                    selectedSubtask?.dueDate
-                      ? new Date(selectedSubtask.dueDate).toISOString().slice(0, 10)
-                      : ""
-                  }
+                      className="h-10 bg-background"
+                      value={selectedSubtask?.dueDate ? new Date(selectedSubtask.dueDate).toISOString().slice(0, 10) : ""}
                       onChange={(e) => {
                         const v = e.target.value;
-                    updateSelectedSubtaskMeta({ dueDate: v ? new Date(v).toISOString() : null });
-                  }}
-                  disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskMeta}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <Label>Assegnatario</Label>
-                <Select
-                  value={selectedSubtask?.assigneeId || "__none__"}
-                  onValueChange={(v) => updateSelectedSubtaskMeta({ assigneeId: v === "__none__" ? null : v })}
-                  disabled={!selectedSubtask || !canAssignSubtask || isSavingSubtaskMeta}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Seleziona" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Nessuno</SelectItem>
-                    {mentionUsers.map((u) => (
-                      <SelectItem key={u.id} value={u.id}>
-                        {u.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                        updateSelectedSubtaskMeta({ dueDate: v ? new Date(v).toISOString() : null });
+                      }}
+                      disabled={!selectedSubtask || !canWriteSelectedSubtask || isSavingSubtaskMeta}
+                    />
+                  </div>
                 </div>
-              </div>
 
-          <Separator />
-
-                <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold flex items-center gap-2">
-                <Link2 className="h-4 w-4" />
-                Dipendenze
+                <div className="rounded-xl border bg-muted/10 p-4">
+                  <div className="text-[11px] font-semibold tracking-wide text-muted-foreground flex items-center gap-2">
+                    <Users className="h-4 w-4 text-orange-600" /> RESPONSABILE
+                  </div>
+                  <div className="mt-2">
+                    <Select
+                      value={selectedSubtask?.assigneeId || "__none__"}
+                      onValueChange={(v) => updateSelectedSubtaskMeta({ assigneeId: v === "__none__" ? null : v })}
+                      disabled={!selectedSubtask || !canAssignSubtask || isSavingSubtaskMeta}
+                    >
+                      <SelectTrigger className="h-10 bg-background">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {selectedSubtask?.assignee ? (
+                            <Avatar className="h-6 w-6">
+                              <AvatarImage src={selectedSubtask.assignee.image || undefined} />
+                              <AvatarFallback className="text-[10px]">
+                                {(selectedSubtask.assignee.firstName?.[0] ||
+                                  selectedSubtask.assignee.name?.[0] ||
+                                  selectedSubtask.assignee.email?.[0] ||
+                                  "U"
+                                ).toUpperCase()}
+                              </AvatarFallback>
+                            </Avatar>
+                          ) : (
+                            <div className="h-6 w-6 rounded-full border bg-muted/30" />
+                          )}
+                          <div className="truncate text-sm">
+                            {selectedSubtask?.assignee
+                              ? String(
+                                  selectedSubtask.assignee.name ||
+                                    `${selectedSubtask.assignee.firstName || ""} ${selectedSubtask.assignee.lastName || ""}`.trim() ||
+                                    selectedSubtask.assignee.email ||
+                                    ""
+                                ).trim()
+                              : "Nessuno"}
+                          </div>
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Nessuno</SelectItem>
+                        {mentionUsers.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {selectedSubtask && (selectedSubtask.dependencies || []).length > 0 ? (
-              <div className="space-y-2">
-                {(selectedSubtask.dependencies || []).map((d) => {
-                  const dependsOn = subtasks.find((s) => s.id === d.dependsOnId);
-                  return (
-                    <div key={d.id} className="flex items-center justify-between gap-3 rounded-lg border p-2">
-                      <div className="min-w-0">
-                        <div className="text-sm truncate">{dependsOn?.title || d.dependsOnId}</div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        disabled={!canWriteTask}
-                        onClick={() => removeSelectedSubtaskDependency(d.id)}
-                        aria-label="Rimuovi dipendenza"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-sm text-muted-foreground">Nessuna dipendenza.</div>
-            )}
-
-            {selectedSubtask ? (
-              <div className="space-y-2">
-                <Label>Aggiungi dipendenza</Label>
-                    <Select
-                  value="__none__"
-                  onValueChange={(v) => {
-                    if (!selectedSubtask) return;
-                    if (!v || v === "__none__") return;
-                    void addSelectedSubtaskDependency(v);
-                  }}
-                  disabled={!canWriteTask}
-                    >
-                      <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Seleziona subtask" />
-                      </SelectTrigger>
-                      <SelectContent>
-                    <SelectItem value="__none__">Seleziona…</SelectItem>
-                    {subtasks
-                      .filter((s) => s.id !== selectedSubtask.id)
-                      .filter((s) => !(selectedSubtask.dependencies || []).some((d) => d.dependsOnId === s.id))
-                      .map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.title}
-                        </SelectItem>
-                      ))}
-                      </SelectContent>
-                    </Select>
-              </div>
-                  ) : null}
-          </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <Label>Descrizione</Label>
-            <Textarea
-              value={subtaskDraftDescription}
-              onChange={(e) => setSubtaskDraftDescription(e.target.value)}
-              placeholder="Aggiungi una descrizione..."
-              disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskDescription || isSavingSubtaskMeta}
-            />
-            <div className="flex justify-end">
-              <Button
-                variant="outline"
-                onClick={saveSubtaskDescription}
-                disabled={!selectedSubtask || !canWriteTask || isSavingSubtaskDescription || isSavingSubtaskMeta}
-              >
-                {isSavingSubtaskDescription ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                Salva descrizione
-              </Button>
+            {/* File & Media */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-semibold flex items-center gap-2">
+                  <Paperclip className="h-4 w-4 text-orange-600" />
+                  File &amp; Media
                 </div>
+                {subtaskAttachments.length > 0 ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="text-orange-600 px-0"
+                    onClick={() => setShowAllSubtaskAttachments((v) => !v)}
+                  >
+                    {showAllSubtaskAttachments ? "Mostra meno" : "Vedi tutti"}
+                  </Button>
+                ) : null}
               </div>
 
-          <Separator />
-
-          <div className="space-y-2">
-            {selectedSubtask ? (
-              <SubtaskChecklists
-                taskId={taskId}
-                subtaskId={selectedSubtask.id}
-                open={subtaskDetailOpen}
-                disabled={!canManageSubtaskChecklists}
-              />
-            ) : null}
-                </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="font-semibold">Allegati</div>
-              <label className="inline-flex items-center gap-2">
-                <Input
+              <div className="rounded-xl border bg-muted/5 p-4">
+                <input
+                  id={`subtask-file-${selectedSubtask?.id || "x"}`}
                   type="file"
+                  className="hidden"
                   disabled={subtaskUploading || !selectedSubtask}
                   onChange={(e) => {
                     const f = e.target.files?.[0];
@@ -2349,176 +2385,291 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     e.currentTarget.value = "";
                   }}
                 />
-              </label>
-                  </div>
-            {subtaskUploading ? (
-              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Upload…
-                </div>
-            ) : null}
-            {subtaskAttachments.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nessun allegato.</div>
-            ) : (
-              <div className="space-y-2">
-                {subtaskAttachments.map((a) => {
-                  const href = getHrefForFilePath(a.filePath) || "#";
-                  const isImg = isProbablyImageFile(a.fileName, a.mimeType);
-                  const previewSrc = isImg ? getImageSrcForFilePath(a.filePath) : null;
-                  return (
-                    <a
-                      key={a.id}
-                      href={href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center gap-3 border rounded-lg p-2 hover:bg-muted/30"
-                    >
-                      {previewSrc ? (
-                        <img
-                          src={previewSrc}
-                          alt={a.fileName}
-                          className="h-9 w-9 rounded object-cover border bg-muted"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <Paperclip className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-medium truncate">{a.fileName}</div>
-                        <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
-                      </div>
-                    </a>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <Separator />
-
-          <div className="space-y-2">
-            <div className="font-semibold">Commenti</div>
-            {subtaskComments.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nessun commento.</div>
-            ) : (
-              <div className="space-y-3">
-                {subtaskComments.map((c) => (
-                  <div key={c.id} className="border rounded-lg p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="text-xs text-muted-foreground">
-                        {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
-              </div>
-                      {(canEditMeta || (meId && c.user?.id === meId)) ? (
-                        <div className="flex items-center gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => startEditSubtaskComment(c)}
-                            disabled={savingSubtaskCommentEdit}
-                            aria-label="Modifica commento"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            onClick={() => void deleteSubtaskComment(c.id)}
-                            disabled={savingSubtaskCommentEdit}
-                            aria-label="Elimina commento"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-            </div>
-                      ) : null}
-          </div>
-
-                    {editingSubtaskCommentId === c.id ? (
-                      <div className="mt-2 space-y-2">
-                        <RichTextEditor
-                          valueHtml={editingSubtaskCommentHtml}
-                          onChange={(html, ids) => {
-                            setEditingSubtaskCommentHtml(html);
-                            setEditingSubtaskMentionedUserIds(ids);
-                          }}
-                          mentionUsers={mentionUsers}
-                          placeholder="Modifica commento…"
-                          disabled={savingSubtaskCommentEdit}
-                          onUploadImage={async (file) => {
-                            const uploaded = await uploadSubtaskAttachment(file);
-                            if (!uploaded) throw new Error("Upload fallito");
-                            const src = getImageSrcForFilePath(uploaded.filePath) || uploaded.filePath;
-                            return { src, alt: uploaded.fileName };
-                          }}
-                        />
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={cancelEditSubtaskComment}
-                            disabled={savingSubtaskCommentEdit}
-                          >
-                            Annulla
-                          </Button>
-                          <Button
-                            type="button"
-                            onClick={saveSubtaskCommentEdit}
-                            disabled={
-                              savingSubtaskCommentEdit ||
-                              !editingSubtaskCommentHtml.trim() ||
-                              isEffectivelyEmptyRichHtmlClient(editingSubtaskCommentHtml)
-                            }
-                          >
-                            Salva
-                          </Button>
-        </div>
-                      </div>
-                    ) : (
-                      <RichTextViewer
-                        html={c.content.includes("<") ? c.content : c.content.replace(/\n/g, "<br/>")}
-                        className="mt-2"
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            <div className="space-y-2">
-              <RichTextEditor
-                valueHtml={subtaskNewCommentHtml}
-                onChange={(html, ids) => {
-                  setSubtaskNewCommentHtml(html);
-                  setSubtaskMentionedUserIds(ids);
-                }}
-                mentionUsers={mentionUsers}
-                disabled={!selectedSubtask || !canWriteTask || savingSubtaskCommentEdit || isSendingSubtaskComment}
-                placeholder="Scrivi un commento…"
-                onUploadImage={async (file) => {
-                  const uploaded = await uploadSubtaskAttachment(file);
-                  if (!uploaded) throw new Error("Upload fallito");
-                  const src = getImageSrcForFilePath(uploaded.filePath) || uploaded.filePath;
-                  return { src, alt: uploaded.fileName };
-                }}
-              />
-              <div className="flex justify-end">
-                <Button
-                  onClick={addSubtaskComment}
-                  disabled={
-                    !selectedSubtask ||
-                    !canWriteTask ||
-                    savingSubtaskCommentEdit ||
-                    isSendingSubtaskComment ||
-                    !subtaskNewCommentHtml.trim() ||
-                    isEffectivelyEmptyRichHtmlClient(subtaskNewCommentHtml)
-                  }
+                <label
+                  htmlFor={`subtask-file-${selectedSubtask?.id || "x"}`}
+                  className={[
+                    "block rounded-xl border-2 border-dashed border-muted-foreground/20 bg-background/40",
+                    "hover:border-orange-300 hover:bg-orange-50/30 transition-colors cursor-pointer",
+                    subtaskUploading || !selectedSubtask ? "opacity-60 cursor-not-allowed" : "",
+                  ].join(" ")}
                 >
-                  {isSendingSubtaskComment ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Invia
-                </Button>
+                  <div className="flex flex-col items-center justify-center gap-2 py-10">
+                    <div className="h-10 w-10 rounded-full bg-muted/40 flex items-center justify-center">
+                      <Plus className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="text-xs font-semibold tracking-wide text-muted-foreground">UPLOAD FILE</div>
+                  </div>
+                </label>
+                {subtaskUploading ? (
+                  <div className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Upload…
+                  </div>
+                ) : null}
+              </div>
+
+              {subtaskAttachments.length === 0 ? null : (
+                <div className="space-y-2">
+                  {(showAllSubtaskAttachments ? subtaskAttachments : subtaskAttachments.slice(0, 3)).map((a) => {
+                    const href = getHrefForFilePath(a.filePath) || "#";
+                    const isImg = isProbablyImageFile(a.fileName, a.mimeType);
+                    const previewSrc = isImg ? getImageSrcForFilePath(a.filePath) : null;
+                    return (
+                      <a
+                        key={a.id}
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-3 rounded-xl border bg-background p-3 hover:bg-muted/20 transition-colors"
+                      >
+                        {previewSrc ? (
+                          <img
+                            src={previewSrc}
+                            alt={a.fileName}
+                            className="h-10 w-10 rounded object-cover border bg-muted"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded bg-muted/40 flex items-center justify-center">
+                            <Paperclip className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium truncate">{a.fileName}</div>
+                          <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Conversazione */}
+            <div className="space-y-3">
+              <div className="font-semibold flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-orange-600" />
+                Conversazione <span className="text-muted-foreground">({subtaskComments.length})</span>
+              </div>
+
+              {subtaskComments.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Nessun messaggio.</div>
+              ) : (
+                <div className="space-y-3">
+                  {subtaskComments.map((c) => (
+                    <div key={c.id} className="rounded-xl border bg-background p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-xs text-muted-foreground">
+                          {c.user?.name || c.user?.email || "Utente"} · {new Date(c.createdAt).toLocaleString()}
+                        </div>
+                        {(canEditMeta || (meId && c.user?.id === meId)) ? (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => startEditSubtaskComment(c)}
+                              disabled={savingSubtaskCommentEdit}
+                              aria-label="Modifica commento"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => void deleteSubtaskComment(c.id)}
+                              disabled={savingSubtaskCommentEdit}
+                              aria-label="Elimina commento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {editingSubtaskCommentId === c.id ? (
+                        <div className="mt-2 space-y-2">
+                          <RichTextEditor
+                            valueHtml={editingSubtaskCommentHtml}
+                            onChange={(html, ids) => {
+                              setEditingSubtaskCommentHtml(html);
+                              setEditingSubtaskMentionedUserIds(ids);
+                            }}
+                            mentionUsers={mentionUsers}
+                            placeholder="Modifica commento…"
+                            disabled={savingSubtaskCommentEdit}
+                            onUploadImage={async (file) => {
+                              const uploaded = await uploadSubtaskAttachment(file);
+                              if (!uploaded) throw new Error("Upload fallito");
+                              const src = getImageSrcForFilePath(uploaded.filePath) || uploaded.filePath;
+                              return { src, alt: uploaded.fileName };
+                            }}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={cancelEditSubtaskComment}
+                              disabled={savingSubtaskCommentEdit}
+                            >
+                              Annulla
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={saveSubtaskCommentEdit}
+                              disabled={
+                                savingSubtaskCommentEdit ||
+                                !editingSubtaskCommentHtml.trim() ||
+                                isEffectivelyEmptyRichHtmlClient(editingSubtaskCommentHtml)
+                              }
+                              className="bg-orange-600 hover:bg-orange-700 text-white"
+                            >
+                              Salva
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <RichTextViewer
+                          html={c.content.includes("<") ? c.content : c.content.replace(/\n/g, "<br/>")}
+                          className="mt-2"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="rounded-xl border bg-background">
+                <div className="p-3">
+                  <RichTextEditor
+                    valueHtml={subtaskNewCommentHtml}
+                    onChange={(html, ids) => {
+                      setSubtaskNewCommentHtml(html);
+                      setSubtaskMentionedUserIds(ids);
+                    }}
+                    mentionUsers={mentionUsers}
+                    disabled={!selectedSubtask || !canWriteTask || savingSubtaskCommentEdit || isSendingSubtaskComment}
+                    placeholder="Rispondi o tagga qualcuno con @..."
+                    onUploadImage={async (file) => {
+                      const uploaded = await uploadSubtaskAttachment(file);
+                      if (!uploaded) throw new Error("Upload fallito");
+                      const src = getImageSrcForFilePath(uploaded.filePath) || uploaded.filePath;
+                      return { src, alt: uploaded.fileName };
+                    }}
+                  />
+                </div>
+                <div className="flex justify-end px-3 pb-3">
+                  <Button
+                    type="button"
+                    onClick={addSubtaskComment}
+                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                    disabled={
+                      !selectedSubtask ||
+                      !canWriteTask ||
+                      savingSubtaskCommentEdit ||
+                      isSendingSubtaskComment ||
+                      !subtaskNewCommentHtml.trim() ||
+                      isEffectivelyEmptyRichHtmlClient(subtaskNewCommentHtml)
+                    }
+                  >
+                    {isSendingSubtaskComment ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+                    Invia
+                  </Button>
+                </div>
               </div>
             </div>
+
+            {/* Avanzate */}
+            <Collapsible open={subtaskAdvancedOpen} onOpenChange={setSubtaskAdvancedOpen}>
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-semibold tracking-[0.25em] text-muted-foreground">AVANZATE</div>
+                <CollapsibleTrigger asChild>
+                  <Button type="button" variant="ghost" size="sm" className="text-muted-foreground">
+                    <span className="mr-2">{subtaskAdvancedOpen ? "Nascondi" : "Mostra"}</span>
+                    <ChevronDown className={subtaskAdvancedOpen ? "h-4 w-4 rotate-180 transition-transform" : "h-4 w-4 transition-transform"} />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent className="mt-4 space-y-8">
+                <div className="space-y-2">
+                  <div className="font-semibold flex items-center gap-2">
+                    <Link2 className="h-4 w-4" />
+                    Dipendenze
+                  </div>
+
+                  {selectedSubtask && (selectedSubtask.dependencies || []).length > 0 ? (
+                    <div className="space-y-2">
+                      {(selectedSubtask.dependencies || []).map((d) => {
+                        const dependsOn = subtasks.find((s) => s.id === d.dependsOnId);
+                        return (
+                          <div key={d.id} className="flex items-center justify-between gap-3 rounded-lg border p-2">
+                            <div className="min-w-0">
+                              <div className="text-sm truncate">{dependsOn?.title || d.dependsOnId}</div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              disabled={!canWriteTask}
+                              onClick={() => removeSelectedSubtaskDependency(d.id)}
+                              aria-label="Rimuovi dipendenza"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">Nessuna dipendenza.</div>
+                  )}
+
+                  {selectedSubtask ? (
+                    <div className="space-y-2">
+                      <Label>Aggiungi dipendenza</Label>
+                      <Select
+                        value="__none__"
+                        onValueChange={(v) => {
+                          if (!selectedSubtask) return;
+                          if (!v || v === "__none__") return;
+                          void addSelectedSubtaskDependency(v);
+                        }}
+                        disabled={!canWriteTask}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Seleziona subtask" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Seleziona…</SelectItem>
+                          {subtasks
+                            .filter((s) => s.id !== selectedSubtask.id)
+                            .filter((s) => !(selectedSubtask.dependencies || []).some((d) => d.dependsOnId === s.id))
+                            .map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.title}
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="space-y-2">
+                  {selectedSubtask ? (
+                    <SubtaskChecklists
+                      taskId={taskId}
+                      subtaskId={selectedSubtask.id}
+                      open={subtaskDetailOpen}
+                      disabled={!canManageSubtaskChecklists}
+                    />
+                  ) : null}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         </div>
       </SideDrawer>

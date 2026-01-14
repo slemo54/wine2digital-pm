@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { getTaskAccessFlags } from "@/lib/task-access";
 import { prisma } from "@/lib/prisma";
+import { canMemberEditSubtaskDetails } from "@/lib/task-update-policy";
 
 export async function PUT(
   request: NextRequest,
@@ -23,12 +24,23 @@ export async function PUT(
     if (!access) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
+
+    // Ensure subtask belongs to the task + allow member permissions based on subtask assignee
+    const existingSubtask = await prisma.subtask.findFirst({
+      where: { id: params.subtaskId, taskId: params.id },
+      select: { id: true, assigneeId: true },
+    });
+    if (!existingSubtask) {
+      return NextResponse.json({ error: "Subtask not found" }, { status: 404 });
+    }
+    const isSubtaskAssignee = Boolean(existingSubtask.assigneeId) && existingSubtask.assigneeId === userId;
+
     const isProjectManager = access.projectRole === "owner" || access.projectRole === "manager";
     const canWrite =
       role === "admin" ||
       isProjectManager ||
       (role === "manager" && access.isProjectMember) ||
-      (role === "member" && access.isAssignee);
+      (role === "member" && canMemberEditSubtaskDetails({ isTaskAssignee: access.isAssignee, isSubtaskAssignee }));
     if (!canWrite) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
@@ -65,7 +77,7 @@ export async function PUT(
     }
 
     const subtask = await prisma.subtask.update({
-      where: { id: params.subtaskId },
+      where: { id: existingSubtask.id },
       data: {
         ...(targetStatus && { status: targetStatus, completed: targetStatus === "done" }),
         ...(title && { title }),
