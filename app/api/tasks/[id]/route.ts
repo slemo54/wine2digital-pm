@@ -135,7 +135,7 @@ export async function PUT(
       role === "admin" ||
       isProjectManager ||
       (role === "manager" && isProjectMember) ||
-      (role === "member" && isAssignee);
+      (role === "member" && isProjectMember);
     if (!canWrite) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }

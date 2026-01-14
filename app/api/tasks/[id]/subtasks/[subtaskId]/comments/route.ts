@@ -80,7 +80,7 @@ export async function POST(
       role === "admin" ||
       isProjectManager ||
       (role === "manager" && access.isProjectMember) ||
-      (role === "member" && access.isAssignee);
+      (role === "member" && access.isProjectMember);
     if (!canWrite) return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
 
     const body = (await request.json().catch(() => ({}))) as CreateBody;

@@ -15,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   CheckCircle2, 
   Circle, 
@@ -27,7 +26,6 @@ import {
   Plus,
   Save,
   Send,
-  ChevronDown,
   X,
   Upload,
   Users,
@@ -195,7 +193,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [subtaskComments, setSubtaskComments] = useState<SubtaskComment[]>([]);
   const [subtaskUploading, setSubtaskUploading] = useState(false);
   const [showAllSubtaskAttachments, setShowAllSubtaskAttachments] = useState(false);
-  const [subtaskAdvancedOpen, setSubtaskAdvancedOpen] = useState(false);
   const [subtaskDraftDescription, setSubtaskDraftDescription] = useState("");
   const [isSavingSubtaskDescription, setIsSavingSubtaskDescription] = useState(false);
   const [isEditingSubtaskTitle, setIsEditingSubtaskTitle] = useState(false);
@@ -301,7 +298,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     setSubtaskDraftTitle(selectedSubtask.title || "");
     setIsEditingSubtaskTitle(false);
     setShowAllSubtaskAttachments(false);
-    setSubtaskAdvancedOpen(false);
     setEditingSubtaskCommentId(null);
     setEditingSubtaskCommentHtml("");
     setEditingSubtaskMentionedUserIds([]);
@@ -962,17 +958,18 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     Array.isArray(task?.assignees) &&
     task.assignees.some((a: any) => a?.user?.id === meId || a?.userId === meId);
   const canEditMeta = globalRole === "admin" || isMeProjectManager || (globalRole === "manager" && isMeProjectMember);
-  const canEditStatus = canEditMeta || (globalRole === "member" && isMeAssignee);
   const canWriteTask =
     globalRole === "admin" ||
     isMeProjectManager ||
     (globalRole === "manager" && isMeProjectMember) ||
-    (globalRole === "member" && isMeAssignee);
+    (globalRole === "member" && isMeProjectMember);
+  const canEditStatus = canEditMeta || (globalRole === "member" && isMeProjectMember);
   const canEditTaskDetails = canWriteTask;
 
   const isMeSelectedSubtaskAssignee =
     Boolean(meId) && Boolean(selectedSubtask?.assigneeId) && selectedSubtask?.assigneeId === meId;
-  const canWriteSelectedSubtask = canWriteTask || (globalRole === "member" && isMeSelectedSubtaskAssignee);
+  const canWriteSelectedSubtask =
+    canWriteTask || (globalRole === "member" && (isMeProjectMember || isMeSelectedSubtaskAssignee));
   const canDeleteSubtask = globalRole === "admin" || isMeProjectManager;
   const canAssignSubtask = globalRole === "admin" || isMeProjectManager;
   const canManageSubtaskChecklists = globalRole === "admin" || isMeProjectManager;
@@ -2581,95 +2578,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
               </div>
             </div>
 
-            {/* Avanzate */}
-            <Collapsible open={subtaskAdvancedOpen} onOpenChange={setSubtaskAdvancedOpen}>
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-semibold tracking-[0.25em] text-muted-foreground">AVANZATE</div>
-                <CollapsibleTrigger asChild>
-                  <Button type="button" variant="ghost" size="sm" className="text-muted-foreground">
-                    <span className="mr-2">{subtaskAdvancedOpen ? "Nascondi" : "Mostra"}</span>
-                    <ChevronDown className={subtaskAdvancedOpen ? "h-4 w-4 rotate-180 transition-transform" : "h-4 w-4 transition-transform"} />
-                  </Button>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsibleContent className="mt-4 space-y-8">
-                <div className="space-y-2">
-                  <div className="font-semibold flex items-center gap-2">
-                    <Link2 className="h-4 w-4" />
-                    Dipendenze
-                  </div>
-
-                  {selectedSubtask && (selectedSubtask.dependencies || []).length > 0 ? (
-                    <div className="space-y-2">
-                      {(selectedSubtask.dependencies || []).map((d) => {
-                        const dependsOn = subtasks.find((s) => s.id === d.dependsOnId);
-                        return (
-                          <div key={d.id} className="flex items-center justify-between gap-3 rounded-lg border p-2">
-                            <div className="min-w-0">
-                              <div className="text-sm truncate">{dependsOn?.title || d.dependsOnId}</div>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive"
-                              disabled={!canWriteTask}
-                              onClick={() => removeSelectedSubtaskDependency(d.id)}
-                              aria-label="Rimuovi dipendenza"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">Nessuna dipendenza.</div>
-                  )}
-
-                  {selectedSubtask ? (
-                    <div className="space-y-2">
-                      <Label>Aggiungi dipendenza</Label>
-                      <Select
-                        value="__none__"
-                        onValueChange={(v) => {
-                          if (!selectedSubtask) return;
-                          if (!v || v === "__none__") return;
-                          void addSelectedSubtaskDependency(v);
-                        }}
-                        disabled={!canWriteTask}
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Seleziona subtask" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Seleziona…</SelectItem>
-                          {subtasks
-                            .filter((s) => s.id !== selectedSubtask.id)
-                            .filter((s) => !(selectedSubtask.dependencies || []).some((d) => d.dependsOnId === s.id))
-                            .map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                {s.title}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="space-y-2">
-                  {selectedSubtask ? (
-                    <SubtaskChecklists
-                      taskId={taskId}
-                      subtaskId={selectedSubtask.id}
-                      open={subtaskDetailOpen}
-                      disabled={!canManageSubtaskChecklists}
-                    />
-                  ) : null}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            {/* Avanzate rimosse (come da richiesta) */}
           </div>
         </div>
       </SideDrawer>

@@ -40,7 +40,9 @@ export async function PUT(
       role === "admin" ||
       isProjectManager ||
       (role === "manager" && access.isProjectMember) ||
-      (role === "member" && canMemberEditSubtaskDetails({ isTaskAssignee: access.isAssignee, isSubtaskAssignee }));
+      (role === "member" &&
+        (access.isProjectMember ||
+          canMemberEditSubtaskDetails({ isTaskAssignee: access.isAssignee, isSubtaskAssignee })));
     if (!canWrite) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
