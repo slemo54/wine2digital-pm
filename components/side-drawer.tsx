@@ -10,6 +10,7 @@ type SideDrawerProps = {
   side?: "right" | "left" | "top" | "bottom";
   contentClassName?: string;
   overlayClassName?: string;
+  hideClose?: boolean;
 };
 
 export function SideDrawer({
@@ -19,10 +20,16 @@ export function SideDrawer({
   side = "right",
   contentClassName,
   overlayClassName,
+  hideClose,
 }: SideDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side={side} className={contentClassName} overlayClassName={overlayClassName}>
+      <SheetContent
+        side={side}
+        className={contentClassName}
+        overlayClassName={overlayClassName}
+        hideClose={hideClose}
+      >
         {children}
       </SheetContent>
     </Sheet>

@@ -2112,6 +2112,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           setSubtaskDetailOpen(next);
           if (!next) setSelectedSubtask(null);
         }}
+        hideClose
         contentClassName="z-[61] w-[95vw] sm:max-w-3xl h-full p-0 flex flex-col bg-background"
         overlayClassName="z-[60] bg-black/40"
       >
@@ -2210,8 +2211,15 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           <div className="p-6 space-y-10">
             {/* Descrizione */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-sm font-semibold">Descrizione Progetto</div>
+              <div className="text-xs font-semibold tracking-[0.25em] text-muted-foreground">DESCRIZIONE</div>
+              <Textarea
+                value={subtaskDraftDescription}
+                onChange={(e) => setSubtaskDraftDescription(e.target.value)}
+                placeholder="Aggiungi una descrizione..."
+                className="min-h-[64px] rounded-xl bg-muted/10 resize-y"
+                disabled={!selectedSubtask || !canWriteSelectedSubtask || isSavingSubtaskDescription || isSavingSubtaskMeta}
+              />
+              <div className="flex justify-end">
                 <Button
                   type="button"
                   variant="outline"
@@ -2219,17 +2227,14 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                   disabled={!selectedSubtask || !canWriteSelectedSubtask || isSavingSubtaskDescription || isSavingSubtaskMeta}
                   className="border-orange-200 text-orange-600 hover:bg-orange-50"
                 >
-                  {isSavingSubtaskDescription ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  {isSavingSubtaskDescription ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
                   Salva
                 </Button>
               </div>
-              <Textarea
-                value={subtaskDraftDescription}
-                onChange={(e) => setSubtaskDraftDescription(e.target.value)}
-                placeholder="Aggiungi una descrizione..."
-                className="min-h-[120px] rounded-xl bg-muted/10"
-                disabled={!selectedSubtask || !canWriteSelectedSubtask || isSavingSubtaskDescription || isSavingSubtaskMeta}
-              />
             </div>
 
             {/* Dettagli */}
