@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,6 +100,8 @@ export function ProjectTaskLists(props: {
 
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
+  const deferredQ = useDeferredValue(q);
+  const expandedSet = useMemo(() => new Set(expanded), [expanded]);
 
   const [showCreateList, setShowCreateList] = useState(false);
   const [newListName, setNewListName] = useState("");
@@ -122,7 +124,7 @@ export function ProjectTaskLists(props: {
     try {
       const [listsRes, tasksRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/lists`, { cache: "no-store" }),
-        fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&page=1&pageSize=200`, { cache: "no-store" }),
+        fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&page=1&pageSize=200&view=projectLists`, { cache: "no-store" }),
       ]);
 
       const listsData = await listsRes.json().catch(() => ({}));
@@ -158,7 +160,7 @@ export function ProjectTaskLists(props: {
     setLoadingMore(true);
     try {
       const res = await fetch(
-        `/api/tasks?projectId=${encodeURIComponent(projectId)}&page=${nextPage}&pageSize=200`,
+        `/api/tasks?projectId=${encodeURIComponent(projectId)}&page=${nextPage}&pageSize=200&view=projectLists`,
         { cache: "no-store" }
       );
       const data = await res.json().catch(() => ({}));
@@ -296,13 +298,13 @@ export function ProjectTaskLists(props: {
   }, [projectId]);
 
   const filteredTasks = useMemo(() => {
-    const query = q.trim().toLowerCase();
+    const query = deferredQ.trim().toLowerCase();
     if (!query) return tasks;
     return tasks.filter((t) => {
       const hay = `${t.title} ${t.description || ""}`.toLowerCase();
       return hay.includes(query);
     });
-  }, [tasks, q]);
+  }, [tasks, deferredQ]);
 
   const tasksByListId = useMemo(() => {
     const map = new Map<string, TaskDto[]>();
@@ -504,6 +506,7 @@ export function ProjectTaskLists(props: {
       <Accordion type="multiple" value={expanded} onValueChange={(v) => setExpanded(v)}>
         {lists.map((l) => {
           const listTasks = tasksByListId.get(l.id) || [];
+          const isOpen = expandedSet.has(l.id);
           return (
             <AccordionItem key={l.id} value={l.id} className="border rounded-lg mb-3 bg-white">
               <AccordionTrigger className="px-4">
@@ -558,7 +561,7 @@ export function ProjectTaskLists(props: {
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4">
-                {listTasks.length === 0 ? (
+                {!isOpen ? null : listTasks.length === 0 ? (
                   <div className="text-sm text-muted-foreground py-3">Nessuna task in questa categoria.</div>
                 ) : (
                   <div className="space-y-2">

@@ -49,6 +49,7 @@ import { SubtaskChecklists } from "@/components/subtask-checklists";
 import { getHrefForFilePath, getImageSrcForFilePath } from "@/lib/drive-links";
 import { formatEurCents, parseEurToCents } from "@/lib/money";
 import { markTaskNotificationsRead } from "@/lib/notifications-client";
+import { isPerfEnabled, startPerfTimer } from "@/lib/perf-client";
 
 const RichTextEditor = dynamic(
   () => import("@/components/ui/rich-text-editor").then((m) => m.RichTextEditor),
@@ -57,6 +58,15 @@ const RichTextEditor = dynamic(
     loading: () => <div className="text-sm text-muted-foreground">Caricamento editor…</div>,
   }
 );
+
+type ProjectMetaCacheItem = {
+  ts: number;
+  lists: Array<{ id: string; name: string }>;
+  tags: Array<{ id: string; name: string }>;
+};
+
+const PROJECT_META_TTL_MS = 30_000;
+const projectMetaCache = new Map<string, ProjectMetaCacheItem>();
 
 function isEffectivelyEmptyRichHtmlClient(html: string): boolean {
   const hasImage = /<img\b/i.test(html);
@@ -154,10 +164,19 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [subtasks, setSubtasks] = useState<Subtask[]>([]);
+  const [subtasksLoading, setSubtasksLoading] = useState(false);
   const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [activityEvents, setActivityEvents] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"subtasks" | "attachments" | "comments" | "activity">("subtasks");
+  const [commentsLoaded, setCommentsLoaded] = useState(false);
+  const [attachmentsLoaded, setAttachmentsLoaded] = useState(false);
+  const [activityLoaded, setActivityLoaded] = useState(false);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [projectMetaLoading, setProjectMetaLoading] = useState(false);
+  const [projectMetaLoaded, setProjectMetaLoaded] = useState(false);
   const [isSavingMeta, setIsSavingMeta] = useState(false);
   const [isDeletingTask, setIsDeletingTask] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
@@ -210,6 +229,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const didMarkTaskNotificationsReadRef = useRef<string | null>(null);
   const didMarkTaskCommentMentionsReadRef = useRef<string | null>(null);
   const didMarkSubtaskMentionsReadRef = useRef<string | null>(null);
+  const lastProjectMetaIdRef = useRef<string | null>(null);
+  const withPerf = (url: string): string => {
+    if (!isPerfEnabled()) return url;
+    return url.includes("?") ? `${url}&perf=1` : `${url}?perf=1`;
+  };
 
   useEffect(() => {
     if (!open) {
@@ -247,13 +271,31 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   }, [open, taskId, subtaskDetailOpen, selectedSubtask?.id]);
 
   useEffect(() => {
-    if (open && taskId) {
-      fetchTaskDetails();
-    }
+    if (!open || !taskId) return;
+    void fetchTaskCore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, taskId]);
 
   useEffect(() => {
     didOpenInitialSubtaskRef.current = null;
+    lastProjectMetaIdRef.current = null;
+    setTask(null);
+    setSubtasks([]);
+    setSubtasksLoading(false);
+    setComments([]);
+    setAttachments([]);
+    setActivityEvents([]);
+    setActiveTab("subtasks");
+    setCommentsLoaded(false);
+    setAttachmentsLoaded(false);
+    setActivityLoaded(false);
+    setCommentsLoading(false);
+    setAttachmentsLoading(false);
+    setActivityLoading(false);
+    setProjectMetaLoaded(false);
+    setProjectMetaLoading(false);
+    setProjectLists([]);
+    setProjectTags([]);
   }, [taskId]);
 
   useEffect(() => {
@@ -307,76 +349,186 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtaskDetailOpen, selectedSubtask?.id]);
 
-  const fetchTaskDetails = async () => {
-    setLoading(true);
+  const fetchProjectMeta = async (effectiveProjectId: string) => {
+    if (!effectiveProjectId) {
+      lastProjectMetaIdRef.current = null;
+      setProjectLists([]);
+      setProjectTags([]);
+      setProjectMetaLoaded(false);
+      setProjectMetaLoading(false);
+      return;
+    }
+
+    const cacheHit = projectMetaCache.get(effectiveProjectId);
+    if (cacheHit && Date.now() - cacheHit.ts < PROJECT_META_TTL_MS) {
+      lastProjectMetaIdRef.current = effectiveProjectId;
+      setProjectLists(cacheHit.lists);
+      setProjectTags(cacheHit.tags);
+      setProjectMetaLoaded(true);
+      setProjectMetaLoading(false);
+      return;
+    }
+
+    if (projectMetaLoading && lastProjectMetaIdRef.current === effectiveProjectId) return;
+
+    setProjectMetaLoading(true);
+    lastProjectMetaIdRef.current = effectiveProjectId;
     try {
-      const [taskRes, subtasksRes, commentsRes, attachmentsRes, activityRes] = await Promise.all([
-        fetch(`/api/tasks/${taskId}`),
-        fetch(`/api/tasks/${taskId}/subtasks`),
-        fetch(`/api/tasks/${taskId}/comments`),
-        fetch(`/api/tasks/${taskId}/attachments`),
-        fetch(`/api/tasks/${taskId}/activity`),
+      const [listsRes, tagsRes] = await Promise.all([
+        fetch(`/api/projects/${effectiveProjectId}/lists`, { cache: "no-store" }),
+        fetch(`/api/projects/${effectiveProjectId}/tags`, { cache: "no-store" }),
       ]);
 
-      const [taskData, subtasksData, commentsData, attachmentsData, activityData] = await Promise.all([
-        taskRes.json(),
-        subtasksRes.json(),
-        commentsRes.json(),
-        attachmentsRes.json(),
-        activityRes.json(),
+      const [listsData, tagsData] = await Promise.all([
+        listsRes.json().catch(() => ({})),
+        tagsRes.json().catch(() => ({})),
       ]);
+
+      const lists =
+        listsRes.ok && Array.isArray((listsData as any)?.lists)
+          ? (listsData as any).lists.map((l: any) => ({ id: String(l.id), name: String(l.name) }))
+          : [];
+
+      const tags =
+        tagsRes.ok && Array.isArray((tagsData as any)?.tags)
+          ? (tagsData as any).tags.map((t: any) => ({ id: String(t.id), name: String(t.name) }))
+          : [];
+
+      setProjectLists(lists);
+      setProjectTags(tags);
+      setProjectMetaLoaded(true);
+      projectMetaCache.set(effectiveProjectId, { ts: Date.now(), lists, tags });
+    } catch {
+      setProjectLists([]);
+      setProjectTags([]);
+      setProjectMetaLoaded(false);
+    } finally {
+      setProjectMetaLoading(false);
+    }
+  };
+
+  const fetchTaskCore = async () => {
+    const stopPerf = startPerfTimer("TaskDetailModal.fetchTaskCore", { taskId });
+    setLoading(true);
+    setSubtasksLoading(true);
+    let ok = false;
+    let subtasksCount = 0;
+    try {
+      const taskReq = fetch(withPerf(`/api/tasks/${taskId}`), { cache: "no-store" });
+      const subtasksReq = fetch(withPerf(`/api/tasks/${taskId}/subtasks`), { cache: "no-store" });
+
+      const taskRes = await taskReq;
+      const taskData = await taskRes.json().catch(() => ({}));
+      if (!taskRes.ok) throw new Error((taskData as any)?.error || "Errore caricamento task");
 
       setTask(taskData);
-      setSubtasks(subtasksData);
-      setComments(commentsData);
-      setAttachments(attachmentsData);
-      setActivityEvents(Array.isArray(activityData?.events) ? activityData.events : []);
+      // sblocca rendering immediato del drawer anche se le subtasks sono lente
+      setLoading(false);
 
-      // Lists sono per-progetto: quando il modal viene aperto da /tasks (scope globale),
+      // Lists/tags sono per-progetto: quando il modal viene aperto da /tasks (scope globale),
       // il caller potrebbe non conoscere subito il projectId. In quel caso lo deduciamo dal task.
       const taskProjectId =
         typeof (taskData as any)?.projectId === "string" ? String((taskData as any).projectId) : "";
       const effectiveProjectId = taskProjectId || (projectId && projectId !== "_global" ? projectId : "");
-      if (!effectiveProjectId) {
-        setProjectLists([]);
-        setProjectTags([]);
-      } else {
-        try {
-          const [listsRes, tagsRes] = await Promise.all([
-            fetch(`/api/projects/${effectiveProjectId}/lists`, { cache: "no-store" }),
-            fetch(`/api/projects/${effectiveProjectId}/tags`, { cache: "no-store" }),
-          ]);
+      void fetchProjectMeta(effectiveProjectId);
 
-          const [listsData, tagsData] = await Promise.all([
-            listsRes.json().catch(() => ({})),
-            tagsRes.json().catch(() => ({})),
-          ]);
+      const subtasksRes = await subtasksReq;
+      const subtasksData = await subtasksRes.json().catch(() => ([]));
+      if (!subtasksRes.ok) throw new Error((subtasksData as any)?.error || "Errore caricamento subtasks");
 
-          if (listsRes.ok && Array.isArray((listsData as any)?.lists)) {
-            setProjectLists((listsData as any).lists.map((l: any) => ({ id: String(l.id), name: String(l.name) })));
-          } else {
-            setProjectLists([]);
-          }
+      const st = Array.isArray(subtasksData) ? (subtasksData as Subtask[]) : [];
+      subtasksCount = st.length;
+      setSubtasks(st);
 
-          if (tagsRes.ok && Array.isArray((tagsData as any)?.tags)) {
-            setProjectTags(
-              (tagsData as any).tags.map((t: any) => ({ id: String(t.id), name: String(t.name) }))
-            );
-          } else {
-            setProjectTags([]);
-          }
-        } catch {
-          setProjectLists([]);
-          setProjectTags([]);
-        }
-      }
+      ok = true;
     } catch (error) {
       console.error("Failed to fetch task details:", error);
-      toast.error("Errore durante il caricamento del task");
+      toast.error(error instanceof Error ? error.message : "Errore durante il caricamento del task");
+      stopPerf({ ok: false, error: error instanceof Error ? error.message : "unknown" });
     } finally {
       setLoading(false);
+      setSubtasksLoading(false);
+      if (ok) stopPerf({ ok: true, subtasks: subtasksCount });
     }
   };
+
+  const fetchTaskAttachments = async () => {
+    if (attachmentsLoading) return;
+    const stopPerf = startPerfTimer("TaskDetailModal.fetchAttachments", { taskId });
+    setAttachmentsLoading(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/attachments`, { cache: "no-store" });
+      const data = await res.json().catch(() => ([]));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore caricamento allegati");
+      const list = Array.isArray(data) ? (data as Attachment[]) : [];
+      setAttachments(list);
+      setAttachmentsLoaded(true);
+      stopPerf({ ok: true, count: list.length });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore caricamento allegati");
+      stopPerf({ ok: false, error: e instanceof Error ? e.message : "unknown" });
+    } finally {
+      setAttachmentsLoading(false);
+    }
+  };
+
+  const fetchTaskComments = async () => {
+    if (commentsLoading) return;
+    const stopPerf = startPerfTimer("TaskDetailModal.fetchComments", { taskId });
+    setCommentsLoading(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/comments`, { cache: "no-store" });
+      const data = await res.json().catch(() => ([]));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore caricamento commenti");
+      const list = Array.isArray(data) ? (data as Comment[]) : [];
+      setComments(list);
+      setCommentsLoaded(true);
+      stopPerf({ ok: true, count: list.length });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore caricamento commenti");
+      stopPerf({ ok: false, error: e instanceof Error ? e.message : "unknown" });
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  const fetchTaskActivity = async () => {
+    if (activityLoading) return;
+    const stopPerf = startPerfTimer("TaskDetailModal.fetchActivity", { taskId });
+    setActivityLoading(true);
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/activity`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Errore caricamento activity");
+      const list = Array.isArray((data as any)?.events) ? ((data as any).events as any[]) : [];
+      setActivityEvents(list);
+      setActivityLoaded(true);
+      stopPerf({ ok: true, count: list.length });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Errore caricamento activity");
+      stopPerf({ ok: false, error: e instanceof Error ? e.message : "unknown" });
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!open || !taskId) return;
+    if (activeTab === "attachments" && !attachmentsLoaded && !attachmentsLoading) void fetchTaskAttachments();
+    if (activeTab === "comments" && !commentsLoaded && !commentsLoading) void fetchTaskComments();
+    if (activeTab === "activity" && !activityLoaded && !activityLoading) void fetchTaskActivity();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    open,
+    taskId,
+    activeTab,
+    attachmentsLoaded,
+    commentsLoaded,
+    activityLoaded,
+    attachmentsLoading,
+    commentsLoading,
+    activityLoading,
+  ]);
 
   const updateTaskMeta = async (
     patch: Record<string, any>,
@@ -389,12 +541,19 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || "Update failed");
-      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as any)?.error || "Update failed");
+
+      // The PUT payload does not always include nested project.members; preserve them from the existing task.
+      setTask((prev: any) => {
+        const next: any = data;
+        if (!prev) return next;
+        const prevProject = prev?.project || {};
+        const nextProject = next?.project ? { ...prevProject, ...next.project } : prevProject;
+        return { ...prev, ...next, project: nextProject };
+      });
       if (!opts?.silent) toast.success(opts?.successMessage || "Aggiornato");
-      await fetchTaskDetails();
+      if (activityLoaded) void fetchTaskActivity();
       onUpdate?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore aggiornamento");
@@ -541,6 +700,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Errore durante l'aggiunta del commento");
       setComments((prev) => [...prev, data as any]);
+      setCommentsLoaded(true);
       setNewCommentHtml("");
       setMentionedUserIds([]);
         toast.success("Commento aggiunto");
@@ -577,6 +737,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Errore salvataggio");
       setComments((prev) => prev.map((c) => (c.id === editingCommentId ? (data as any) : c)));
+      setCommentsLoaded(true);
       cancelEditComment();
       toast.success("Commento aggiornato");
     } catch (e) {
@@ -593,6 +754,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Errore eliminazione");
       setComments((prev) => prev.filter((c) => c.id !== commentId));
+      setCommentsLoaded(true);
       if (editingCommentId === commentId) cancelEditComment();
       toast.success("Commento eliminato");
     } catch (e) {
@@ -614,7 +776,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
       if (res.ok) {
         const attachment = await res.json();
-        setAttachments([...attachments, attachment]);
+        setAttachments((prev) => [...prev, attachment]);
+        setAttachmentsLoaded(true);
         toast.success("File caricato");
       }
     } catch (error) {
@@ -931,19 +1094,20 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     setIsEditingTaskTitle(false);
   }, [taskId, task?.updatedAt, currentAssigneeKey, task]);
 
-  if (loading) {
+  if (!open) return null;
+
+  if (loading || !task) {
     return (
       <Sheet open={open} onOpenChange={onClose}>
         <SheetContent side="right" className="w-[95vw] sm:max-w-5xl max-h-[90vh] max-h-[90dvh] overflow-hidden p-0">
-          <div className="flex items-center justify-center p-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500" />
+          <div className="flex items-center justify-center p-8 gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span className="text-sm">Caricamento…</span>
           </div>
         </SheetContent>
       </Sheet>
     );
   }
-
-  if (!task) return null;
 
   const globalRole = ((session?.user as any)?.role as string | undefined) || "member";
   const meId = (session?.user as any)?.id as string | undefined;
@@ -1704,11 +1868,17 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       <Select
                         value={task.listId || ""}
                         onValueChange={(v) => updateTaskMeta({ listId: v || null })}
-                        disabled={isSavingMeta || projectLists.length === 0}
+                        disabled={isSavingMeta || projectMetaLoading || projectLists.length === 0}
                       >
                         <SelectTrigger className="h-9">
                           <SelectValue
-                            placeholder={projectLists.length === 0 ? "Categorie non disponibili" : "Seleziona"}
+                            placeholder={
+                              projectMetaLoading
+                                ? "Caricamento…"
+                                : projectLists.length === 0
+                                  ? "Categorie non disponibili"
+                                  : "Seleziona"
+                            }
                           />
                         </SelectTrigger>
                         <SelectContent>
@@ -1806,7 +1976,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     </div>
 
                     <div className="space-y-2">
-                    {subtasks.length === 0 ? (
+                    {subtasksLoading ? (
+                      <div className="text-sm text-muted-foreground flex items-center gap-2 py-2">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Caricamento subtasks…
+                      </div>
+                    ) : null}
+                    {!subtasksLoading && subtasks.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nessuna subtask.</div>
                     ) : null}
                       {subtasks.map((subtask) => (
@@ -1896,12 +2071,17 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     <h3 className="text-sm font-semibold flex items-center gap-2">
                       <Paperclip className="w-4 h-4" />
                       Allegati
-                      <span className="text-muted-foreground">({attachments.length})</span>
+                      <span className="text-muted-foreground">({attachmentsLoaded ? attachments.length : "…"})</span>
                     </h3>
                   </div>
 
                     <div className="space-y-2">
-                    {attachments.length === 0 ? (
+                    {attachmentsLoading ? (
+                      <div className="text-sm text-muted-foreground flex items-center gap-2 py-1">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Caricamento allegati…
+                      </div>
+                    ) : null}
+                    {!attachmentsLoading && attachmentsLoaded && attachments.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nessun allegato.</div>
                     ) : null}
                     {attachments.map((attachment) => {
@@ -1957,11 +2137,16 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                   <h3 className="text-sm font-semibold flex items-center gap-2">
                       <MessageSquare className="w-4 h-4" />
                       Commenti
-                    <span className="text-muted-foreground">({comments.length})</span>
+                    <span className="text-muted-foreground">({commentsLoaded ? comments.length : "…"})</span>
                     </h3>
 
                     <div className="space-y-3">
-                    {comments.length === 0 ? (
+                    {commentsLoading ? (
+                      <div className="text-sm text-muted-foreground flex items-center gap-2 py-1">
+                        <Loader2 className="h-4 w-4 animate-spin" /> Caricamento commenti…
+                      </div>
+                    ) : null}
+                    {!commentsLoading && commentsLoaded && comments.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nessun commento.</div>
                     ) : null}
                       {comments.map((comment) => (
@@ -2073,6 +2258,14 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
               {activeTab === "activity" ? (
                 <div className="space-y-3">
+                  {activityLoading ? (
+                    <div className="text-sm text-muted-foreground flex items-center gap-2 py-1">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Caricamento activity…
+                    </div>
+                  ) : null}
+                  {!activityLoading && activityLoaded && activityEvents.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Nessun evento.</div>
+                  ) : null}
                   {activityEvents.map((e) => (
                     <div key={e.id} className="flex gap-3">
                       <Avatar className="w-8 h-8">

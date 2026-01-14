@@ -130,7 +130,7 @@ export default function DashboardPage() {
   const fetchMyTasks = async () => {
     try {
       // Keep this aligned with /tasks?scope=assigned (pageSize=100)
-      const response = await fetch("/api/tasks?scope=assigned&page=1&pageSize=100");
+      const response = await fetch("/api/tasks?scope=assigned&page=1&pageSize=100&view=dashboard");
       const data = await response.json();
       setMyTasks(Array.isArray(data?.tasks) ? data.tasks : []);
     } catch {

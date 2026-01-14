@@ -9,28 +9,43 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const perf = new URL(request.url).searchParams.get("perf") === "1";
+  const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const session = await getServerSession(authOptions);
+  const tAuth = typeof performance !== "undefined" ? performance.now() : Date.now();
   if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const headers = perf ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)}` } : undefined;
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
   }
 
   try {
     const userId = (session.user as any).id as string | undefined;
     const role = ((session.user as any).role as string | undefined) || "member";
     if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      const headers = perf ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)}` } : undefined;
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
     }
 
+    const tDb0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const access = await getTaskAccessFlags(prisma, params.id, userId);
     if (!access) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      const tDb1 = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const headers = perf
+        ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},db;dur=${(tDb1 - tDb0).toFixed(1)}` }
+        : undefined;
+      return NextResponse.json({ error: "Task not found" }, { status: 404, headers });
     }
 
     const canRead = role === "admin" || access.isAssignee || access.isProjectMember;
     if (!canRead) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+      const tDb1 = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const headers = perf
+        ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},db;dur=${(tDb1 - tDb0).toFixed(1)}` }
+        : undefined;
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403, headers });
     }
 
+    const tQuery0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const subtasks = await prisma.subtask.findMany({
       where: { taskId: params.id },
       orderBy: { position: "asc" },
@@ -49,8 +64,15 @@ export async function GET(
         dependentOn: true
       }
     });
+    const tQuery1 = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const tEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const headers = perf
+      ? {
+          "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},access;dur=${(tQuery0 - tDb0).toFixed(1)},db;dur=${(tQuery1 - tQuery0).toFixed(1)},total;dur=${(tEnd - t0).toFixed(1)}`,
+        }
+      : undefined;
 
-    return NextResponse.json(subtasks);
+    return NextResponse.json(subtasks, { headers });
   } catch (error) {
     console.error("Error fetching subtasks:", error);
     return NextResponse.json(

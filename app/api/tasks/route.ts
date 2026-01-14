@@ -20,6 +20,15 @@ function normalizeTagName(input: string): string {
     .toUpperCase();
 }
 
+type TasksView = "default" | "projectLists" | "dashboard";
+
+function normalizeTasksView(input: string | null): TasksView {
+  const v = String(input || "").trim();
+  if (v === "projectLists") return "projectLists";
+  if (v === "dashboard") return "dashboard";
+  return "default";
+}
+
 export async function GET(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -42,6 +51,7 @@ export async function GET(req: NextRequest) {
     const q = searchParams.get('q');
     const tag = searchParams.get('tag');
     const tagName = tag ? normalizeTagName(tag) : null;
+    const view = normalizeTasksView(searchParams.get("view"));
 
     const page = Math.max(1, Number(searchParams.get('page') || 1));
     const pageSizeRaw = Number(searchParams.get('pageSize') || 50);
@@ -93,38 +103,68 @@ export async function GET(req: NextRequest) {
       ],
     } as const;
 
-    const [total, tasks] = await Promise.all([
-      prisma.task.count({ where: where as any }),
-      prisma.task.findMany({
-        where: where as any,
-        orderBy: [{ updatedAt: 'desc' }],
-        skip,
-        take: pageSize,
-        include: {
-          project: { select: { id: true, name: true } },
-          taskList: { select: { id: true, name: true } },
-          tags: { select: { id: true, name: true } },
-          assignees: {
-            include: {
-              user: {
-                select: {
-                  id: true,
-                  email: true,
-                  name: true,
-                  firstName: true,
-                  lastName: true,
-                  image: true,
-                },
+    const findManyArgs: any = {
+      where: where as any,
+      orderBy: [{ updatedAt: 'desc' }],
+      skip,
+      take: pageSize,
+    };
+
+    if (view === "projectLists") {
+      findManyArgs.select = {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+        listId: true,
+        taskList: { select: { id: true, name: true } },
+        legacyTags: true,
+        tags: { select: { id: true, name: true } },
+        amountCents: true,
+      };
+    } else if (view === "dashboard") {
+      findManyArgs.select = {
+        id: true,
+        title: true,
+        description: true,
+        status: true,
+        priority: true,
+        dueDate: true,
+        project: { select: { id: true, name: true } },
+        _count: { select: { comments: true, attachments: true, subtasks: true } },
+      };
+    } else {
+      findManyArgs.include = {
+        project: { select: { id: true, name: true } },
+        taskList: { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true } },
+        assignees: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                name: true,
+                firstName: true,
+                lastName: true,
+                image: true,
               },
             },
           },
-          _count: { select: { comments: true, attachments: true, subtasks: true } },
-          subtasks: {
-            where: { OR: [{ status: "done" }, { completed: true }] },
-            select: { id: true }
-          }
         },
-      }),
+        _count: { select: { comments: true, attachments: true, subtasks: true } },
+        subtasks: {
+          where: { OR: [{ status: "done" }, { completed: true }] },
+          select: { id: true }
+        }
+      };
+    }
+
+    const [total, tasks] = await Promise.all([
+      prisma.task.count({ where: where as any }),
+      prisma.task.findMany(findManyArgs),
     ]);
 
     return NextResponse.json({ tasks, page, pageSize, total });

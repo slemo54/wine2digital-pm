@@ -330,6 +330,8 @@ model Subtask {
   // Dependencies
   dependencies SubtaskDependency[] @relation("SubtaskDependencies")
   dependentOn  SubtaskDependency[] @relation("DependentSubtasks")
+
+  @@index([taskId, position])
 }
 
 // Subtask Dependencies
@@ -343,6 +345,7 @@ model SubtaskDependency {
   dependsOn Subtask @relation("DependentSubtasks", fields: [dependsOnId], references: [id], onDelete: Cascade)
 
   @@unique([subtaskId, dependsOnId])
+  @@index([dependsOnId])
 }
 
 model SubtaskChecklist {

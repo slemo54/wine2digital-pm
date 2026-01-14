@@ -4,6 +4,7 @@ import { ReactNode, useMemo } from "react";
 import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CommandPalette } from "@/components/command-palette";
+import { PerfOverlay } from "@/components/perf-overlay";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
@@ -53,6 +54,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </div>
         <CommandPalette />
+        <PerfOverlay />
         <footer className="py-2 text-center mt-auto border-t border-border/40">
           <p className="text-[10px] text-muted-foreground/40 font-mono">by Anselmo Acquah</p>
         </footer>
