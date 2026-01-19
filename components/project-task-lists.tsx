@@ -13,11 +13,32 @@ import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Download } from "lucide-react";
-import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate, safeFileStem } from "@/lib/export";
-import { formatEurCents } from "@/lib/money";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects,
+  DragStartEvent,
+  DragOverEvent,
+  DragEndEvent,
+  useDroppable,
+  closestCorners,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
 
-type ListDto = { id: string; name: string; updatedAt: string; _count?: { tasks: number } };
+type ListDto = { id: string; name: string; updatedAt: string; position?: number; _count?: { tasks: number } };
 
 type TaskDto = {
   id: string;
@@ -27,6 +48,7 @@ type TaskDto = {
   priority: string;
   dueDate: string | null;
   listId: string | null;
+  position?: number;
   taskList: { id: string; name: string } | null;
   legacyTags?: string | null;
   tags?: Array<{ id: string; name: string }>;
@@ -72,6 +94,68 @@ function getTagBadgeClass(tagName: string): string {
   return "bg-primary text-primary-foreground border-primary/20";
 }
 
+function SortableTask({ id, children, disabled }: { id: string; children: React.ReactNode; disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    data: { type: "Task" },
+    disabled,
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 100 : "auto",
+    position: "relative" as const,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="flex gap-2 items-start group/task">
+      {!disabled && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="mt-4 cursor-grab active:cursor-grabbing text-muted-foreground/20 hover:text-muted-foreground opacity-0 group-hover/task:opacity-100 transition-opacity shrink-0"
+        >
+          <GripVertical className="w-4 h-4" />
+        </div>
+      )}
+      <div className="flex-1 min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function SortableList({ id, children, disabled }: { id: string; children: React.ReactNode; disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    data: { type: "List" },
+    disabled,
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : "auto",
+    position: "relative" as const,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="group/list relative">
+      {!disabled && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute left-1 top-4 z-10 cursor-grab active:cursor-grabbing text-muted-foreground/20 hover:text-muted-foreground opacity-0 group-hover/list:opacity-100 transition-opacity"
+        >
+          <GripVertical className="w-4 h-4" />
+        </div>
+      )}
+      <div className={!disabled ? "pl-6" : ""}>{children}</div>
+    </div>
+  );
+}
+
 export function ProjectTaskLists(props: {
   projectId: string;
   sessionUserId?: string | null;
@@ -92,6 +176,123 @@ export function ProjectTaskLists(props: {
 
   const [lists, setLists] = useState<ListDto[]>([]);
   const [tasks, setTasks] = useState<TaskDto[]>([]);
+  
+  // DnD State
+  const [localLists, setLocalLists] = useState<ListDto[]>([]);
+  const [localTasks, setLocalTasks] = useState<TaskDto[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Load local storage order if available
+    const savedOrder = localStorage.getItem(`project_order_${projectId}`);
+    if (savedOrder) {
+      try {
+        const { listOrder, taskOrder } = JSON.parse(savedOrder);
+        const sortedLists = [...lists].sort((a, b) => {
+          const posA = listOrder[a.id] ?? a.position ?? 0;
+          const posB = listOrder[b.id] ?? b.position ?? 0;
+          return posA - posB;
+        });
+        const sortedTasks = [...tasks].sort((a, b) => {
+          const posA = taskOrder[a.id] ?? a.position ?? 0;
+          const posB = taskOrder[b.id] ?? b.position ?? 0;
+          return posA - posB;
+        });
+        setLocalLists(sortedLists);
+        setLocalTasks(sortedTasks);
+      } catch {
+        setLocalLists(lists);
+        setLocalTasks(tasks);
+      }
+    } else {
+        setLocalLists(lists);
+        setLocalTasks(tasks);
+    }
+  }, [lists, tasks, projectId]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(String(event.active.id));
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    // Only handle Task moving between lists here
+    const activeTask = localTasks.find((t) => t.id === activeId);
+    if (!activeTask) return; // Not a task
+
+    const overTask = localTasks.find((t) => t.id === overId);
+    const overList = localLists.find((l) => l.id === overId);
+
+    if (overTask && activeTask.listId !== overTask.listId) {
+      setLocalTasks((items) => {
+        const activeIndex = items.findIndex((t) => t.id === activeId);
+        const overIndex = items.findIndex((t) => t.id === overId);
+        if (items[activeIndex].listId !== items[overIndex].listId) {
+          items[activeIndex].listId = items[overIndex].listId;
+          return arrayMove(items, activeIndex, overIndex);
+        }
+        return items;
+      });
+    } else if (overList && activeTask.listId !== overList.id) {
+      setLocalTasks((items) => {
+        const activeIndex = items.findIndex((t) => t.id === activeId);
+        items[activeIndex].listId = overList.id;
+        return [...items];
+      });
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+
+    if (activeId === overId) return;
+
+    const isList = localLists.some(l => l.id === activeId);
+    
+    if (isList) {
+        setLocalLists((items) => {
+            const oldIndex = items.findIndex((l) => l.id === activeId);
+            const newIndex = items.findIndex((l) => l.id === overId);
+            const newItems = arrayMove(items, oldIndex, newIndex);
+            
+            // Persist to LocalStorage
+            const listOrder = newItems.reduce((acc, item, index) => ({ ...acc, [item.id]: index }), {});
+            const currentStore = JSON.parse(localStorage.getItem(`project_order_${projectId}`) || '{"listOrder":{},"taskOrder":{}}');
+            localStorage.setItem(`project_order_${projectId}`, JSON.stringify({ ...currentStore, listOrder }));
+            
+            return newItems;
+        });
+    } else {
+        setLocalTasks((items) => {
+            const oldIndex = items.findIndex((t) => t.id === activeId);
+            const newIndex = items.findIndex((t) => t.id === overId);
+            const newItems = arrayMove(items, oldIndex, newIndex);
+
+            // Persist to LocalStorage
+            const taskOrder = newItems.reduce((acc, item, index) => ({ ...acc, [item.id]: index }), {});
+            const currentStore = JSON.parse(localStorage.getItem(`project_order_${projectId}`) || '{"listOrder":{},"taskOrder":{}}');
+            localStorage.setItem(`project_order_${projectId}`, JSON.stringify({ ...currentStore, taskOrder }));
+
+            return newItems;
+        });
+    }
+  };
+
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [tasksPage, setTasksPage] = useState(1);
@@ -297,25 +498,23 @@ export function ProjectTaskLists(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  const filteredTasks = useMemo(() => {
-    const query = deferredQ.trim().toLowerCase();
-    if (!query) return tasks;
-    return tasks.filter((t) => {
-      const hay = `${t.title} ${t.description || ""}`.toLowerCase();
-      return hay.includes(query);
-    });
-  }, [tasks, deferredQ]);
-
   const tasksByListId = useMemo(() => {
     const map = new Map<string, TaskDto[]>();
-    for (const t of filteredTasks) {
+    for (const t of localTasks) {
+      // Filter by query if present
+      if (deferredQ.trim()) {
+         const query = deferredQ.trim().toLowerCase();
+         const hay = `${t.title} ${t.description || ""}`.toLowerCase();
+         if (!hay.includes(query)) continue;
+      }
+      
       const key = t.listId || "__none__";
       const arr = map.get(key) || [];
       arr.push(t);
       map.set(key, arr);
     }
     return map;
-  }, [filteredTasks]);
+  }, [localTasks, deferredQ]);
 
   const createList = async () => {
     const name = newListName.trim();
@@ -503,204 +702,226 @@ export function ProjectTaskLists(props: {
         </div>
       </div>
 
-      <Accordion type="multiple" value={expanded} onValueChange={(v) => setExpanded(v)}>
-        {lists.map((l) => {
-          const listTasks = tasksByListId.get(l.id) || [];
-          const isOpen = expandedSet.has(l.id);
-          return (
-            <AccordionItem key={l.id} value={l.id} className="border rounded-lg mb-3 bg-white">
-              <AccordionTrigger className="px-4">
-                <div className="flex items-center justify-between w-full pr-4">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="font-semibold truncate">{l.name}</div>
-                    <Badge variant="secondary">
-                      {listTasks.length}/{l._count?.tasks ?? listTasks.length}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setDefaultListIdForNewTask(l.id);
-                        setShowCreateTask(true);
-                      }}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add task
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setRenameListId(l.id);
-                        setRenameValue(l.name);
-                      }}
-                      title="Rinomina"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        deleteList(l.id, l.name);
-                      }}
-                      title="Elimina"
-                      disabled={l.name === DEFAULT_LIST_NAME}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </AccordionTrigger>
-              <AccordionContent className="px-4">
-                {!isOpen ? null : listTasks.length === 0 ? (
-                  <div className="text-sm text-muted-foreground py-3">Nessuna task in questa categoria.</div>
-                ) : (
-                  <div className="space-y-2">
-                    {listTasks.map((t) => {
-                      const sb = statusBadge(t.status);
-                      const tagNames = getDisplayTagNames(t);
-                      const primaryTag = tagNames[0] || null;
-                      const extraTagCount = tagNames.length > 1 ? tagNames.length - 1 : 0;
-                      const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : null;
-                      const isEditing = editingTaskId === t.id;
-                      const isDeleting = deletingTaskId === t.id;
-                      const disableRowOpen = isEditing;
-                      return (
-                        <div
-                          key={t.id}
-                          role="button"
-                          tabIndex={0}
-                          className="w-full text-left border rounded-lg p-3 hover:bg-muted/30 transition-colors group"
-                          onClick={() => {
-                            if (disableRowOpen) return;
-                            setSelectedTaskId(t.id);
-                          }}
-                          onKeyDown={(e) => {
-                            if (disableRowOpen) return;
-                            if (e.key === "Enter" || e.key === " ") {
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={localLists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+          <Accordion type="multiple" value={expanded} onValueChange={(v) => setExpanded(v)}>
+            {localLists.map((l) => {
+              const listTasks = tasksByListId.get(l.id) || [];
+              const isOpen = expandedSet.has(l.id);
+              return (
+                <SortableList key={l.id} id={l.id} disabled={!!q}>
+                  <AccordionItem value={l.id} className="border rounded-lg mb-3 bg-white">
+                    <AccordionTrigger className="px-4">
+                      <div className="flex items-center justify-between w-full pr-4">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="font-semibold truncate">{l.name}</div>
+                          <Badge variant="secondary">
+                            {listTasks.length}/{l._count?.tasks ?? listTasks.length}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
                               e.preventDefault();
-                              setSelectedTaskId(t.id);
-                            }
-                          }}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              {isEditing ? (
-                                <div className="flex items-start gap-2" onClick={(e) => e.stopPropagation()}>
-                                  <Input
-                                    value={editingTaskTitle}
-                                    onChange={(e) => setEditingTaskTitle(e.target.value)}
-                                    disabled={!canManageTasks || savingTaskTitle}
+                              e.stopPropagation();
+                              setDefaultListIdForNewTask(l.id);
+                              setShowCreateTask(true);
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add task
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setRenameListId(l.id);
+                              setRenameValue(l.name);
+                            }}
+                            title="Rinomina"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              deleteList(l.id, l.name);
+                            }}
+                            title="Elimina"
+                            disabled={l.name === DEFAULT_LIST_NAME}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4">
+                      {!isOpen ? null : listTasks.length === 0 ? (
+                        <div className="text-sm text-muted-foreground py-3">Nessuna task in questa categoria.</div>
+                      ) : (
+                        <SortableContext items={listTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                          <div className="space-y-2 min-h-[10px]">
+                            {listTasks.map((t) => {
+                              const sb = statusBadge(t.status);
+                              const tagNames = getDisplayTagNames(t);
+                              const primaryTag = tagNames[0] || null;
+                              const extraTagCount = tagNames.length > 1 ? tagNames.length - 1 : 0;
+                              const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : null;
+                              const isEditing = editingTaskId === t.id;
+                              const isDeleting = deletingTaskId === t.id;
+                              const disableRowOpen = isEditing;
+                              return (
+                                <SortableTask key={t.id} id={t.id} disabled={!!q}>
+                                  <div
+                                    role="button"
+                                    tabIndex={0}
+                                    className="w-full text-left border rounded-lg p-3 hover:bg-muted/30 transition-colors group"
+                                    onClick={() => {
+                                      if (disableRowOpen) return;
+                                      setSelectedTaskId(t.id);
+                                    }}
                                     onKeyDown={(e) => {
-                                      if (e.key === "Escape") {
+                                      if (disableRowOpen) return;
+                                      if (e.key === "Enter" || e.key === " ") {
                                         e.preventDefault();
-                                        cancelEditTaskTitle();
-                                      }
-                                      if (e.key === "Enter") {
-                                        e.preventDefault();
-                                        void saveEditedTaskTitle();
+                                        setSelectedTaskId(t.id);
                                       }
                                     }}
-                                  />
-                                  <Button
-                                    size="sm"
-                                    onClick={() => void saveEditedTaskTitle()}
-                                    disabled={!canManageTasks || savingTaskTitle || !editingTaskTitle.trim()}
                                   >
-                                    {savingTaskTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salva"}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={cancelEditTaskTitle}
-                                    disabled={savingTaskTitle}
-                                  >
-                                    Annulla
-                                  </Button>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="font-medium truncate">{t.title}</div>
-                                  {t.description ? (
-                                    <div className="text-xs text-muted-foreground line-clamp-2 mt-1">{t.description}</div>
-                                  ) : null}
-                                </>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                              {amountEur ? (
-                                <Badge
-                                  variant="outline"
-                                  className="rounded-md px-4 py-1 text-[11px] font-semibold min-w-[120px] justify-center"
-                                  title="Importo"
-                                >
-                                  {amountEur}
-                                </Badge>
-                              ) : null}
-                              {primaryTag ? (
-                                <Badge
-                                  variant="default"
-                                  className={`rounded-md px-4 py-1 text-[11px] font-semibold uppercase tracking-wide min-w-[140px] justify-center ${getTagBadgeClass(primaryTag)}`}
-                                  title={tagNames.join(", ")}
-                                >
-                                  {primaryTag}
-                                </Badge>
-                              ) : null}
-                              {extraTagCount > 0 ? (
-                                <Badge variant="outline" title={tagNames.join(", ")}>
-                                  +{extraTagCount}
-                                </Badge>
-                              ) : null}
-                              <Badge variant={sb.variant} className="capitalize">
-                                {sb.label}
-                              </Badge>
-                              {t.dueDate ? (
-                                <Badge variant="outline">{new Date(t.dueDate).toLocaleDateString()}</Badge>
-                              ) : null}
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="min-w-0 flex-1">
+                                        {isEditing ? (
+                                          <div className="flex items-start gap-2" onClick={(e) => e.stopPropagation()}>
+                                            <Input
+                                              value={editingTaskTitle}
+                                              onChange={(e) => setEditingTaskTitle(e.target.value)}
+                                              disabled={!canManageTasks || savingTaskTitle}
+                                              onKeyDown={(e) => {
+                                                if (e.key === "Escape") {
+                                                  e.preventDefault();
+                                                  cancelEditTaskTitle();
+                                                }
+                                                if (e.key === "Enter") {
+                                                  e.preventDefault();
+                                                  void saveEditedTaskTitle();
+                                                }
+                                              }}
+                                            />
+                                            <Button
+                                              size="sm"
+                                              onClick={() => void saveEditedTaskTitle()}
+                                              disabled={!canManageTasks || savingTaskTitle || !editingTaskTitle.trim()}
+                                            >
+                                              {savingTaskTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salva"}
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              onClick={cancelEditTaskTitle}
+                                              disabled={savingTaskTitle}
+                                            >
+                                              Annulla
+                                            </Button>
+                                          </div>
+                                        ) : (
+                                          <>
+                                            <div className="font-medium truncate">{t.title}</div>
+                                            {t.description ? (
+                                              <div className="text-xs text-muted-foreground line-clamp-2 mt-1">{t.description}</div>
+                                            ) : null}
+                                          </>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                        {amountEur ? (
+                                          <Badge
+                                            variant="outline"
+                                            className="rounded-md px-4 py-1 text-[11px] font-semibold min-w-[120px] justify-center"
+                                            title="Importo"
+                                          >
+                                            {amountEur}
+                                          </Badge>
+                                        ) : null}
+                                        {primaryTag ? (
+                                          <Badge
+                                            variant="default"
+                                            className={`rounded-md px-4 py-1 text-[11px] font-semibold uppercase tracking-wide min-w-[140px] justify-center ${getTagBadgeClass(primaryTag)}`}
+                                            title={tagNames.join(", ")}
+                                          >
+                                            {primaryTag}
+                                          </Badge>
+                                        ) : null}
+                                        {extraTagCount > 0 ? (
+                                          <Badge variant="outline" title={tagNames.join(", ")}>
+                                            +{extraTagCount}
+                                          </Badge>
+                                        ) : null}
+                                        <Badge variant={sb.variant} className="capitalize">
+                                          {sb.label}
+                                        </Badge>
+                                        {t.dueDate ? (
+                                          <Badge variant="outline">{new Date(t.dueDate).toLocaleDateString()}</Badge>
+                                        ) : null}
 
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8"
-                                  onClick={() => startEditTaskTitle(t)}
-                                  disabled={!canManageTasks || isEditing}
-                                  title={canManageTasks ? "Modifica titolo" : noPermissionHint}
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 text-destructive"
-                                  onClick={() => void deleteTask(t)}
-                                  disabled={!canManageTasks || isDeleting || isEditing}
-                                  title={canManageTasks ? "Elimina task" : noPermissionHint}
-                                >
-                                  {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                </Button>
-                              </div>
-                            </div>
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-8 w-8"
+                                            onClick={() => startEditTaskTitle(t)}
+                                            disabled={!canManageTasks || isEditing}
+                                            title={canManageTasks ? "Modifica titolo" : noPermissionHint}
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-8 w-8 text-destructive"
+                                            onClick={() => void deleteTask(t)}
+                                            disabled={!canManageTasks || isDeleting || isEditing}
+                                            title={canManageTasks ? "Elimina task" : noPermissionHint}
+                                          >
+                                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </SortableTask>
+                              );
+                            })}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
+                        </SortableContext>
+                      )}
+                    </AccordionContent>
+                  </AccordionItem>
+                </SortableList>
+              );
+            })}
+          </Accordion>
+        </SortableContext>
+        <DragOverlay>
+          {activeId ? (
+            <div className="p-4 bg-background border rounded-lg shadow-lg opacity-80">
+              {localLists.find(l => l.id === activeId)?.name || localTasks.find(t => t.id === activeId)?.title || "Item"}
+            </div>
+          ) : null}
+        </DragOverlay>
+      </DndContext>
 
       {tasks.length > 0 && tasks.length < tasksTotal ? (
         <div className="flex justify-center">

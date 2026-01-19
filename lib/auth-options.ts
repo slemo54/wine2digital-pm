@@ -113,7 +113,7 @@ export const authOptions: NextAuthOptions = {
       // First-time login: store user info in token
       if (user) {
         gToken.id = user.id;
-        gToken.role = (user as any).role;
+        gToken.role = ((user as any).role || 'member').toLowerCase();
       }
 
       // OAuth login: ensure role and tokens are set for new users
@@ -122,7 +122,7 @@ export const authOptions: NextAuthOptions = {
           where: { id: user.id },
         });
         if (dbUser) {
-          gToken.role = dbUser.role;
+          gToken.role = (dbUser.role || 'member').toLowerCase();
         }
 
         // Persist Google tokens for API access
@@ -143,7 +143,7 @@ export const authOptions: NextAuthOptions = {
             select: { role: true, isActive: true },
           });
           if (dbUser) {
-            gToken.role = dbUser.role;
+            gToken.role = (dbUser.role || 'member').toLowerCase();
             gToken.isActive = dbUser.isActive;
           }
         } catch {
