@@ -962,14 +962,15 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     globalRole === "admin" ||
     isMeProjectManager ||
     (globalRole === "manager" && isMeProjectMember) ||
-    (globalRole === "member" && isMeProjectMember);
+    (globalRole === "member" && (isMeProjectMember || isMeAssignee));
   const canEditStatus = canEditMeta || (globalRole === "member" && isMeProjectMember);
   const canEditTaskDetails = canWriteTask;
 
   const isMeSelectedSubtaskAssignee =
     Boolean(meId) && Boolean(selectedSubtask?.assigneeId) && selectedSubtask?.assigneeId === meId;
   const canWriteSelectedSubtask =
-    canWriteTask || (globalRole === "member" && (isMeProjectMember || isMeSelectedSubtaskAssignee));
+    canWriteTask ||
+    (globalRole === "member" && (isMeProjectMember || isMeAssignee || isMeSelectedSubtaskAssignee));
   const canDeleteSubtask = globalRole === "admin" || isMeProjectManager;
   const canAssignSubtask = globalRole === "admin" || isMeProjectManager;
   const canManageSubtaskChecklists = globalRole === "admin" || isMeProjectManager;
