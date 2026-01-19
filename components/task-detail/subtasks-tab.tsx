@@ -294,6 +294,7 @@ export function SubtasksTab({ taskId, subtasks, projectMembers, onUpdate, canEdi
                                             <SubtaskChecklists
                                                 taskId={taskId}
                                                 subtaskId={st.id}
+                                                open={expandedSubtasks.has(st.id)}
                                                 disabled={!canEdit}
                                             />
                                         </div>
