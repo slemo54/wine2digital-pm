@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Search, Download } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
