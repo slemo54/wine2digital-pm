@@ -36,13 +36,20 @@ export async function PUT(
     const isSubtaskAssignee = Boolean(existingSubtask.assigneeId) && existingSubtask.assigneeId === userId;
 
     const isProjectManager = access.projectRole === "owner" || access.projectRole === "manager";
+
+    // Permission logic for editing subtasks:
+    // - admin: can always edit
+    // - project manager (owner/manager role in project): can always edit
+    // - manager (global role): can edit if project member
+    // - member (global role): can edit if project member OR task assignee OR subtask assignee
     const canWrite =
       role === "admin" ||
       isProjectManager ||
       (role === "manager" && access.isProjectMember) ||
-      (role === "member" &&
-        (access.isProjectMember ||
-          canMemberEditSubtaskDetails({ isTaskAssignee: access.isAssignee, isSubtaskAssignee })));
+      (role === "member" && access.isProjectMember) ||
+      (role === "member" && access.isAssignee) ||
+      (role === "member" && isSubtaskAssignee);
+
     if (!canWrite) {
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
     }
