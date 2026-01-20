@@ -39,7 +39,7 @@ Per inviare email (oltre alle notifiche in-app) per menzioni/chat/assenze:
 Note:
 - Le email includono link assoluti basati su `NEXTAUTH_URL` (impostalo correttamente in prod).
 - Se `EMAIL_NOTIFICATIONS_ENABLED` non è `"true"`, l’app invia solo notifiche in-app.
-- `RESEND_FROM` ha fallback a `it@mammajumboshrimp.com` se non impostato.
+- `RESEND_FROM` ha fallback a `it@mammajumboshrimp.com` se non impostato; se è impostato su un dominio diverso, viene ignorato.
 
 ## Setup locale
 ```bash

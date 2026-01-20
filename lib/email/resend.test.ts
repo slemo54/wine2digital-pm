@@ -26,7 +26,9 @@ test("getResendFrom: falls back to it@mammajumboshrimp.com", () => {
     delete process.env.RESEND_FROM;
     assert.equal(getResendFrom(), "it@mammajumboshrimp.com");
     process.env.RESEND_FROM = "  foo@bar.com ";
-    assert.equal(getResendFrom(), "foo@bar.com");
+    assert.equal(getResendFrom(), "it@mammajumboshrimp.com");
+    process.env.RESEND_FROM = "  it@mammajumboshrimp.com ";
+    assert.equal(getResendFrom(), "it@mammajumboshrimp.com");
   } finally {
     if (prev === undefined) delete process.env.RESEND_FROM;
     else process.env.RESEND_FROM = prev;

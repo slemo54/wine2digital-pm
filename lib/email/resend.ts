@@ -10,7 +10,15 @@ export function isEmailNotificationsEnabled(): boolean {
 }
 
 export function getResendFrom(): string {
-  return String(process.env.RESEND_FROM || "it@mammajumboshrimp.com").trim();
+  const fallback = "it@mammajumboshrimp.com";
+  const envFrom = String(process.env.RESEND_FROM || "").trim();
+  if (!envFrom) return fallback;
+
+  // Resend requires the sender domain to be verified; avoid misconfigured legacy domains.
+  const lower = envFrom.toLowerCase();
+  if (!lower.endsWith("@mammajumboshrimp.com")) return fallback;
+
+  return envFrom;
 }
 
 export type SendEmailResult =
