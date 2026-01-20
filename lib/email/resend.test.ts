@@ -20,11 +20,11 @@ test("isEmailNotificationsEnabled: true only when env is 'true'", () => {
   }
 });
 
-test("getResendFrom: falls back to pm@justdothework.it", () => {
+test("getResendFrom: falls back to it@mammajumboshrimp.com", () => {
   const prev = process.env.RESEND_FROM;
   try {
     delete process.env.RESEND_FROM;
-    assert.equal(getResendFrom(), "pm@justdothework.it");
+    assert.equal(getResendFrom(), "it@mammajumboshrimp.com");
     process.env.RESEND_FROM = "  foo@bar.com ";
     assert.equal(getResendFrom(), "foo@bar.com");
   } finally {
