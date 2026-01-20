@@ -951,7 +951,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     ? task.project.members.find((m: any) => m?.userId === meId) || null
     : null;
   const isMeProjectMember = Boolean(myMembership);
-  const myProjectRole = myMembership?.role ? String(myMembership.role) : "";
+  const myProjectRole = myMembership?.role ? String(myMembership.role).toLowerCase() : "";
   const isMeProjectManager = myProjectRole === "owner" || myProjectRole === "manager";
   const isMeAssignee =
     Boolean(meId) &&
