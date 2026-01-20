@@ -44,7 +44,7 @@ Legenda: “Cond.” = condizionale (serve anche essere membro/owner/manager del
 | **Task – tag/importo/archiviazione** | Cond. (solo se project `owner/manager`) | Cond. (se membro progetto) | Sì |
 | **Task – eliminare** | Cond. (solo se project `owner/manager`) | Cond. (se membro progetto) | Sì |
 | **Commenti/Allegati task** | Cond. (crea se assegnatario; modifica/elimina anche se autore/uploader) | Cond. (se membro progetto; può anche moderare) | Sì |
-| **Subtask – creare/modificare** | Cond. (se assegnatario task **o** assegnatario subtask, oppure project `owner/manager`) | Cond. (se membro progetto) | Sì |
+| **Subtask – creare/modificare (title/description/status/priority/deadline)** | Cond. (se **membro del progetto** oppure assegnatario task oppure assegnatario subtask) | Cond. (se membro progetto) | Sì |
 | **Subtask – assegnare (assigneeId)** | Cond. (solo project `owner/manager`) | No (a meno di essere project `owner/manager`) | Sì |
 | **Subtask – eliminare** | Cond. (solo project `owner/manager`) | No (a meno di essere project `owner/manager`) | Sì |
 | **Checklist subtask – creare/modificare/eliminare** | Cond. (solo project `owner/manager`) | Cond. (solo project `owner/manager`) | Sì |
