@@ -951,7 +951,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     ? task.project.members.find((m: any) => m?.userId === meId) || null
     : null;
   const isMeProjectMember = Boolean(myMembership);
-  const myProjectRole = myMembership?.role ? String(myMembership.role).toLowerCase() : "";
+  const myProjectRoleRaw = myMembership?.role;
+  const myProjectRole = typeof myProjectRoleRaw === "string" && myProjectRoleRaw.trim()
+    ? String(myProjectRoleRaw).toLowerCase().trim()
+    : "";
   const isMeProjectManager = myProjectRole === "owner" || myProjectRole === "manager";
   const isMeAssignee =
     Boolean(meId) &&
