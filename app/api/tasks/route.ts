@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
         listId: true,
         taskList: { select: { id: true, name: true } },
         legacyTags: true,
-        tags: { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true, color: true } },
         amountCents: true,
       };
     } else if (view === "dashboard") {
@@ -139,7 +139,7 @@ export async function GET(req: NextRequest) {
       findManyArgs.include = {
         project: { select: { id: true, name: true } },
         taskList: { select: { id: true, name: true } },
-        tags: { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true, color: true } },
         assignees: {
           include: {
             user: {

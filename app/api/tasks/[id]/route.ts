@@ -67,7 +67,7 @@ export async function GET(
             },
           },
         },
-        tags: { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true, color: true } },
         taskList: { select: { id: true, name: true } },
         _count: { select: { comments: true, attachments: true, subtasks: true } },
       },
@@ -316,7 +316,7 @@ export async function PUT(
       include: {
         project: { select: { id: true, name: true } },
         taskList: { select: { id: true, name: true } },
-        tags: { select: { id: true, name: true } },
+        tags: { select: { id: true, name: true, color: true } },
         assignees: {
           include: {
             user: {

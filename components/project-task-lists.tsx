@@ -54,7 +54,7 @@ type TaskDto = {
   position?: number;
   taskList: { id: string; name: string } | null;
   legacyTags?: string | null;
-  tags?: Array<{ id: string; name: string }>;
+  tags?: Array<{ id: string; name: string; color?: string | null }>;
   amountCents?: number | null;
 };
 
@@ -83,10 +83,19 @@ function parseLegacyTags(legacyTags: string | null | undefined): string[] {
   }
 }
 
-function getDisplayTagNames(t: TaskDto): string[] {
-  const rel = Array.isArray(t.tags) ? t.tags.map((x) => String(x?.name || "").trim()).filter(Boolean) : [];
+type DisplayTag = { name: string; color?: string | null };
+
+function getDisplayTags(t: TaskDto): DisplayTag[] {
+  const rel = Array.isArray(t.tags)
+    ? t.tags
+        .map((x) => ({
+          name: String(x?.name || "").trim(),
+          color: x?.color ? String(x.color) : null,
+        }))
+        .filter((x) => x.name)
+    : [];
   if (rel.length > 0) return rel;
-  return parseLegacyTags(t.legacyTags);
+  return parseLegacyTags(t.legacyTags).map((name) => ({ name: String(name || "").trim(), color: null })).filter((x) => x.name);
 }
 
 function getTagBadgeClass(tagName: string): string {
@@ -791,9 +800,9 @@ export function ProjectTaskLists(props: {
                           <div className="space-y-2 min-h-[10px]">
                             {listTasks.map((t) => {
                               const sb = statusBadge(t.status);
-                              const tagNames = getDisplayTagNames(t);
-                              const primaryTag = tagNames[0] || null;
-                              const extraTagCount = tagNames.length > 1 ? tagNames.length - 1 : 0;
+                              const tags = getDisplayTags(t);
+                              const primaryTag = tags[0] || null;
+                              const extraTagCount = tags.length > 1 ? tags.length - 1 : 0;
                               const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : null;
                               const isEditing = editingTaskId === t.id;
                               const isDeleting = deletingTaskId === t.id;
@@ -873,14 +882,19 @@ export function ProjectTaskLists(props: {
                                         {primaryTag ? (
                                           <Badge
                                             variant="default"
-                                            className={`rounded-md px-4 py-1 text-[11px] font-semibold uppercase tracking-wide min-w-[140px] justify-center ${getTagBadgeClass(primaryTag)}`}
-                                            title={tagNames.join(", ")}
+                                            className={`rounded-md px-4 py-1 text-[11px] font-semibold uppercase tracking-wide min-w-[140px] justify-center transition-opacity ${
+                                              primaryTag.color
+                                                ? "text-white border border-black/10 hover:opacity-90"
+                                                : getTagBadgeClass(primaryTag.name)
+                                            }`}
+                                            style={primaryTag.color ? { backgroundColor: primaryTag.color } : undefined}
+                                            title={tags.map((x) => x.name).join(", ")}
                                           >
-                                            {primaryTag}
+                                            {primaryTag.name}
                                           </Badge>
                                         ) : null}
                                         {extraTagCount > 0 ? (
-                                          <Badge variant="outline" title={tagNames.join(", ")}>
+                                          <Badge variant="outline" title={tags.map((x) => x.name).join(", ")}>
                                             +{extraTagCount}
                                           </Badge>
                                         ) : null}
