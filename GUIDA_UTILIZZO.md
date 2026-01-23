@@ -16,6 +16,7 @@ Rispetto a Nifty è più snella e focalizzata su: **Progetti**, **Task**, **File
 - **Progetti**: lista progetti e gestione avanzamento.
 - **Task**: vista globale di tutte le task (con filtri).
 - **Calendario**: richieste assenza e calendario team.
+- **Notifiche**: pagina dedicata con elenco notifiche (pallino rosso = non lette).
 - **File**: accesso rapido ai file per progetto (poi apri la tab “Files” nel progetto).
 - **Profilo**: dati account + logout.
 

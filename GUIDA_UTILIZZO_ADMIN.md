@@ -51,6 +51,13 @@ Mostra:
 - attore (chi ha fatto l’azione)
 - metadata (dettagli)
 
+## Admin · Archivio richieste (`/admin/absences`)
+
+Pagina per gestire lo **storico delle richieste di assenza**:
+- filtri (utente/email, status, tipo, range date)
+- **Export CSV** (con limite massimo per evitare esportazioni gigantesche)
+- eliminazione di una singola riga oppure **bulk delete** (con “dry run” per stimare quante righe verranno eliminate)
+
 ## Gestione membri nei progetti (owner/manager/admin)
 
 Dentro un progetto, nel riquadro “Team”:

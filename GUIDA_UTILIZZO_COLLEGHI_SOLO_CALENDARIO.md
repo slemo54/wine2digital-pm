@@ -26,6 +26,12 @@ Nella pagina Calendario troverai indicatori:
 - **Pending** → in attesa (giallo)
 - **Rejected** → rifiutata (rosso)
 
+## Notifiche (quando approvano/rifiutano)
+
+Quando un manager/admin approva o rifiuta la tua richiesta:
+- ricevi una notifica in-app nella pagina **Notifiche**
+- in alcune configurazioni potresti ricevere anche una **email**
+
 ## Vista “Calendario” vs Vista “Lista”
 
 In alto trovi due modalità:

@@ -18,6 +18,13 @@ Questa guida è per chi usa la piattaforma per lavorare su **progetti e task**, 
 - **Activity**: attività recenti su task/progetti che ti riguardano.
 - **Quick Actions**: scorciatoie (crea task/progetto, apri calendario/progetti).
 
+## Notifiche (pagina dedicata)
+
+Dal menu puoi aprire **Notifiche**:
+- vedi la lista completa (non solo le ultime 5/6 in Dashboard)
+- puoi **segnare tutte come lette**
+- il **pallino rosso** nel menu indica notifiche non lette
+
 ## Progetti: come lavorare per progetto
 
 Vai su **Progetti** e apri un progetto. Dentro un progetto trovi 4 tab principali:
