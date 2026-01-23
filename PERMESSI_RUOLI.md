@@ -23,8 +23,8 @@ Legenda: “Cond.” = condizionale (serve anche essere membro/owner/manager del
 | **Gestione utenti (ruolo/attivo/reparto)** | No | No | Sì |
 | **Audit log** | No | No | Sì |
 | **Impostazioni globali (WorkSettings)** | No | No | Sì |
-| **Assenze – vedere richieste** | Solo proprie | Tutte | Tutte |
-| **Assenze – approvare/rifiutare/modificare** | No | Sì | Sì |
+| **Assenze – vedere richieste** | Solo proprie | Proprie + Reparto | Tutte |
+| **Assenze – approvare/rifiutare/modificare** | No | Solo Reparto | Tutte |
 | **Assenze – eliminare** | Solo proprie | Solo proprie | Tutte |
 | **Progetti – lista** | Solo progetti dove sei creator/membro | Idem | Idem (*nota: l’admin può aprire per ID anche senza essere membro*) |
 | **Progetti – creare** | Sì | Sì | Sì |
@@ -76,7 +76,7 @@ Legenda: “Cond.” = condizionale (serve anche essere membro/owner/manager del
   - **Commentare e caricare allegati** su task/subtask **se è assegnatario** (poi può modificare/eliminare i propri commenti/allegati).
   - **Gestire membri / tag / liste / inviti** **solo se** nel progetto è `owner` o `manager`.
   - **Wiki**: leggere/scrivere **solo** nei progetti di cui è membro.
-  - **Assenze**: creare richieste; vedere le proprie; eliminare le proprie.
+  - **Assenze**: creare richieste; vedere le proprie; eliminare le proprie. Non può vedere assenze altrui o approvarle.
   - **Clockify**: vedere/creare solo i propri dati.
 
 - **Non può**:
@@ -88,9 +88,7 @@ Legenda: “Cond.” = condizionale (serve anche essere membro/owner/manager del
 ### manager (ruolo globale)
 - **Può (in generale)**:
   - Tutto ciò che può un `member`, più:
-  - **Assenze**:
-    - vedere **tutte** le richieste
-    - approvare/rifiutare/modificare richieste
+  - **Assenze**: creare richieste; vedere le proprie; vedere quelle del proprio reparto; approvare/rifiutare richieste del proprio reparto.
   - **Task** (nei progetti di cui è membro):
     - creare
     - modificare (non solo status)
@@ -124,6 +122,23 @@ Legenda: “Cond.” = condizionale (serve anche essere membro/owner/manager del
     - la lista task (`/api/tasks`) e la ricerca globale (`/api/search`) sono filtrate su membership/assegnazione, non su ruolo admin
     - però l’admin può aprire risorse per ID (es. `/api/projects/[id]`, `/api/tasks/[id]`) anche senza membership
   - **Gestione membri progetto / tag / liste / inviti**: attualmente richiede comunque che l’admin sia **membro del progetto** (poi il check permessi passa perché admin).
+
+---
+
+### Gestione Assenze e Calendario
+
+La visibilità e la capacità di gestione delle assenze (ferie, permessi, etc.) seguono una logica di reparto basata sul campo `User.department`.
+
+| Ruolo | Visibilità (Vedere) | Azioni (Approvare/Rifiutare) |
+|---|---|---|
+| **Admin** | Tutte le assenze di tutti gli utenti | Può approvare o rifiutare qualsiasi richiesta |
+| **Manager** | Proprie + Utenti dello stesso reparto (`department`) | Solo per utenti dello stesso reparto |
+| **Member** | Solo le proprie richieste | Nessuna (Sola lettura) |
+
+#### Note tecniche
+- Il reparto di un utente è definito nel campo `department` del modello `User`.
+- Se un Manager non ha un reparto assegnato, potrà vedere solo le proprie assenze.
+- L'approvazione da parte di un Manager di un utente di un altro reparto restituirà un errore `403 Forbidden`.
 
 ---
 
