@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+ 
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+ 
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+ 
+    --primary: 24 100% 50%; /* Orange accent from design */
+    --primary-foreground: 0 0% 100%;
+ 
+    --secondary: 0 0% 93%; /* #ECECEC neutral gray */
+    --secondary-foreground: 0 0% 20%;
+ 
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+ 
+    --accent: 0 0% 95%;
+    --accent-foreground: 0 0% 10%;
+ 
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Status colors matching reference design */
+    --success: 142 76% 36%; /* Green for completed/approved */
+    --success-foreground: 0 0% 100%;
+    
+    --warning: 38 92% 50%; /* Yellow for pending/in-review */
+    --warning-foreground: 0 0% 100%;
+    
+    --info: 217 91% 60%; /* Blue for under review */
+    --info-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 24 100% 50%;
+ 
+    --radius: 0.75rem;
+  }
+ 
+  .dark {
+    --background: 222.2 47.4% 11.2%;
+    --foreground: 210 40% 98%;
+
+    /* Card: leggermente più chiara del background per effetto elevation */
+    --card: 222.2 47.4% 16%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 47.4% 16%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 24 100% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: in dark mode lo rendiamo scuro quasi quanto il background per non abbagliare */
+    --secondary: 217.2 32.6% 12%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 20%;
+    --muted-foreground: 215 20.2% 75%; /* Più chiaro per leggibilità */
+
+    --accent: 217.2 32.6% 20%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 22%;
+    --input: 217.2 32.6% 22%;
+    --ring: 24 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Dark-mode compatibility: Override FORZATI con !important per vincere su utility tailwind inline */
+  .dark .bg-white {
+    background-color: hsl(var(--card)) !important;
+    color: hsl(var(--card-foreground)) !important;
+  }
+  .dark .bg-white\/50 {
+    background-color: hsl(var(--card) / 0.5) !important;
+  }
+  .dark .bg-white\/60 {
+    background-color: hsl(var(--card) / 0.6) !important;
+  }
+  .dark .bg-white\/80 {
+    background-color: hsl(var(--card) / 0.8) !important;
+  }
+
+  .dark .bg-gray-50,
+  .dark .bg-gray-100,
+  .dark .bg-\[\#F8FAFC\],
+  .dark .bg-slate-50 {
+    background-color: hsl(var(--secondary)) !important;
+    color: hsl(var(--secondary-foreground)) !important;
+  }
+  
+  .dark .bg-gray-200 {
+    background-color: hsl(var(--muted)) !important;
+  }
+
+  .dark .hover\:bg-gray-50:hover {
+    background-color: hsl(var(--accent)) !important;
+  }
+
+  /* Testi: rimappiamo i grigi scuri a grigi chiari */
+  .dark .text-black,
+  .dark .text-gray-900,
+  .dark .text-gray-800,
+  .dark .text-gray-700 {
+    color: hsl(var(--foreground)) !important;
+  }
+
+  .dark .text-gray-600,
+  .dark .text-gray-500 {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+  
+  /* Bordi: schiariamo i bordi scuri */
+  .dark .border-gray-100,
+  .dark .border-gray-200,
+  .dark .border-gray-300,
+  .dark .border-white {
+    border-color: hsl(var(--border)) !important;
+  }
+  
+  .dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+    border-color: hsl(var(--border)) !important;
+  }
+}
