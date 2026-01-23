@@ -50,6 +50,21 @@ import { SubtaskChecklists } from "@/components/subtask-checklists";
 import { getHrefForFilePath, getImageSrcForFilePath } from "@/lib/drive-links";
 import { formatEurCents, parseEurToCents } from "@/lib/money";
 import { markTaskNotificationsRead } from "@/lib/notifications-client";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const RichTextEditor = dynamic(
   () => import("@/components/ui/rich-text-editor").then((m) => m.RichTextEditor),
@@ -142,6 +157,37 @@ interface SubtaskComment {
 }
 
 import { TagColorPicker } from "./tag-color-picker";
+
+function SortableSubtaskItem({ id, children, disabled }: { id: string; children: React.ReactNode; disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled,
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : "auto",
+    position: "relative" as const,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="group/sortable relative">
+      {!disabled && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute left-0 top-1/2 -translate-y-1/2 -ml-6 cursor-grab active:cursor-grabbing text-muted-foreground/30 hover:text-muted-foreground opacity-0 group-hover/sortable:opacity-100 transition-opacity p-1"
+        >
+          <GripVertical className="w-4 h-4" />
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+import { GripVertical } from "lucide-react";
 
 interface TaskDetailModalProps {
   open: boolean;
@@ -310,6 +356,44 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     void fetchSubtaskDetails(selectedSubtask.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtaskDetailOpen, selectedSubtask?.id]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    setSubtasks((items) => {
+      const oldIndex = items.findIndex((s) => s.id === active.id);
+      const newIndex = items.findIndex((s) => s.id === over.id);
+      const newItems = arrayMove(items, oldIndex, newIndex);
+
+      const orderMap = newItems.reduce((acc, item, index) => ({ ...acc, [item.id]: index }), {});
+      localStorage.setItem(`task_subtask_order_${taskId}`, JSON.stringify(orderMap));
+
+      return newItems;
+    });
+  };
+
+  useEffect(() => {
+    if (!taskId || subtasks.length === 0) return;
+    const savedOrder = localStorage.getItem(`task_subtask_order_${taskId}`);
+    if (savedOrder) {
+      try {
+        const orderMap = JSON.parse(savedOrder);
+        const sorted = [...subtasks].sort((a, b) => {
+            const posA = orderMap[a.id] ?? a.position ?? 0;
+            const posB = orderMap[b.id] ?? b.position ?? 0;
+            return posA - posB;
+        });
+        if (JSON.stringify(sorted.map(s => s.id)) !== JSON.stringify(subtasks.map(s => s.id))) {
+             setSubtasks(sorted);
+        }
+      } catch {}
+    }
+  }, [taskId, subtasks]);
 
   const fetchTaskDetails = async () => {
     setLoading(true);
@@ -1880,59 +1964,64 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     {subtasks.length === 0 ? (
                       <div className="text-sm text-muted-foreground">Nessuna subtask.</div>
                     ) : null}
-                    {subtasks.map((subtask) => (
-                      <div
-                        key={subtask.id}
-                        role="button"
-                        tabIndex={0}
-                        className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
-                        onClick={() => {
-                          setSelectedSubtask(subtask);
-                          setSubtaskDetailOpen(true);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            setSelectedSubtask(subtask);
-                            setSubtaskDetailOpen(true);
-                          }
-                        }}
-                      >
-                        <div onClick={(e) => e.stopPropagation()}>
-                          {(() => {
-                            const canWriteThisSubtask =
-                              canWriteTask ||
-                              (globalRole === "member" && Boolean(meId) && subtask?.assigneeId === meId);
-                            return (
-                              <Checkbox
-                                checked={subtask.completed}
-                                disabled={!canWriteThisSubtask}
-                                onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
-                              />
-                            );
-                          })()}
-                        </div>
-                        <div className="flex-1 min-w-0 text-left">
-                          <div className={subtask.completed ? "line-through text-muted-foreground" : ""}>
-                            {subtask.title}
-                          </div>
-                        </div>
-                        {canDeleteSubtask ? (
-                          <div onClick={(e) => e.stopPropagation()}>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9 text-destructive"
-                              onClick={() => void deleteSubtask(subtask.id)}
-                              aria-label="Elimina subtask"
+                    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                      <SortableContext items={subtasks.map(s => s.id)} strategy={verticalListSortingStrategy}>
+                        {subtasks.map((subtask) => (
+                          <SortableSubtaskItem key={subtask.id} id={subtask.id} disabled={!canWriteTask}>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              className="w-full flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors bg-background"
+                              onClick={() => {
+                                setSelectedSubtask(subtask);
+                                setSubtaskDetailOpen(true);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setSelectedSubtask(subtask);
+                                  setSubtaskDetailOpen(true);
+                                }
+                              }}
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
+                              <div onClick={(e) => e.stopPropagation()}>
+                                {(() => {
+                                  const canWriteThisSubtask =
+                                    canWriteTask ||
+                                    (globalRole === "member" && Boolean(meId) && subtask?.assigneeId === meId);
+                                  return (
+                                    <Checkbox
+                                      checked={subtask.completed}
+                                      disabled={!canWriteThisSubtask}
+                                      onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
+                                    />
+                                  );
+                                })()}
+                              </div>
+                              <div className="flex-1 min-w-0 text-left">
+                                <div className={subtask.completed ? "line-through text-muted-foreground" : ""}>
+                                  {subtask.title}
+                                </div>
+                              </div>
+                              {canDeleteSubtask ? (
+                                <div onClick={(e) => e.stopPropagation()}>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-9 w-9 text-destructive"
+                                    onClick={() => void deleteSubtask(subtask.id)}
+                                    aria-label="Elimina subtask"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </div>
+                          </SortableSubtaskItem>
+                        ))}
+                      </SortableContext>
+                    </DndContext>
                   </div>
 
                   <div className="flex items-center gap-2">
