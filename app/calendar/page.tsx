@@ -93,17 +93,22 @@ export default function CalendarPage() {
   useEffect(() => {
     if (status === "unauthenticated") {
       router.replace("/auth/login");
+    } else if (status === "authenticated" && isAccessDenied) {
+      toast.error("Accesso negato al calendario.");
+      router.replace("/dashboard");
     }
-  }, [status, router]);
+  }, [status, router, isAccessDenied]);
 
   useEffect(() => {
+    if (isAccessDenied) return;
     fetchAbsences();
-  }, []);
+  }, [isAccessDenied]);
 
   useEffect(() => {
+    if (isAccessDenied) return;
     void fetchCalendarAbsences(visibleMonth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleMonth]);
+  }, [visibleMonth, isAccessDenied]);
 
   const fetchCounts = async () => {
     try {
@@ -330,8 +335,11 @@ export default function CalendarPage() {
 
   const userRole = ((session?.user as any)?.role || "member").toLowerCase();
   const userDepartment = (session?.user as any)?.department || null;
+  const calendarEnabled = (session?.user as any)?.calendarEnabled !== false;
   const isManagerOrAdmin = userRole === "admin" || userRole === "manager";
   const isAdmin = userRole === "admin";
+
+  const isAccessDenied = !isAdmin && !calendarEnabled;
 
   const canApproveAbsence = (absence: Absence) => {
     if (userRole === "admin") return true;

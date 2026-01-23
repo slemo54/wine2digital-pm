@@ -33,6 +33,11 @@ export async function GET(req: NextRequest) {
     const userId = (session.user as any).id;
     const userRole = (session.user as any).role || 'member';
     const userDepartment = (session.user as any).department || null;
+    const calendarEnabled = (session.user as any).calendarEnabled !== false;
+
+    if (userRole !== 'admin' && !calendarEnabled) {
+      return NextResponse.json({ error: 'Calendar access is disabled for your account' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(req.url);
     const statusParam = (searchParams.get('status') || '').trim();

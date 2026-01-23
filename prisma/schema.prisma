@@ -42,6 +42,7 @@ model User {
 
   isActive   Boolean   @default(true)
   disabledAt DateTime?
+  calendarEnabled Boolean @default(true)
 
   // Organization
   department   String?

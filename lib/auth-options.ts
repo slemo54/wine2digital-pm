@@ -70,6 +70,7 @@ export const authOptions: NextAuthOptions = {
           name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
           role: user.role,
           department: user.department,
+          calendarEnabled: user.calendarEnabled,
         };
       },
     }),
@@ -116,6 +117,7 @@ export const authOptions: NextAuthOptions = {
         gToken.id = user.id;
         gToken.role = ((user as any).role || 'member').toLowerCase();
         gToken.department = (user as any).department || null;
+        gToken.calendarEnabled = (user as any).calendarEnabled ?? true;
       }
 
       // OAuth login: ensure role and tokens are set for new users
@@ -142,12 +144,13 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: gToken.id },
-            select: { role: true, isActive: true, department: true },
+            select: { role: true, isActive: true, department: true, calendarEnabled: true },
           });
           if (dbUser) {
             gToken.role = (dbUser.role || 'member').toLowerCase();
             gToken.isActive = dbUser.isActive;
             gToken.department = dbUser.department || null;
+            gToken.calendarEnabled = dbUser.calendarEnabled;
           }
         } catch {
           // Best-effort: keep previous token values
@@ -168,6 +171,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = gToken.id;
         (session.user as any).role = gToken.role;
         (session.user as any).department = gToken.department;
+        (session.user as any).calendarEnabled = gToken.calendarEnabled;
         (session.user as any).accessToken = gToken.accessToken;
       }
       return session;
@@ -235,6 +239,7 @@ type GoogleToken = JWT & {
   id?: string;
   role?: string;
   department?: string | null;
+  calendarEnabled?: boolean;
   isActive?: boolean;
 };
 

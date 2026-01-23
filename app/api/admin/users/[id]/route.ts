@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 type PatchBody = {
   role?: "admin" | "manager" | "member";
   isActive?: boolean;
+  calendarEnabled?: boolean;
   department?: string | null;
 };
 
@@ -21,6 +22,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const body = (await req.json()) as PatchBody;
     const nextRole = body?.role;
     const nextActive = body?.isActive;
+    const nextCalendarEnabled = body?.calendarEnabled;
     const nextDepartmentRaw = body?.department;
     const nextDepartment =
       nextDepartmentRaw === null
@@ -35,7 +37,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     const target = await prisma.user.findUnique({
       where: { id: params.id },
-      select: { id: true, role: true, isActive: true, department: true },
+      select: { id: true, role: true, isActive: true, department: true, calendarEnabled: true },
     });
     if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
@@ -54,6 +56,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         ...(typeof nextActive === "boolean"
           ? { isActive: nextActive, disabledAt: nextActive ? null : new Date() }
           : {}),
+        ...(typeof nextCalendarEnabled === "boolean" ? { calendarEnabled: nextCalendarEnabled } : {}),
         ...(nextDepartment !== undefined ? { department: nextDepartment } : {}),
       },
       select: {
@@ -65,6 +68,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         department: true,
         role: true,
         isActive: true,
+        calendarEnabled: true,
         disabledAt: true,
         createdAt: true,
         updatedAt: true,
@@ -78,8 +82,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         entityType: "User",
         entityId: updated.id,
         metadata: {
-          from: { role: target.role, isActive: target.isActive, department: target.department },
-          to: { role: updated.role, isActive: updated.isActive, department: updated.department },
+          from: { role: target.role, isActive: target.isActive, department: target.department, calendarEnabled: target.calendarEnabled },
+          to: { role: updated.role, isActive: updated.isActive, department: updated.department, calendarEnabled: updated.calendarEnabled },
         },
       },
     });
@@ -87,7 +91,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     publishRealtimeEvent({
       channel: "admin",
       event: "admin.user.updated",
-      data: { userId: updated.id, role: updated.role, isActive: updated.isActive, department: updated.department },
+      data: { userId: updated.id, role: updated.role, isActive: updated.isActive, department: updated.department, calendarEnabled: updated.calendarEnabled },
     }).catch(() => {});
 
     return NextResponse.json({ user: updated });

@@ -62,7 +62,15 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const { data: session, status } = useSession();
   const globalRole = (session?.user as any)?.role as string | undefined;
   const isAdmin = globalRole === "admin";
+  const calendarEnabled = (session?.user as any)?.calendarEnabled !== false;
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const filteredNav = NAV.filter((item) => {
+    if (item.href === "/calendar") {
+      return isAdmin || calendarEnabled;
+    }
+    return true;
+  });
 
   useEffect(() => {
     if (status !== "authenticated") return;
@@ -110,8 +118,8 @@ export function AppSidebar({ className }: AppSidebarProps) {
           <ThemeToggle />
         </div>
 
-        <nav className="p-3 space-y-1">
-          {NAV.map((item) => {
+        <        <nav className="p-3 space-y-1">
+          {filteredNav.map((item) => {
             const active = item.isActive ? item.isActive(pathname) : pathname === item.href;
             const Icon = item.icon;
             return (

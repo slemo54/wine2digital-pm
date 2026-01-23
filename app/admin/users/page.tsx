@@ -23,6 +23,7 @@ type AdminUser = {
   department: string | null;
   role: string;
   isActive: boolean;
+  calendarEnabled: boolean;
   disabledAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -76,7 +77,7 @@ export default function AdminUsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, isAdmin, q, roleFilter, activeFilter]);
 
-  const updateUser = async (id: string, patch: { role?: string; isActive?: boolean; department?: string | null }) => {
+  const updateUser = async (id: string, patch: { role?: string; isActive?: boolean; department?: string | null; calendarEnabled?: boolean }) => {
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: "PUT",
@@ -176,8 +177,9 @@ export default function AdminUsersPage() {
                   <div className="col-span-4">Utente</div>
                   <div className="col-span-2">Ruolo</div>
                   <div className="col-span-3">Reparto</div>
-                  <div className="col-span-1">Attivo</div>
-                  <div className="col-span-2 text-right">Azioni</div>
+                  <div className="col-span-1 text-center">Calendario</div>
+                  <div className="col-span-1 text-center">Attivo</div>
+                  <div className="col-span-1 text-right">Azioni</div>
                 </div>
                 <div className="divide-y">
                   {users.map((u) => (
@@ -238,12 +240,20 @@ export default function AdminUsersPage() {
                         })()}
                       </div>
 
-                      <div className="md:col-span-1">
+                      <div className="md:col-span-1 flex flex-col items-center">
+                        <div className="text-xs text-muted-foreground md:hidden mb-1">Calendario</div>
+                        <Switch
+                          checked={u.calendarEnabled}
+                          onCheckedChange={(v) => updateUser(u.id, { calendarEnabled: v })}
+                        />
+                      </div>
+
+                      <div className="md:col-span-1 flex flex-col items-center">
                         <div className="text-xs text-muted-foreground md:hidden mb-1">Attivo</div>
                         <Switch checked={u.isActive} onCheckedChange={(v) => updateUser(u.id, { isActive: v })} />
                       </div>
 
-                      <div className="md:col-span-2 md:text-right">
+                      <div className="md:col-span-1 md:text-right">
                         <Button
                           variant="ghost"
                           size="sm"

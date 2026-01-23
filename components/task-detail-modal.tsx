@@ -166,12 +166,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [draftAssigneeIds, setDraftAssigneeIds] = useState<string[]>([]);
   const [tagsPickerOpen, setTagsPickerOpen] = useState(false);
-  const [projectTags, setProjectTags] = useState<Array<{ id: string; name: string }>>([]);
+  const [projectTags, setProjectTags] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
   const [tagQuery, setTagQuery] = useState("");
   const [draftTagIds, setDraftTagIds] = useState<string[]>([]);
   const [newTagName, setNewTagName] = useState("");
   const [renamingTagId, setRenamingTagId] = useState<string | null>(null);
   const [renamingTagName, setRenamingTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#94a3b8");
   const [tagMutationBusy, setTagMutationBusy] = useState(false);
   const [amountPickerOpen, setAmountPickerOpen] = useState(false);
   const [draftAmountInput, setDraftAmountInput] = useState("");

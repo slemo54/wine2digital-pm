@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
         department: true,
         role: true,
         isActive: true,
+        calendarEnabled: true,
         disabledAt: true,
         createdAt: true,
         updatedAt: true,

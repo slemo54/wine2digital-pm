@@ -39,3 +39,4 @@ coverage
 *.swp
 *.bak
 
+node_modules

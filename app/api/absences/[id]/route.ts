@@ -19,6 +19,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const userId = (session.user as any).id;
     const actorRole = (session.user as any).role || 'member';
     const actorDepartment = (session.user as any).department || null;
+    const calendarEnabled = (session.user as any).calendarEnabled !== false;
+
+    if (actorRole !== 'admin' && !calendarEnabled) {
+      return NextResponse.json({ error: 'Calendar access is disabled for your account' }, { status: 403 });
+    }
 
     const body = await req.json();
     const { status } = body;
@@ -136,6 +141,13 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
 
     const userId = (session.user as any).id;
+    const userRole = (session.user as any).role || 'member';
+    const calendarEnabled = (session.user as any).calendarEnabled !== false;
+
+    if (userRole !== 'admin' && !calendarEnabled) {
+      return NextResponse.json({ error: 'Calendar access is disabled for your account' }, { status: 403 });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
