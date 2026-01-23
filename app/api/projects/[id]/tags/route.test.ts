@@ -8,7 +8,7 @@ test("project tags route exports handlers (smoke)", async () => {
 });
 
 test("tagSchema validation", async () => {
-  const { tagSchema } = await import("./route");
+  const { tagSchema } = await import("@/lib/project-tag-schema");
 
   // Valid cases
   assert.ok(tagSchema.safeParse({ name: "TAG", color: "#ef4444" }).success);

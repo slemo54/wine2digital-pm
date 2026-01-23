@@ -58,6 +58,14 @@ type AbsenceCounts = {
 export default function CalendarPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+
+  const userRole = ((session?.user as any)?.role || "member").toLowerCase();
+  const userDepartment = (session?.user as any)?.department || null;
+  const calendarEnabled = (session?.user as any)?.calendarEnabled !== false;
+  const isManagerOrAdmin = userRole === "admin" || userRole === "manager";
+  const isAdmin = userRole === "admin";
+  const isAccessDenied = !isAdmin && !calendarEnabled;
+
   const [pendingAbsences, setPendingAbsences] = useState<Absence[]>([]);
   const [approvedAbsences, setApprovedAbsences] = useState<Absence[]>([]);
   const [rejectedAbsences, setRejectedAbsences] = useState<Absence[]>([]);
@@ -332,14 +340,6 @@ export default function CalendarPage() {
     };
     return labels[type] || type;
   };
-
-  const userRole = ((session?.user as any)?.role || "member").toLowerCase();
-  const userDepartment = (session?.user as any)?.department || null;
-  const calendarEnabled = (session?.user as any)?.calendarEnabled !== false;
-  const isManagerOrAdmin = userRole === "admin" || userRole === "manager";
-  const isAdmin = userRole === "admin";
-
-  const isAccessDenied = !isAdmin && !calendarEnabled;
 
   const canApproveAbsence = (absence: Absence) => {
     if (userRole === "admin") return true;

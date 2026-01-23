@@ -118,7 +118,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
           <ThemeToggle />
         </div>
 
-        <        <nav className="p-3 space-y-1">
+        <nav className="p-3 space-y-1">
           {filteredNav.map((item) => {
             const active = item.isActive ? item.isActive(pathname) : pathname === item.href;
             const Icon = item.icon;

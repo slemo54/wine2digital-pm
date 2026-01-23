@@ -2,17 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session-user";
 import { canManageProjectMembers } from "@/lib/project-permissions";
-import { z } from "zod";
+import { tagSchema } from "@/lib/project-tag-schema";
 
 export const dynamic = "force-dynamic";
-
-export const tagSchema = z.object({
-  name: z.string().min(1, "Name required"),
-  color: z
-    .string()
-    .regex(/^#[0-9a-fA-F]{6}$/, "Invalid hex color format")
-    .optional(),
-});
 
 function normalizeTagName(input: unknown): string {
   const raw = String(input || "")
