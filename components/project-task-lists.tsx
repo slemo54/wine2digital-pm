@@ -98,6 +98,37 @@ function getDisplayTags(t: TaskDto): DisplayTag[] {
   return parseLegacyTags(t.legacyTags).map((name) => ({ name: String(name || "").trim(), color: null })).filter((x) => x.name);
 }
 
+type TagTotals = {
+  daFatturare: number;
+  fatturato: number;
+  incassato: number;
+  previsionale: number;
+  totale: number;
+};
+
+function calculateTagTotals(tasks: TaskDto[]): TagTotals {
+  const totals: TagTotals = { daFatturare: 0, fatturato: 0, incassato: 0, previsionale: 0, totale: 0 };
+
+  for (const t of tasks) {
+    const amount = typeof t.amountCents === "number" ? t.amountCents : 0;
+    if (amount === 0) continue;
+
+    totals.totale += amount;
+    const tags = getDisplayTags(t).map((x) => x.name.toUpperCase());
+
+    if (tags.includes("DA FATTURARE") || tags.includes("DA INSERIRE")) {
+      totals.daFatturare += amount;
+    } else if (tags.includes("FATTURATO") || tags.includes("PRATICA INSERITA")) {
+      totals.fatturato += amount;
+    } else if (tags.includes("INCASSATO")) {
+      totals.incassato += amount;
+    } else {
+      totals.previsionale += amount; // default: previsionale
+    }
+  }
+  return totals;
+}
+
 function getTagBadgeClass(tagName: string): string {
   const n = String(tagName || "").trim().toUpperCase();
   if (n === "PAGATO") return "bg-emerald-500 text-white border-emerald-600/20";
@@ -462,7 +493,8 @@ export function ProjectTaskLists(props: {
         const subtasksTotal = Number.isFinite(t?._count?.subtasks) ? Number(t._count.subtasks) : 0;
         const subtasksDone = Array.isArray(t?.subtasks) ? t.subtasks.length : 0;
 
-        const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : "";
+        // Export as pure number (euros with decimals) for Excel compatibility
+        const amountEur = typeof t?.amountCents === "number" ? (t.amountCents / 100) : "";
 
         return [
           String(t?.project?.id || projectId),
@@ -528,6 +560,11 @@ export function ProjectTaskLists(props: {
     }
     return map;
   }, [localTasks, deferredQ]);
+
+  // Calcola totali globali per il progetto
+  const globalTotals = useMemo(() => {
+    return calculateTagTotals(localTasks);
+  }, [localTasks]);
 
   const createList = async () => {
     const name = newListName.trim();
@@ -726,6 +763,44 @@ export function ProjectTaskLists(props: {
         onSuccess={fetchAll}
       />
 
+      {/* Totali globali progetto */}
+      {globalTotals.totale > 0 && (
+        <Card className="mb-4">
+          <CardContent className="py-3 px-4">
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              {globalTotals.daFatturare > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Da fatturare:</span>{" "}
+                  <strong className="text-orange-600">{formatEurCents(globalTotals.daFatturare)}</strong>
+                </div>
+              )}
+              {globalTotals.fatturato > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Fatturato:</span>{" "}
+                  <strong className="text-blue-600">{formatEurCents(globalTotals.fatturato)}</strong>
+                </div>
+              )}
+              {globalTotals.incassato > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Incassato:</span>{" "}
+                  <strong className="text-green-600">{formatEurCents(globalTotals.incassato)}</strong>
+                </div>
+              )}
+              {globalTotals.previsionale > 0 && (
+                <div>
+                  <span className="text-muted-foreground">Previsionale:</span>{" "}
+                  <strong className="text-gray-500">{formatEurCents(globalTotals.previsionale)}</strong>
+                </div>
+              )}
+              <div className="border-l pl-4 ml-auto">
+                <span className="text-muted-foreground">TOTALE:</span>{" "}
+                <strong>{formatEurCents(globalTotals.totale)}</strong>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -742,54 +817,78 @@ export function ProjectTaskLists(props: {
                 <SortableList key={l.id} id={l.id} disabled={!!q}>
                   <AccordionItem value={l.id} className="border rounded-lg mb-3 bg-white">
                     <AccordionTrigger className="px-4">
-                      <div className="flex items-center justify-between w-full pr-4">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="font-semibold truncate">{l.name}</div>
-                          <Badge variant="secondary">
-                            {listTasks.length}/{l._count?.tasks ?? listTasks.length}
-                          </Badge>
+                      <div className="flex flex-col w-full pr-4 gap-1">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="font-semibold truncate">{l.name}</div>
+                            <Badge variant="secondary">
+                              {listTasks.length}/{l._count?.tasks ?? listTasks.length}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDefaultListIdForNewTask(l.id);
+                                setShowCreateTask(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Add task
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setRenameListId(l.id);
+                                setRenameValue(l.name);
+                              }}
+                              title="Rinomina"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                deleteList(l.id, l.name);
+                              }}
+                              title="Elimina"
+                              disabled={l.name === DEFAULT_LIST_NAME}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setDefaultListIdForNewTask(l.id);
-                              setShowCreateTask(true);
-                            }}
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add task
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setRenameListId(l.id);
-                              setRenameValue(l.name);
-                            }}
-                            title="Rinomina"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              deleteList(l.id, l.name);
-                            }}
-                            title="Elimina"
-                            disabled={l.name === DEFAULT_LIST_NAME}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        {/* Totali per tag */}
+                        {(() => {
+                          const totals = calculateTagTotals(listTasks);
+                          if (totals.totale === 0) return null;
+                          return (
+                            <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                              {totals.daFatturare > 0 && (
+                                <span className="text-orange-600">Da fatturare: {formatEurCents(totals.daFatturare)}</span>
+                              )}
+                              {totals.fatturato > 0 && (
+                                <span className="text-blue-600">Fatturato: {formatEurCents(totals.fatturato)}</span>
+                              )}
+                              {totals.incassato > 0 && (
+                                <span className="text-green-600">Incassato: {formatEurCents(totals.incassato)}</span>
+                              )}
+                              {totals.previsionale > 0 && (
+                                <span className="text-gray-500">Previsionale: {formatEurCents(totals.previsionale)}</span>
+                              )}
+                              <span className="font-medium text-foreground">Totale: {formatEurCents(totals.totale)}</span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-4">
