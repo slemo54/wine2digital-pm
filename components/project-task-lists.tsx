@@ -103,6 +103,10 @@ export function ProjectTaskLists(props: {
   const deferredQ = useDeferredValue(q);
   const expandedSet = useMemo(() => new Set(expanded), [expanded]);
 
+  // Per-list task rendering limits to reduce DOM size
+  const INITIAL_TASKS_PER_LIST = 20;
+  const [listLimits, setListLimits] = useState<Record<string, number>>({});
+
   const [showCreateList, setShowCreateList] = useState(false);
   const [newListName, setNewListName] = useState("");
   const [savingList, setSavingList] = useState(false);
@@ -124,7 +128,8 @@ export function ProjectTaskLists(props: {
     try {
       const [listsRes, tasksRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/lists`, { cache: "no-store" }),
-        fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&page=1&pageSize=200&view=projectLists`, { cache: "no-store" }),
+        // Reduced initial pageSize from 200 to 50 for faster initial render
+        fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&page=1&pageSize=50&view=projectLists`, { cache: "no-store" }),
       ]);
 
       const listsData = await listsRes.json().catch(() => ({}));
@@ -160,7 +165,7 @@ export function ProjectTaskLists(props: {
     setLoadingMore(true);
     try {
       const res = await fetch(
-        `/api/tasks?projectId=${encodeURIComponent(projectId)}&page=${nextPage}&pageSize=200&view=projectLists`,
+        `/api/tasks?projectId=${encodeURIComponent(projectId)}&page=${nextPage}&pageSize=50&view=projectLists`,
         { cache: "no-store" }
       );
       const data = await res.json().catch(() => ({}));
@@ -565,7 +570,14 @@ export function ProjectTaskLists(props: {
                   <div className="text-sm text-muted-foreground py-3">Nessuna task in questa categoria.</div>
                 ) : (
                   <div className="space-y-2">
-                    {listTasks.map((t) => {
+                    {(() => {
+                      const limit = listLimits[l.id] ?? INITIAL_TASKS_PER_LIST;
+                      const visibleTasks = listTasks.slice(0, limit);
+                      const hasMore = listTasks.length > limit;
+                      const remaining = listTasks.length - limit;
+                      return (
+                        <>
+                          {visibleTasks.map((t) => {
                       const sb = statusBadge(t.status);
                       const tagNames = getDisplayTagNames(t);
                       const primaryTag = tagNames[0] || null;
@@ -694,6 +706,26 @@ export function ProjectTaskLists(props: {
                         </div>
                       );
                     })}
+                          {hasMore && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full text-muted-foreground hover:text-foreground"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setListLimits((prev) => ({
+                                  ...prev,
+                                  [l.id]: (prev[l.id] ?? INITIAL_TASKS_PER_LIST) + 20,
+                                }));
+                              }}
+                            >
+                              Mostra altre {Math.min(remaining, 20)} task
+                              {remaining > 20 && ` (${remaining} rimanenti)`}
+                            </Button>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
               </AccordionContent>

@@ -4,19 +4,49 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Calendar, Users, Loader2, Settings, LogOut, Briefcase } from "lucide-react";
-import { signOut } from "next-auth/react";
+import { Calendar, Users, Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { ProjectTaskLists } from "@/components/project-task-lists";
-import { ProjectChat } from "@/components/project-chat";
-import { ProjectFiles } from "@/components/project-files";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProjectMembersPanel } from "@/components/project-members-panel";
-import { TaskDetailModal } from "@/components/task-detail-modal";
+
+// Lazy load components for tabs that aren't initially visible
+const ProjectChat = dynamic(
+  () => import("@/components/project-chat").then((m) => m.ProjectChat),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
+const ProjectFiles = dynamic(
+  () => import("@/components/project-files").then((m) => m.ProjectFiles),
+  {
+    loading: () => (
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    ),
+    ssr: false,
+  }
+);
+
+// TaskDetailModal is lazy loaded since it's only shown when a task is selected
+const TaskDetailModal = dynamic(
+  () => import("@/components/task-detail-modal").then((m) => m.TaskDetailModal),
+  {
+    loading: () => null,
+    ssr: false,
+  }
+);
 
 interface Project {
   id: string;

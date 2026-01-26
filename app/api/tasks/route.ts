@@ -30,18 +30,23 @@ function normalizeTasksView(input: string | null): TasksView {
 }
 
 export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const perf = searchParams.get("perf") === "1";
+  const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+
   try {
     const session = await getServerSession(authOptions);
+    const tAuth = typeof performance !== "undefined" ? performance.now() : Date.now();
     if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const headers = perf ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)}` } : undefined;
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers });
     }
 
     const userId = (session.user as any).id as string | undefined;
     if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const headers = perf ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)}` } : undefined;
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers });
     }
-
-    const { searchParams } = new URL(req.url);
     const scope = (searchParams.get('scope') || 'all') as 'all' | 'assigned' | 'projects';
     const status = searchParams.get('status');
     const priority = searchParams.get('priority');
@@ -162,12 +167,21 @@ export async function GET(req: NextRequest) {
       };
     }
 
+    const tDb0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const [total, tasks] = await Promise.all([
       prisma.task.count({ where: where as any }),
       prisma.task.findMany(findManyArgs),
     ]);
+    const tDb1 = typeof performance !== "undefined" ? performance.now() : Date.now();
 
-    return NextResponse.json({ tasks, page, pageSize, total });
+    const tEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const headers = perf
+      ? {
+          "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},db;dur=${(tDb1 - tDb0).toFixed(1)},total;dur=${(tEnd - t0).toFixed(1)}`,
+        }
+      : undefined;
+
+    return NextResponse.json({ tasks, page, pageSize, total }, { headers });
   } catch (error) {
     console.error('List tasks error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

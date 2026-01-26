@@ -16,7 +16,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const perf = new URL(request.url).searchParams.get("perf") === "1";
+  const url = new URL(request.url);
+  const perf = url.searchParams.get("perf") === "1";
+  // "light" view omits project.members for faster initial drawer render
+  const view = url.searchParams.get("view") as "light" | "full" | null;
+  const isLightView = view === "light";
+
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const session = await getServerSession(authOptions);
   const tAuth = typeof performance !== "undefined" ? performance.now() : Date.now();
@@ -34,6 +39,8 @@ export async function GET(
     }
 
     const tDb0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+
+    // For light view, we still need members for permission check but we fetch minimal data
     const task = await prisma.task.findUnique({
       where: { id: params.id },
       include: {
@@ -41,22 +48,25 @@ export async function GET(
           select: {
             id: true,
             name: true,
-            members: {
-              select: {
-                userId: true,
-                role: true,
-                user: {
+            // For light view, only fetch userId for permission check (no user details)
+            members: isLightView
+              ? { select: { userId: true, role: true } }
+              : {
                   select: {
-                    id: true,
-                    email: true,
-                    name: true,
-                    firstName: true,
-                    lastName: true,
-                    image: true,
+                    userId: true,
+                    role: true,
+                    user: {
+                      select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                        firstName: true,
+                        lastName: true,
+                        image: true,
+                      },
+                    },
                   },
                 },
-              },
-            },
           },
         },
         assignees: {
@@ -98,6 +108,16 @@ export async function GET(
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403, headers });
     }
 
+    // For light view, strip members from response (frontend fetches on-demand)
+    const responseTask = isLightView
+      ? {
+          ...task,
+          project: task.project
+            ? { id: task.project.id, name: task.project.name }
+            : null,
+        }
+      : task;
+
     const tEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
     const headers = perf
       ? {
@@ -105,7 +125,7 @@ export async function GET(
         }
       : undefined;
 
-    return NextResponse.json(task, { headers });
+    return NextResponse.json(responseTask, { headers });
   } catch (error) {
     console.error("Error fetching task:", error);
     return NextResponse.json(

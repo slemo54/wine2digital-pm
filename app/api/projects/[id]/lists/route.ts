@@ -12,17 +12,32 @@ function isMissingTableError(err: unknown): boolean {
   return msg.includes("TaskList") && msg.toLowerCase().includes("does not exist");
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const perf = new URL(req.url).searchParams.get("perf") === "1";
+  const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+
   try {
     const me = await getSessionUser();
-    if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const tAuth = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (!me) {
+      const headers = perf ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)}` } : undefined;
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers });
+    }
 
+    const tAccess0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const membership = await prisma.projectMember.findFirst({
       where: { projectId: params.id, userId: me.id },
       select: { id: true },
     });
-    if (!membership) return NextResponse.json({ error: "Not a project member" }, { status: 403 });
+    const tAccess1 = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (!membership) {
+      const headers = perf
+        ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},access;dur=${(tAccess1 - tAccess0).toFixed(1)}` }
+        : undefined;
+      return NextResponse.json({ error: "Not a project member" }, { status: 403, headers });
+    }
 
+    const tDb0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const lists = await prisma.taskList.findMany({
       where: { projectId: params.id },
       orderBy: { updatedAt: "desc" },
@@ -33,8 +48,16 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
         _count: { select: { tasks: true } },
       },
     });
+    const tDb1 = typeof performance !== "undefined" ? performance.now() : Date.now();
 
-    return NextResponse.json({ lists, defaultListName: DEFAULT_LIST_NAME });
+    const tEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const headers = perf
+      ? {
+          "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},access;dur=${(tAccess1 - tAccess0).toFixed(1)},db;dur=${(tDb1 - tDb0).toFixed(1)},total;dur=${(tEnd - t0).toFixed(1)}`,
+        }
+      : undefined;
+
+    return NextResponse.json({ lists, defaultListName: DEFAULT_LIST_NAME }, { headers });
   } catch (error) {
     if (isMissingTableError(error)) {
       return NextResponse.json(

@@ -30,22 +30,36 @@ async function getProjectAccess(input: { projectId: string; userId: string }) {
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const perf = new URL(req.url).searchParams.get("perf") === "1";
+  const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
+
   try {
     const me = await getMe(req);
+    const tAuth = typeof performance !== "undefined" ? performance.now() : Date.now();
     if (!me) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      const headers = perf ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)}` } : undefined;
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers });
     }
 
+    const tAccess0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const access = await getProjectAccess({ projectId: params.id, userId: me.id });
+    const tAccess1 = typeof performance !== "undefined" ? performance.now() : Date.now();
     if (!access) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      const headers = perf
+        ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},access;dur=${(tAccess1 - tAccess0).toFixed(1)}` }
+        : undefined;
+      return NextResponse.json({ error: 'Project not found' }, { status: 404, headers });
     }
     const isProjectMember = Boolean(access.projectRole);
     const canRead = me.role === 'admin' || access.creatorId === me.id || isProjectMember;
     if (!canRead) {
-      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+      const headers = perf
+        ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},access;dur=${(tAccess1 - tAccess0).toFixed(1)}` }
+        : undefined;
+      return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403, headers });
     }
 
+    const tDb0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const project = await prisma.project.findUnique({
       where: { id: params.id },
       include: {
@@ -94,12 +108,23 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         },
       },
     });
+    const tDb1 = typeof performance !== "undefined" ? performance.now() : Date.now();
 
     if (!project) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      const headers = perf
+        ? { "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},access;dur=${(tAccess1 - tAccess0).toFixed(1)},db;dur=${(tDb1 - tDb0).toFixed(1)}` }
+        : undefined;
+      return NextResponse.json({ error: 'Project not found' }, { status: 404, headers });
     }
 
-    return NextResponse.json({ project });
+    const tEnd = typeof performance !== "undefined" ? performance.now() : Date.now();
+    const headers = perf
+      ? {
+          "Server-Timing": `auth;dur=${(tAuth - t0).toFixed(1)},access;dur=${(tAccess1 - tAccess0).toFixed(1)},db;dur=${(tDb1 - tDb0).toFixed(1)},total;dur=${(tEnd - t0).toFixed(1)}`,
+        }
+      : undefined;
+
+    return NextResponse.json({ project }, { headers });
   } catch (error) {
     console.error('Get project error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

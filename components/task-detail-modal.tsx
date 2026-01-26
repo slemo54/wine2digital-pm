@@ -414,7 +414,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     let ok = false;
     let subtasksCount = 0;
     try {
-      const taskReq = fetch(withPerf(`/api/tasks/${taskId}`), { cache: "no-store" });
+      // Use "light" view to skip project.members for faster initial render
+      const taskReq = fetch(withPerf(`/api/tasks/${taskId}?view=light`), { cache: "no-store" });
       const subtasksReq = fetch(withPerf(`/api/tasks/${taskId}/subtasks`), { cache: "no-store" });
 
       const taskRes = await taskReq;
