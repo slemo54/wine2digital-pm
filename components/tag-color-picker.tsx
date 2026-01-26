@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { Check } from "lucide-react";
 
 const PALETTE = [
+  { name: "slate-400", hex: "#94a3b8" },
   { name: "red-500", hex: "#ef4444" },
   { name: "blue-500", hex: "#3b82f6" },
   { name: "green-500", hex: "#22c55e" },

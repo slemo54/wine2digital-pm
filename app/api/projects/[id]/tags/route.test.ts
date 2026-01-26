@@ -22,3 +22,16 @@ test("tagSchema validation", async () => {
   assert.strictEqual(tagSchema.safeParse({ name: "TAG", color: "#1234567" }).success, false); // too long
 });
 
+test("tagUpdateSchema validation", async () => {
+  const { tagUpdateSchema } = await import("@/lib/project-tag-schema");
+
+  // Valid cases
+  assert.ok(tagUpdateSchema.safeParse({ name: "TAG" }).success);
+  assert.ok(tagUpdateSchema.safeParse({ color: "#ef4444" }).success);
+  assert.ok(tagUpdateSchema.safeParse({ name: "TAG", color: "#ABCDEF" }).success);
+
+  // Invalid cases
+  assert.strictEqual(tagUpdateSchema.safeParse({}).success, false); // require at least one field
+  assert.strictEqual(tagUpdateSchema.safeParse({ color: "ef4444" }).success, false); // missing #
+});
+

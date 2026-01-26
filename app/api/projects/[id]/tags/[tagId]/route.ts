@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session-user";
 import { canManageProjectMembers } from "@/lib/project-permissions";
+import { tagUpdateSchema } from "@/lib/project-tag-schema";
 
 export const dynamic = "force-dynamic";
 
@@ -28,8 +29,14 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string; 
     }
 
     const body = await req.json().catch(() => ({}));
-    const name = normalizeTagName((body as any)?.name);
-    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+    const maybeNameRaw = (body as any)?.name;
+    const maybeName = typeof maybeNameRaw === "string" ? normalizeTagName(maybeNameRaw) : undefined;
+    const parseResult = tagUpdateSchema.safeParse({ ...body, ...(maybeName ? { name: maybeName } : {}) });
+    if (!parseResult.success) {
+      return NextResponse.json({ error: parseResult.error.errors[0].message }, { status: 400 });
+    }
+
+    const { name, color } = parseResult.data;
 
     const existing = await prisma.projectTag.findFirst({
       where: { id: params.tagId, projectId: params.id },
@@ -39,7 +46,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string; 
 
     const updated = await prisma.projectTag.update({
       where: { id: params.tagId },
-      data: { name },
+      data: {
+        ...(typeof name === "string" ? { name } : {}),
+        ...(typeof color === "string" ? { color } : {}),
+      },
       select: { id: true, name: true, color: true, createdAt: true, updatedAt: true },
     });
 

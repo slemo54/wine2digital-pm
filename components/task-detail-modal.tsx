@@ -218,6 +218,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [newTagName, setNewTagName] = useState("");
   const [renamingTagId, setRenamingTagId] = useState<string | null>(null);
   const [renamingTagName, setRenamingTagName] = useState("");
+  const [renamingTagColor, setRenamingTagColor] = useState("#94a3b8");
   const [newTagColor, setNewTagColor] = useState("#94a3b8");
   const [tagMutationBusy, setTagMutationBusy] = useState(false);
   const [amountPickerOpen, setAmountPickerOpen] = useState(false);
@@ -1211,6 +1212,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     if (!t) return;
     setRenamingTagId(tagId);
     setRenamingTagName(t.name);
+    setRenamingTagColor(t.color ? String(t.color) : "#94a3b8");
   };
 
   const saveRenameTag = async () => {
@@ -1223,13 +1225,18 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const res = await fetch(`/api/projects/${currentProjectId}/tags/${renamingTagId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, color: renamingTagColor }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Impossibile rinominare tag");
-      setProjectTags((prev) => prev.map((t) => (t.id === renamingTagId ? { ...t, name } : t)).sort((a, b) => a.name.localeCompare(b.name)));
+      setProjectTags((prev) =>
+        prev
+          .map((t) => (t.id === renamingTagId ? { ...t, name, color: renamingTagColor } : t))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
       setRenamingTagId(null);
       setRenamingTagName("");
+      setRenamingTagColor("#94a3b8");
       toast.success("Tag aggiornato");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Impossibile rinominare tag");
@@ -1561,6 +1568,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             setNewTagColor("#94a3b8");
                             setRenamingTagId(null);
                             setRenamingTagName("");
+                            setRenamingTagColor("#94a3b8");
                           }
                         }}
                       >
@@ -1593,6 +1601,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               filteredProjectTags.map((t) => {
                                 const checked = draftTagIds.includes(t.id);
                                 const isRenaming = renamingTagId === t.id;
+                                const dotColor = isRenaming ? renamingTagColor : (t.color || "#94a3b8");
                                 return (
                                   <div
                                     key={t.id}
@@ -1612,26 +1621,35 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                                       />
                                       <div
                                         className="w-2 h-2 rounded-full shrink-0"
-                                        style={{ backgroundColor: t.color || "#94a3b8" }}
+                                        style={{ backgroundColor: dotColor }}
                                       />
                                       {isRenaming ? (
-                                        <Input
-                                          value={renamingTagName}
-                                          onChange={(e) => setRenamingTagName(e.target.value)}
-                                          className="h-8"
-                                          disabled={tagMutationBusy}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Escape") {
-                                              e.preventDefault();
-                                              setRenamingTagId(null);
-                                              setRenamingTagName("");
-                                            }
-                                            if (e.key === "Enter") {
-                                              e.preventDefault();
-                                              void saveRenameTag();
-                                            }
-                                          }}
-                                        />
+                                        <div className="flex-1 min-w-0 space-y-2">
+                                          <Input
+                                            value={renamingTagName}
+                                            onChange={(e) => setRenamingTagName(e.target.value)}
+                                            className="h-8"
+                                            disabled={tagMutationBusy}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Escape") {
+                                                e.preventDefault();
+                                                setRenamingTagId(null);
+                                                setRenamingTagName("");
+                                                setRenamingTagColor("#94a3b8");
+                                              }
+                                              if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                void saveRenameTag();
+                                              }
+                                            }}
+                                          />
+                                          <TagColorPicker
+                                            value={renamingTagColor}
+                                            onChange={(hex) => setRenamingTagColor(hex)}
+                                            disabled={tagMutationBusy}
+                                            className="gap-1"
+                                          />
+                                        </div>
                                       ) : (
                                         <span className="truncate">{t.name}</span>
                                       )}
@@ -1654,6 +1672,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                                             onClick={() => {
                                               setRenamingTagId(null);
                                               setRenamingTagName("");
+                                              setRenamingTagColor("#94a3b8");
                                             }}
                                             disabled={tagMutationBusy}
                                           >
