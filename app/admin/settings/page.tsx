@@ -6,7 +6,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "react-hot-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, GitCommit, ExternalLink } from "lucide-react";
+
+interface ChangelogEntry {
+    sha: string;
+    title: string;
+    date: string;
+    url: string;
+}
 
 export default function AdminSettingsPage() {
     const [loading, setLoading] = useState(true);
@@ -17,8 +24,11 @@ export default function AdminSettingsPage() {
         breakDurationMin: 60,
         lateToleranceMin: 15,
     });
+    const [changelog, setChangelog] = useState<ChangelogEntry[]>([]);
+    const [changelogLoading, setChangelogLoading] = useState(true);
 
     useEffect(() => {
+        // Load settings
         fetch("/api/admin/settings")
             .then((res) => {
                 if (res.ok) return res.json();
@@ -36,6 +46,13 @@ export default function AdminSettingsPage() {
             })
             .catch(() => toast.error("Failed to load settings"))
             .finally(() => setLoading(false));
+
+        // Load changelog
+        fetch("/api/admin/changelog")
+            .then((res) => res.json())
+            .then((data) => setChangelog(data.commits || []))
+            .catch(() => {})
+            .finally(() => setChangelogLoading(false));
     }, []);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,6 +128,59 @@ export default function AdminSettingsPage() {
                             </Button>
                         </div>
                     </form>
+                </CardContent>
+            </Card>
+
+            {/* Changelog Section */}
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <GitCommit className="h-5 w-5" />
+                        Changelog
+                    </CardTitle>
+                    <CardDescription>Ultimi aggiornamenti della web app.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {changelogLoading ? (
+                        <div className="flex justify-center py-4">
+                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : changelog.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Nessun changelog disponibile.</p>
+                    ) : (
+                        <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                            {changelog.map((entry) => (
+                                <div
+                                    key={entry.sha}
+                                    className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors"
+                                >
+                                    <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono text-muted-foreground shrink-0">
+                                        {entry.sha}
+                                    </code>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm truncate">{entry.title}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {new Date(entry.date).toLocaleDateString("it-IT", {
+                                                day: "numeric",
+                                                month: "short",
+                                                year: "numeric",
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            })}
+                                        </p>
+                                    </div>
+                                    <a
+                                        href={entry.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        <ExternalLink className="h-4 w-4" />
+                                    </a>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
