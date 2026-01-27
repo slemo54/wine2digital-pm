@@ -1,5 +1,7 @@
 "use client";
 
+import * as XLSX from "xlsx";
+
 export function escapeCsvCell(value: unknown): string {
   const raw = value === null || value === undefined ? "" : String(value);
   return `"${raw.replace(/"/g, '""')}"`;
@@ -104,5 +106,49 @@ export function isoDate(date: unknown): string {
   const d = date instanceof Date ? date : new Date(String(date));
   if (Number.isNaN(d.getTime())) return "";
   return d.toISOString().slice(0, 10);
+}
+
+export function centsToEuros(cents: number | null | undefined): number | null {
+  if (cents === null || cents === undefined) return null;
+  if (!Number.isFinite(cents)) return null;
+  return cents / 100;
+}
+
+export function buildXlsxAccounting(opts: {
+  header: string[];
+  rows: unknown[][];
+  sheetName?: string;
+}): ArrayBuffer {
+  const header = opts.header;
+  const rows = opts.rows;
+  const sheetName = opts.sheetName || "Tasks";
+
+  // Crea worksheet con header e data
+  const data = [header, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(data);
+
+  // Applica formattazione numerica alla colonna F (amountEur)
+  const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+  for (let row = 1; row <= range.e.r; row++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: row, c: 5 }); // colonna F (index 5)
+    if (ws[cellAddress] && typeof ws[cellAddress].v === "number") {
+      ws[cellAddress].t = "n";
+      ws[cellAddress].z = "#,##0.00";
+    }
+  }
+
+  // Crea workbook
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  // Write to ArrayBuffer
+  return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+}
+
+export function downloadXlsxFile(filename: string, buffer: ArrayBuffer): void {
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  downloadBlob(filename, blob);
 }
 

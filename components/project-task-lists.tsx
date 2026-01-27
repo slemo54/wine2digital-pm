@@ -15,7 +15,7 @@ import { TaskDetailModal } from "@/components/task-detail-modal";
 import { CSVImportWizard } from "@/components/custom-fields/CSVImportWizard";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { formatEurCents } from "@/lib/money";
-import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate, safeFileStem } from "@/lib/export";
+import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate, safeFileStem, buildXlsxAccounting, downloadXlsxFile, centsToEuros } from "@/lib/export";
 import {
   DndContext,
   closestCenter,
@@ -506,6 +506,86 @@ export function ProjectTaskLists(props: {
     }
   };
 
+  const exportTasksForAccounting = async () => {
+    const MAX_EXPORT = 5000;
+    setIsExporting(true);
+    try {
+      const query = q.trim();
+      const base = new URLSearchParams();
+      base.set("projectId", projectId);
+      if (query) base.set("q", query);
+
+      // Fetch total first
+      const firstRes = await fetch(`/api/tasks?${base.toString()}&page=1&pageSize=1`, { cache: "no-store" });
+      const firstData = await firstRes.json().catch(() => ({}));
+      if (!firstRes.ok) throw new Error(firstData?.error || "Export fallito");
+      const total = Number.isFinite(firstData?.total) ? Number(firstData.total) : 0;
+      if (!total) {
+        toast("Nessuna task da esportare");
+        return;
+      }
+      if (total > MAX_EXPORT) {
+        toast.error(`Troppe task da esportare (${total}). Usa la ricerca per ridurre i risultati.`);
+        return;
+      }
+
+      // Fetch all pages
+      const pageSize = 200;
+      const pages = Math.ceil(total / pageSize);
+      const all: any[] = [];
+      for (let page = 1; page <= pages; page++) {
+        const params = new URLSearchParams(base.toString());
+        params.set("page", String(page));
+        params.set("pageSize", String(pageSize));
+        const res = await fetch(`/api/tasks?${params.toString()}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || "Export fallito");
+        const chunk = Array.isArray(data?.tasks) ? data.tasks : [];
+        all.push(...chunk);
+      }
+
+      // Header ridotto: solo 8 colonne
+      const header = [
+        "projectName",
+        "category",
+        "title",
+        "description",
+        "dueDate",
+        "amountEur",
+        "createdAt",
+        "updatedAt",
+      ];
+
+      // Rows con amountEur numerico
+      const rows = all.map((t: any) => {
+        const category = String(t?.taskList?.name || DEFAULT_LIST_NAME);
+        const amountEur = typeof t?.amountCents === "number" ? centsToEuros(t.amountCents) : null;
+
+        return [
+          String(t?.project?.name || ""),
+          category,
+          String(t?.title || ""),
+          String(t?.description || ""),
+          isoDate(t?.dueDate),
+          amountEur, // NUMERO, non stringa
+          isoDate(t?.createdAt),
+          isoDate(t?.updatedAt),
+        ];
+      });
+
+      const stamp = new Date().toISOString().slice(0, 10);
+      const projLabel = safeFileStem(String((all[0] as any)?.project?.name || projectId));
+
+      const buffer = buildXlsxAccounting({ header, rows, sheetName: "Tasks" });
+      downloadXlsxFile(`tasks_accounting_${projLabel}_${stamp}.xlsx`, buffer);
+      toast.success("Export XLSX pronto");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export fallito");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   useEffect(() => {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -705,6 +785,9 @@ export function ProjectTaskLists(props: {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => void exportTasks("xls")} disabled={isExporting}>
                 Export XLS (task)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => void exportTasksForAccounting()} disabled={isExporting}>
+                Export XLSX (accounting)
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
