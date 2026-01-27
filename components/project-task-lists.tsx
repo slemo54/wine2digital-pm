@@ -462,7 +462,7 @@ export function ProjectTaskLists(props: {
         const subtasksTotal = Number.isFinite(t?._count?.subtasks) ? Number(t._count.subtasks) : 0;
         const subtasksDone = Array.isArray(t?.subtasks) ? t.subtasks.length : 0;
 
-        const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : "";
+        const amountEur = typeof t?.amountCents === "number" ? centsToEuros(t.amountCents) : null;
 
         return [
           String(t?.project?.id || projectId),
@@ -607,6 +607,58 @@ export function ProjectTaskLists(props: {
       map.set(key, arr);
     }
     return map;
+  }, [localTasks, deferredQ]);
+
+  const categoryTotals = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of localTasks) {
+      if (deferredQ.trim()) {
+        const query = deferredQ.trim().toLowerCase();
+        const hay = `${t.title} ${t.description || ""}`.toLowerCase();
+        if (!hay.includes(query)) continue;
+      }
+      const key = t.listId || "__none__";
+      const amount = t.amountCents || 0;
+      map.set(key, (map.get(key) || 0) + amount);
+    }
+    return map;
+  }, [localTasks, deferredQ]);
+
+  const statusTotals = useMemo(() => {
+    const totals = {
+      daFatturare: 0,
+      fatturato: 0,
+      incassato: 0,
+      previsionale: 0,
+    };
+
+    for (const t of localTasks) {
+      if (deferredQ.trim()) {
+        const query = deferredQ.trim().toLowerCase();
+        const hay = `${t.title} ${t.description || ""}`.toLowerCase();
+        if (!hay.includes(query)) continue;
+      }
+
+      const amount = t.amountCents || 0;
+      if (amount === 0) continue;
+
+      const tags = getDisplayTags(t);
+      const tagNames = tags.map((tag) => tag.name.toUpperCase());
+      const hasPagato = tagNames.includes("PAGATO");
+      const hasFatturaEmessa = tagNames.includes("FATTURA EMESSA");
+
+      totals.previsionale += amount;
+
+      if (hasPagato) {
+        totals.incassato += amount;
+      } else if (hasFatturaEmessa) {
+        totals.fatturato += amount;
+      } else {
+        totals.daFatturare += amount;
+      }
+    }
+
+    return totals;
   }, [localTasks, deferredQ]);
 
   const createList = async () => {
@@ -809,6 +861,34 @@ export function ProjectTaskLists(props: {
         onSuccess={fetchAll}
       />
 
+      {/* Sezione Totali per Stato */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <Card className="bg-amber-50 border-amber-200">
+          <CardContent className="pt-6">
+            <div className="text-sm font-medium text-amber-900">DA FATTURARE</div>
+            <div className="text-2xl font-bold text-amber-700 mt-2">{formatEurCents(statusTotals.daFatturare)}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-sky-50 border-sky-200">
+          <CardContent className="pt-6">
+            <div className="text-sm font-medium text-sky-900">FATTURATO</div>
+            <div className="text-2xl font-bold text-sky-700 mt-2">{formatEurCents(statusTotals.fatturato)}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-emerald-50 border-emerald-200">
+          <CardContent className="pt-6">
+            <div className="text-sm font-medium text-emerald-900">INCASSATO</div>
+            <div className="text-2xl font-bold text-emerald-700 mt-2">{formatEurCents(statusTotals.incassato)}</div>
+          </CardContent>
+        </Card>
+        <Card className="bg-purple-50 border-purple-200">
+          <CardContent className="pt-6">
+            <div className="text-sm font-medium text-purple-900">PREVISIONALE</div>
+            <div className="text-2xl font-bold text-purple-700 mt-2">{formatEurCents(statusTotals.previsionale)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -828,9 +908,16 @@ export function ProjectTaskLists(props: {
                       <div className="flex items-center justify-between w-full pr-4">
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="font-semibold truncate">{l.name}</div>
-                          <Badge variant="secondary">
-                            {listTasks.length}/{l._count?.tasks ?? listTasks.length}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">
+                              {listTasks.length}/{l._count?.tasks ?? listTasks.length}
+                            </Badge>
+                            {categoryTotals.get(l.id) ? (
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                                Totale: {formatEurCents(categoryTotals.get(l.id) || 0)}
+                              </Badge>
+                            ) : null}
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <Button
