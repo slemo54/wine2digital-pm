@@ -861,30 +861,73 @@ export function ProjectTaskLists(props: {
         onSuccess={fetchAll}
       />
 
-      {/* Sezione Totali per Stato */}
+      {/* Sezione Totali per Stato - Fixed Styling */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card className="bg-amber-50 border-amber-200">
+        {/* DA FATTURARE */}
+        <Card className="bg-card/50 border-border/50 shadow-sm">
           <CardContent className="pt-6">
-            <div className="text-sm font-medium text-amber-900">DA FATTURARE</div>
-            <div className="text-2xl font-bold text-amber-700 mt-2">{formatEurCents(statusTotals.daFatturare)}</div>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-1.5 rounded-full bg-[#f97316]" />
+              <div className="flex-1">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                  Da Fatturare
+                </div>
+                <div className="text-2xl font-bold text-foreground">
+                  {formatEurCents(statusTotals.daFatturare)}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-sky-50 border-sky-200">
+
+        {/* FATTURATO */}
+        <Card className="bg-card/50 border-border/50 shadow-sm">
           <CardContent className="pt-6">
-            <div className="text-sm font-medium text-sky-900">FATTURATO</div>
-            <div className="text-2xl font-bold text-sky-700 mt-2">{formatEurCents(statusTotals.fatturato)}</div>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-1.5 rounded-full bg-[#0ea5e9]" />
+              <div className="flex-1">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                  Fatturato
+                </div>
+                <div className="text-2xl font-bold text-foreground">
+                  {formatEurCents(statusTotals.fatturato)}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-emerald-50 border-emerald-200">
+
+        {/* INCASSATO */}
+        <Card className="bg-card/50 border-border/50 shadow-sm">
           <CardContent className="pt-6">
-            <div className="text-sm font-medium text-emerald-900">INCASSATO</div>
-            <div className="text-2xl font-bold text-emerald-700 mt-2">{formatEurCents(statusTotals.incassato)}</div>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-1.5 rounded-full bg-[#10b981]" />
+              <div className="flex-1">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                  Incassato
+                </div>
+                <div className="text-2xl font-bold text-foreground">
+                  {formatEurCents(statusTotals.incassato)}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-purple-50 border-purple-200">
+
+        {/* PREVISIONALE */}
+        <Card className="bg-card/50 border-border/50 shadow-sm">
           <CardContent className="pt-6">
-            <div className="text-sm font-medium text-purple-900">PREVISIONALE</div>
-            <div className="text-2xl font-bold text-purple-700 mt-2">{formatEurCents(statusTotals.previsionale)}</div>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-1.5 rounded-full" style={{ backgroundColor: "hsl(24 100% 50%)" }} />
+              <div className="flex-1">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                  Previsionale
+                </div>
+                <div className="text-2xl font-bold text-foreground">
+                  {formatEurCents(statusTotals.previsionale)}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

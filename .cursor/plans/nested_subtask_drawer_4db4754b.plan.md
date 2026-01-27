@@ -25,6 +25,7 @@ todos:
     status: completed
     dependencies:
       - api-mentions-notify
+isProject: false
 ---
 
 # Nested drawer Subtask + Rich comments
@@ -51,8 +52,6 @@ flowchart LR
   SubtaskCommentsAPI --> Prisma
   SubtaskCommentsAPI -->|create| NotificationsTable
 ```
-
-
 
 ## Implementazione (passi)
 

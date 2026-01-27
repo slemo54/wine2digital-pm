@@ -17,6 +17,8 @@ export default function AdminSettingsPage() {
         breakDurationMin: 60,
         lateToleranceMin: 15,
     });
+    const [commits, setCommits] = useState<any[]>([]);
+    const [loadingCommits, setLoadingCommits] = useState(false);
 
     useEffect(() => {
         fetch("/api/admin/settings")
@@ -36,6 +38,21 @@ export default function AdminSettingsPage() {
             })
             .catch(() => toast.error("Failed to load settings"))
             .finally(() => setLoading(false));
+    }, []);
+
+    useEffect(() => {
+        setLoadingCommits(true);
+        fetch("/api/github/commits")
+            .then((res) => {
+                if (res.ok) return res.json();
+                throw new Error("Failed to load commits");
+            })
+            .then((data) => setCommits(data.commits || []))
+            .catch((err) => {
+                console.error("Failed to load changelog:", err);
+                setCommits([]);
+            })
+            .finally(() => setLoadingCommits(false));
     }, []);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -111,6 +128,61 @@ export default function AdminSettingsPage() {
                             </Button>
                         </div>
                     </form>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Changelog</CardTitle>
+                    <CardDescription>
+                        Recent updates and changes to the application from GitHub.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {loadingCommits ? (
+                        <div className="flex justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : commits.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No recent commits found.</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {commits.map((commit) => (
+                                <div
+                                    key={commit.sha}
+                                    className="flex items-start gap-3 py-3 border-b last:border-b-0"
+                                >
+                                    <div className="flex-shrink-0 mt-1">
+                                        <div className="h-2 w-2 rounded-full bg-primary" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-foreground truncate">
+                                            {commit.messageTitle}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                            {new Date(commit.date).toLocaleString("it-IT", {
+                                                day: "numeric",
+                                                month: "short",
+                                                year: "numeric",
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            })}
+                                            {" · "}
+                                            {commit.author}
+                                        </p>
+                                    </div>
+                                    <a
+                                        href={commit.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex-shrink-0 text-xs text-primary hover:underline"
+                                    >
+                                        View
+                                    </a>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

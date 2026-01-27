@@ -44,7 +44,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         {/* End Google Tag Manager */}
 
         {/* Microsoft Clarity */}
-        <Script id="microsoft-clarity" strategy="afterInteractive">
+        <Script id="microsoft-clarity" strategy="lazyOnload">
           {`(function(c,l,a,r,i,t,y){
         c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
         t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
@@ -65,7 +65,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         {/* End Google Tag Manager (noscript) */}
 
         {/* Elfsight AI Chatbot | pm.wine2digital */}
-        <Script src="https://elfsightcdn.com/platform.js" strategy="afterInteractive" />
+        <Script src="https://elfsightcdn.com/platform.js" strategy="lazyOnload" />
         <div
           className="elfsight-app-57b93af2-30e0-4b47-ab37-53e380b55c5a"
           data-elfsight-app-lazy="true"
