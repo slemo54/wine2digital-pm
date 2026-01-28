@@ -632,7 +632,13 @@ export function ProjectTaskLists(props: {
       previsionale: 0,
     };
 
+    // Define recognized tags for each status category
+    const TAG_DA_FATTURARE = ["DA FATTURARE", "DA INSERIRE"];
+    const TAG_FATTURATO = ["FATTURATO", "PRATICA INSERITA", "FATTURA EMESSA"];
+    const TAG_INCASSATO = ["INCASSATO", "PAGATO"];
+
     for (const t of localTasks) {
+      // Apply search filter
       if (deferredQ.trim()) {
         const query = deferredQ.trim().toLowerCase();
         const hay = `${t.title} ${t.description || ""}`.toLowerCase();
@@ -644,17 +650,23 @@ export function ProjectTaskLists(props: {
 
       const tags = getDisplayTags(t);
       const tagNames = tags.map((tag) => tag.name.toUpperCase());
-      const hasPagato = tagNames.includes("PAGATO");
-      const hasFatturaEmessa = tagNames.includes("FATTURA EMESSA");
 
-      totals.previsionale += amount;
+      // Check if task has any status tag
+      const hasIncassato = tagNames.some((name) => TAG_INCASSATO.includes(name));
+      const hasFatturato = tagNames.some((name) => TAG_FATTURATO.includes(name));
+      const hasDaFatturare = tagNames.some((name) => TAG_DA_FATTURARE.includes(name));
+      const hasAnyStatusTag = hasIncassato || hasFatturato || hasDaFatturare;
 
-      if (hasPagato) {
+      // Calculate totals with priority order: INCASSATO > FATTURATO > DA FATTURARE > PREVISIONALE
+      if (hasIncassato) {
         totals.incassato += amount;
-      } else if (hasFatturaEmessa) {
+      } else if (hasFatturato) {
         totals.fatturato += amount;
-      } else {
+      } else if (hasDaFatturare) {
         totals.daFatturare += amount;
+      } else if (!hasAnyStatusTag) {
+        // Only tasks WITHOUT status tags go to previsionale
+        totals.previsionale += amount;
       }
     }
 
