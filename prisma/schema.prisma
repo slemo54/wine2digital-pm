@@ -279,6 +279,11 @@ model Task {
   attachments  TaskAttachment[]
   activities   TaskActivity[]
   customFieldValues CustomFieldValue[]
+
+  // Performance indexes
+  @@index([projectId, status, updatedAt])
+  @@index([status])
+  @@index([dueDate])
 }
 
 model TaskActivity {
@@ -307,6 +312,7 @@ model TaskAssignee {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([taskId, userId])
+  @@index([userId, taskId])
 }
 
 // Subtasks - Tasks within tasks (Mini Tasks)
@@ -337,6 +343,8 @@ model Subtask {
   dependentOn  SubtaskDependency[] @relation("DependentSubtasks")
 
   @@index([taskId, position])
+  @@index([assigneeId, status])
+  @@index([taskId, status, position])
 }
 
 // Subtask Dependencies
@@ -553,6 +561,10 @@ model Notification {
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Performance indexes
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
 }
 
 // Project Invites - Sharing via link

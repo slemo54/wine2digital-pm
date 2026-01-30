@@ -49,7 +49,7 @@ isProject: false
 
 ## Workstream A — Tagliare impatto di script terze parti (alto impatto, basso rischio)
 
-- In [`nextjs_space/app/layout.tsx`](nextjs_space/app/layout.tsx) oggi vengono caricati globalmente:
+- In `[nextjs_space/app/layout.tsx](nextjs_space/app/layout.tsx)` oggi vengono caricati globalmente:
 - `https://apps.abacus.ai/chatllm/appllm-lib.js` (strategy `afterInteractive`)
 - `https://elfsightcdn.com/platform.js` (strategy `afterInteractive`)
 - **Review**:
@@ -61,7 +61,7 @@ isProject: false
 
 ## Workstream B — `/project/[id]`: ridurre JS iniziale e lavoro in main thread
 
-- In `[nextjs_space/app/project/[id]/page.tsx](nextjs_space/app/project/[id]/page.tsx) `la pagina è `"use client"` e importa componenti non necessari al tab iniziale.
+- In `[nextjs_space/app/project/[id]/page.tsx](nextjs_space/app/project/[id]/page.tsx)` la pagina è `"use client"` e importa componenti non necessari al tab iniziale.
 - **Review**:
 - verificare bundle/parse e quali componenti entrano nel JS iniziale
 - **Azioni candidate**:
@@ -71,7 +71,7 @@ isProject: false
 
 ## Workstream C — Liste task: DOM e rendering (virtualizzazione/limitazione)
 
-- In [`nextjs_space/components/project-task-lists.tsx`](nextjs_space/components/project-task-lists.tsx) si caricano fino a `pageSize=200` e si renderizza per lista.
+- In `[nextjs_space/components/project-task-lists.tsx](nextjs_space/components/project-task-lists.tsx)` si caricano fino a `pageSize=200` e si renderizza per lista.
 - **Review**:
 - contare numero totale di nodi renderizzati (liste x task) e correlare con INP
 - **Azioni candidate**:
@@ -81,7 +81,7 @@ isProject: false
 
 ## Workstream D — Drawer task: ridurre payload “core” e demand-load di dati pesanti
 
-- In [`nextjs_space/components/task-detail-modal.tsx`](nextjs_space/components/task-detail-modal.tsx) il drawer è già impostato per caricare progressivamente.
+- In `[nextjs_space/components/task-detail-modal.tsx](nextjs_space/components/task-detail-modal.tsx)` il drawer è già impostato per caricare progressivamente.
 - **Review**:
 - controllare se `GET /api/tasks/:id` include dati non indispensabili al primo paint (es. `project.members` completo)
 - **Azioni candidate**:
@@ -92,7 +92,7 @@ isProject: false
 
 - Indici già critici (subtasks) sono stati aggiunti; ora serve una **review completa** su tabelle più calde:
 - `Task` (filtri per `projectId`, `status`, `updatedAt`, `listId`)
-- `Message` (chat: `projectId`, `createdAt`) — oggi **manca un index** in schema (`model Message` in [`nextjs_space/prisma/schema.prisma`](nextjs_space/prisma/schema.prisma))
+- `Message` (chat: `projectId`, `createdAt`) — oggi **manca un index** in schema (`model Message` in `[nextjs_space/prisma/schema.prisma](nextjs_space/prisma/schema.prisma)`)
 - `Notification` (per utente e ordering)
 - **Azioni candidate**:
 - aggiungere `@@index` mirati in Prisma + migration
@@ -111,3 +111,4 @@ isProject: false
 ## Deliverable finale
 
 - Report “prima/dopo” con: INP (percepito), overlay timings, `Server-Timing` (auth/db/total), e lista cambiamenti con impatto stimato.
+
