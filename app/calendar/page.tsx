@@ -510,38 +510,13 @@ export default function CalendarPage() {
                       />
                     </div>
 
-                    {!newAbsence.isFullDay && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="startTime">Ora Inizio</Label>
-                          <Input
-                            id="startTime"
-                            type="time"
-                            value={newAbsence.startTime}
-                            onChange={(e) => setNewAbsence({ ...newAbsence, startTime: e.target.value })}
-                            required={!newAbsence.isFullDay}
-                          />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="endTime">Ora Fine</Label>
-                          <Input
-                            id="endTime"
-                            type="time"
-                            value={newAbsence.endTime}
-                            onChange={(e) => setNewAbsence({ ...newAbsence, endTime: e.target.value })}
-                            required={!newAbsence.isFullDay}
-                          />
-                        </div>
-                      </div>
-                    )}
-
                     <div className="grid gap-2">
-                      <Label htmlFor="reason">Note / Dettagli (Opzionale)</Label>
+                      <Label htmlFor="reason">Dettagli di Orario (tutto il giorno - da ora a ora)</Label>
                       <Textarea
                         id="reason"
                         value={newAbsence.reason}
                         onChange={(e) => setNewAbsence({ ...newAbsence, reason: e.target.value })}
-                        placeholder="Dettagli aggiuntivi..."
+                        placeholder="Es: Tutto il giorno, oppure Dalle 14:30 alle 15:00"
                         rows={3}
                       />
                     </div>

@@ -149,7 +149,7 @@ export async function getDriveServiceAccountIdentity(): Promise<{
   return { clientEmail: sa.client_email, projectId: sa.project_id };
 }
 
-async function getDriveAccessToken(): Promise<string> {
+export async function getDriveAccessToken(): Promise<string> {
   const sa = await readServiceAccountFromEnv();
 
   const now = Math.floor(Date.now() / 1000);
