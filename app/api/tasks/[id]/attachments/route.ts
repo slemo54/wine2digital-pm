@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
-import { resolveDriveUploadFolderId, uploadFileToDrive } from "@/lib/google-drive";
+import { resolveDriveUploadFolderId, uploadFileToDrive, deleteDriveFile } from "@/lib/google-drive";
 import { getTaskAccessFlags } from "@/lib/task-access";
 import { prisma } from "@/lib/prisma";
 

@@ -725,6 +725,28 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     }
   };
 
+  const deleteAttachment = async (attachmentId: string) => {
+    if (!confirm("Sei sicuro di voler eliminare questo file?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/attachments/${attachmentId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setAttachments(attachments.filter((a) => a.id !== attachmentId));
+        toast.success("File eliminato");
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Errore eliminazione");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Errore durante l'eliminazione del file");
+    }
+  };
+
   const fetchSubtaskDetails = async (subtaskId: string) => {
     try {
       const [aRes, cRes] = await Promise.all([
@@ -920,6 +942,29 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       return null;
     } finally {
       setSubtaskUploading(false);
+    }
+  };
+
+  const deleteSubtaskAttachment = async (attachmentId: string) => {
+    if (!selectedSubtask) return;
+    if (!confirm("Sei sicuro di voler eliminare questo file?")) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/tasks/${taskId}/subtasks/${selectedSubtask.id}/attachments/${attachmentId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        setSubtaskAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+        toast.success("File eliminato");
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Errore eliminazione");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Errore durante l'eliminazione del file");
     }
   };
 
@@ -2073,30 +2118,45 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       const isImg = isProbablyImageFile(attachment.fileName, attachment.mimeType);
                       const previewSrc = isImg ? getImageSrcForFilePath(attachment.filePath) : null;
                       return (
-                        <a
+                        <div
                           key={attachment.id}
-                          href={href}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors"
+                          className="flex items-center gap-3 p-3 rounded-lg border hover:bg-muted/30 transition-colors group"
                         >
-                          {previewSrc ? (
-                            <img
-                              src={previewSrc}
-                              alt={attachment.fileName}
-                              className="h-9 w-9 rounded object-cover border bg-muted"
-                              loading="lazy"
-                            />
-                          ) : (
-                            <Paperclip className="w-4 h-4 text-muted-foreground" />
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{attachment.fileName}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {(attachment.fileSize / 1024).toFixed(2)} KB
-                            </p>
-                          </div>
-                        </a>
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-3 flex-1 min-w-0"
+                          >
+                            {previewSrc ? (
+                              <img
+                                src={previewSrc}
+                                alt={attachment.fileName}
+                                className="h-9 w-9 rounded object-cover border bg-muted"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <Paperclip className="w-4 h-4 text-muted-foreground" />
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{attachment.fileName}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(attachment.fileSize / 1024).toFixed(2)} KB
+                              </p>
+                            </div>
+                          </a>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              deleteAttachment(attachment.id);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                          </Button>
+                        </div>
                       );
                     })}
 
@@ -2582,30 +2642,45 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     const isImg = isProbablyImageFile(a.fileName, a.mimeType);
                     const previewSrc = isImg ? getImageSrcForFilePath(a.filePath) : null;
                     return (
-                      <a
+                      <div
                         key={a.id}
-                        href={href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-3 rounded-xl border bg-background p-3 hover:bg-muted/20 transition-colors"
+                        className="flex items-center gap-3 rounded-xl border bg-background p-3 hover:bg-muted/20 transition-colors group"
                       >
-                        {previewSrc ? (
-                          <img
-                            src={previewSrc}
-                            alt={a.fileName}
-                            className="h-10 w-10 rounded object-cover border bg-muted"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded bg-muted/40 flex items-center justify-center">
-                            <Paperclip className="h-4 w-4 text-muted-foreground" />
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-3 flex-1 min-w-0"
+                        >
+                          {previewSrc ? (
+                            <img
+                              src={previewSrc}
+                              alt={a.fileName}
+                              className="h-10 w-10 rounded object-cover border bg-muted"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded bg-muted/40 flex items-center justify-center">
+                              <Paperclip className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium truncate">{a.fileName}</div>
+                            <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
                           </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium truncate">{a.fileName}</div>
-                          <div className="text-xs text-muted-foreground">{Math.round(a.fileSize / 1024)} KB</div>
-                        </div>
-                      </a>
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            deleteSubtaskAttachment(a.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      </div>
                     );
                   })}
                 </div>
