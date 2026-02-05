@@ -66,3 +66,22 @@ export function buildAbsenceDecisionEmail(opts: {
   return { subject: `Richiesta assenza ${statusLabel}`, html, text };
 }
 
+export function buildAbsenceRequestEmail(opts: {
+  requesterName: string;
+  absenceType: string;
+  startDateLabel: string;
+  endDateLabel: string;
+  link: string;
+}): { subject: string; html: string; text: string } {
+  const { html, text } = buildSimpleEmail({
+    title: "Nuova richiesta di permesso",
+    lines: [
+      `${opts.requesterName} ha richiesto ${opts.absenceType}`,
+      `Periodo: dal ${opts.startDateLabel} al ${opts.endDateLabel}`,
+    ],
+    ctaLabel: "Visualizza richiesta",
+    ctaUrl: buildAbsoluteUrl(opts.link),
+  });
+  return { subject: "Nuova richiesta di permesso", html, text };
+}
+

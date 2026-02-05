@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/prisma';
 import { buildAbsenceVisibilityWhere } from '@/lib/absence-permissions';
+import { findAbsenceRequestRecipientsWithEmails } from '@/lib/absence-notification-recipients';
+import { getAbsenceTypeLabel } from '@/lib/absence-labels';
+import { buildAbsenceRequestEmail } from '@/lib/email/notifications';
+import { sendEmail } from '@/lib/email/resend';
 
 export const dynamic = 'force-dynamic';
 
@@ -158,10 +162,75 @@ export async function POST(req: NextRequest) {
             firstName: true,
             lastName: true,
             email: true,
+            name: true,
+            department: true,
           },
         },
       },
     });
+
+    // Send notifications to admins and department managers (best-effort)
+    try {
+      const recipients = await findAbsenceRequestRecipientsWithEmails({
+        requesterUserId: userId,
+        requesterDepartment: absence.user.department,
+      });
+
+      if (recipients.length > 0) {
+        // Create in-app notifications
+        try {
+          const requesterName = absence.user.name || absence.user.email || "Un membro";
+          const startDateLabel = new Date(absence.startDate).toLocaleDateString("it-IT");
+          const endDateLabel = new Date(absence.endDate).toLocaleDateString("it-IT");
+
+          await prisma.notification.createMany({
+            data: recipients.map((recipient) => ({
+              userId: recipient.id,
+              type: "absence_request_pending",
+              title: "Nuova richiesta di permesso",
+              message: `${requesterName} ha richiesto ${getAbsenceTypeLabel(absence.type)} dal ${startDateLabel} al ${endDateLabel}`,
+              link: "/admin/absences?status=pending",
+            })),
+          });
+        } catch (notificationError) {
+          console.error("Failed to create absence notifications:", notificationError);
+        }
+
+        // Send emails (best-effort, don't fail the request)
+        const emailResults = await Promise.allSettled(
+          recipients.map(async (recipient) => {
+            const requesterName = absence.user.name || absence.user.email || "Un membro";
+            const startDateLabel = new Date(absence.startDate).toLocaleDateString("it-IT");
+            const endDateLabel = new Date(absence.endDate).toLocaleDateString("it-IT");
+
+            const email = buildAbsenceRequestEmail({
+              requesterName,
+              absenceType: getAbsenceTypeLabel(absence.type),
+              startDateLabel,
+              endDateLabel,
+              link: "/admin/absences?status=pending",
+            });
+
+            return sendEmail({
+              to: [recipient.email],
+              subject: email.subject,
+              html: email.html,
+              text: email.text,
+            });
+          })
+        );
+
+        // Log email failures (don't fail the request)
+        emailResults.forEach((result, index) => {
+          if (result.status === "rejected") {
+            console.error(`Email failed for ${recipients[index].email}:`, result.reason);
+          }
+        });
+      }
+    } catch (recipientError) {
+      // Log but don't fail the request
+      console.error("Failed to send absence request notifications:", recipientError);
+    }
 
     return NextResponse.json({ absence });
   } catch (error) {

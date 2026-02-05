@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { buildDelimitedText, downloadCsvFile, isoDate } from "@/lib/export";
+import { getAbsenceTypeLabel } from "@/lib/absence-labels";
 
 type AbsenceStatus = "pending" | "approved" | "rejected";
 
@@ -109,20 +110,6 @@ function getTypeIcon(type: string) {
   }
 }
 
-function getTypeLabel(type: string) {
-  const map: Record<string, string> = {
-    vacation: "Ferie",
-    sick_leave: "Malattia",
-    personal: "Permesso",
-    late_entry: "Ingresso in ritardo",
-    early_exit: "Uscita anticipata",
-    overtime: "Straordinario",
-    transfer: "Trasferta",
-    remote: "Smart Working",
-    ooo: "Fuori Ufficio"
-  };
-  return map[type] || type;
-}
 
 type ConfirmMode = "row" | "selected" | "before" | "createdRange";
 
@@ -264,7 +251,7 @@ export default function AdminAbsencesArchivePage() {
         r.id,
         displayName(r.user),
         r.user.email,
-        getTypeLabel(r.type),
+        getAbsenceTypeLabel(r.type),
         r.status,
         isoDate(r.startDate),
         isoDate(r.endDate),
@@ -657,7 +644,7 @@ export default function AdminAbsencesArchivePage() {
                                 <div className={`p-1.5 rounded-md bg-muted ${tInfo.color.replace('text-', 'bg-')}/10`}>
                                   <TypeIcon className={`w-4 h-4 ${tInfo.color}`} />
                                 </div>
-                                <span className="font-medium">{getTypeLabel(r.type)}</span>
+                                <span className="font-medium">{getAbsenceTypeLabel(r.type)}</span>
                               </div>
                             </td>
                             <td className="p-4 align-middle">
