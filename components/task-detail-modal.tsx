@@ -218,6 +218,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [newTagName, setNewTagName] = useState("");
   const [renamingTagId, setRenamingTagId] = useState<string | null>(null);
   const [renamingTagName, setRenamingTagName] = useState("");
+  const [renamingTagColor, setRenamingTagColor] = useState("#94a3b8");
   const [newTagColor, setNewTagColor] = useState("#94a3b8");
   const [tagMutationBusy, setTagMutationBusy] = useState(false);
   const [amountPickerOpen, setAmountPickerOpen] = useState(false);
@@ -1256,6 +1257,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     if (!t) return;
     setRenamingTagId(tagId);
     setRenamingTagName(t.name);
+    setRenamingTagColor(t.color || "#94a3b8");
   };
 
   const saveRenameTag = async () => {
@@ -1268,16 +1270,17 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const res = await fetch(`/api/projects/${currentProjectId}/tags/${renamingTagId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, color: renamingTagColor }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as any)?.error || "Impossibile rinominare tag");
-      setProjectTags((prev) => prev.map((t) => (t.id === renamingTagId ? { ...t, name } : t)).sort((a, b) => a.name.localeCompare(b.name)));
+      if (!res.ok) throw new Error((data as any)?.error || "Impossibile aggiornare tag");
+      setProjectTags((prev) => prev.map((t) => (t.id === renamingTagId ? { ...t, name, color: renamingTagColor } : t)).sort((a, b) => a.name.localeCompare(b.name)));
       setRenamingTagId(null);
       setRenamingTagName("");
+      setRenamingTagColor("#94a3b8");
       toast.success("Tag aggiornato");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile rinominare tag");
+      toast.error(e instanceof Error ? e.message : "Impossibile aggiornare tag");
     } finally {
       setTagMutationBusy(false);
     }
@@ -1660,23 +1663,32 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                                         style={{ backgroundColor: t.color || "#94a3b8" }}
                                       />
                                       {isRenaming ? (
-                                        <Input
-                                          value={renamingTagName}
-                                          onChange={(e) => setRenamingTagName(e.target.value)}
-                                          className="h-8"
-                                          disabled={tagMutationBusy}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Escape") {
-                                              e.preventDefault();
-                                              setRenamingTagId(null);
-                                              setRenamingTagName("");
-                                            }
-                                            if (e.key === "Enter") {
-                                              e.preventDefault();
-                                              void saveRenameTag();
-                                            }
-                                          }}
-                                        />
+                                        <div className="flex flex-col gap-2 flex-1 min-w-0">
+                                          <Input
+                                            value={renamingTagName}
+                                            onChange={(e) => setRenamingTagName(e.target.value)}
+                                            className="h-8"
+                                            disabled={tagMutationBusy}
+                                            onKeyDown={(e) => {
+                                              if (e.key === "Escape") {
+                                                e.preventDefault();
+                                                setRenamingTagId(null);
+                                                setRenamingTagName("");
+                                                setRenamingTagColor("#94a3b8");
+                                              }
+                                              if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                void saveRenameTag();
+                                              }
+                                            }}
+                                          />
+                                          <TagColorPicker
+                                            value={renamingTagColor}
+                                            onChange={setRenamingTagColor}
+                                            disabled={tagMutationBusy}
+                                            className="mt-1"
+                                          />
+                                        </div>
                                       ) : (
                                         <span className="truncate">{t.name}</span>
                                       )}
@@ -1684,27 +1696,14 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
                                     {canManageProjectTags ? (
                                       isRenaming ? (
-                                        <div className="flex items-center gap-1">
-                                          <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => void saveRenameTag()}
-                                            disabled={tagMutationBusy || !normalizeProjectTagName(renamingTagName)}
-                                          >
-                                            Salva
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => {
-                                              setRenamingTagId(null);
-                                              setRenamingTagName("");
-                                            }}
-                                            disabled={tagMutationBusy}
-                                          >
-                                            Annulla
-                                          </Button>
-                                        </div>
+                                        <Button
+                                          size="sm"
+                                          variant="default"
+                                          onClick={() => void saveRenameTag()}
+                                          disabled={tagMutationBusy || !normalizeProjectTagName(renamingTagName)}
+                                        >
+                                          {tagMutationBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Modifica"}
+                                        </Button>
                                       ) : (
                                         <div className="flex items-center gap-1">
                                           <Button
