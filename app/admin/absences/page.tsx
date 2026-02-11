@@ -18,17 +18,29 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  Loader2, 
-  Shield, 
-  Trash2, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
-  Search, 
-  Filter, 
+import {
+  Loader2,
+  Shield,
+  Trash2,
+  Edit2,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Search,
+  Filter,
   RefreshCw,
   Briefcase,
   CreditCard,
@@ -156,6 +168,19 @@ export default function AdminAbsencesArchivePage() {
   const [confirm, setConfirm] = useState<ConfirmState>({ open: false });
   const [confirmCount, setConfirmCount] = useState<number | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingRow, setEditingRow] = useState<AbsenceRow | null>(null);
+  const [editForm, setEditForm] = useState({
+    type: "",
+    startDate: "",
+    endDate: "",
+    isFullDay: true,
+    reason: "",
+    status: "pending" as AbsenceStatus,
+  });
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/login");
@@ -348,6 +373,82 @@ export default function AdminAbsencesArchivePage() {
       await load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Operazione fallita");
+    }
+  };
+
+  // ---- Edit dialog handlers ----
+  const openEditDialog = (row: AbsenceRow) => {
+    setEditingRow(row);
+    const sd = new Date(row.startDate);
+    const ed = new Date(row.endDate);
+    // Auto-correct 2-digit years (e.g. 0026 -> 2026) for display in the date picker
+    const fixYear = (d: Date) => {
+      if (d.getFullYear() < 100) d.setFullYear(d.getFullYear() + 2000);
+      return d;
+    };
+    const fixedStart = fixYear(sd);
+    const fixedEnd = fixYear(ed);
+    setEditForm({
+      type: row.type,
+      startDate: fixedStart.toISOString().split("T")[0],
+      endDate: fixedEnd.toISOString().split("T")[0],
+      isFullDay: row.isFullDay,
+      reason: row.reason || "",
+      status: row.status,
+    });
+    setEditDialogOpen(true);
+  };
+
+  const closeEditDialog = () => {
+    setEditDialogOpen(false);
+    setEditingRow(null);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRow) return;
+
+    if (!editForm.startDate || !editForm.endDate) {
+      toast.error("Inserisci date di inizio e fine.");
+      return;
+    }
+
+    const startYear = new Date(editForm.startDate).getFullYear();
+    const endYear = new Date(editForm.endDate).getFullYear();
+    if (startYear < 2000 || endYear < 2000) {
+      toast.error("Anno non valido. Inserisci l'anno completo (es. 2026).");
+      return;
+    }
+    if (new Date(editForm.startDate) > new Date(editForm.endDate)) {
+      toast.error("La data di inizio deve essere precedente alla data di fine.");
+      return;
+    }
+
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/absences/${editingRow.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: editForm.type,
+          startDate: editForm.startDate,
+          endDate: editForm.endDate,
+          isFullDay: editForm.isFullDay,
+          reason: editForm.reason,
+          status: editForm.status,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Modifica fallita");
+
+      toast.success("Richiesta aggiornata con successo");
+      closeEditDialog();
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Modifica fallita");
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -666,21 +767,31 @@ export default function AdminAbsencesArchivePage() {
                               </Badge>
                             </td>
                             <td className="p-4 align-middle text-right">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                onClick={() =>
-                                  openConfirm({
-                                    mode: "row",
-                                    title: "Elimina richiesta",
-                                    description: `Eliminare definitivamente la richiesta di ${displayName(r.user)}?`,
-                                    payload: { rowId: r.id },
-                                  })
-                                }
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                                  onClick={() => openEditDialog(r)}
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                  onClick={() =>
+                                    openConfirm({
+                                      mode: "row",
+                                      title: "Elimina richiesta",
+                                      description: `Eliminare definitivamente la richiesta di ${displayName(r.user)}?`,
+                                      payload: { rowId: r.id },
+                                    })
+                                  }
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -766,6 +877,111 @@ export default function AdminAbsencesArchivePage() {
             ) : null}
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Edit Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) closeEditDialog(); }}>
+          <DialogContent className="max-w-md">
+            <form onSubmit={handleEditSubmit}>
+              <DialogHeader>
+                <DialogTitle>Modifica Richiesta</DialogTitle>
+                <DialogDescription>
+                  {editingRow ? `Modifica la richiesta di ${displayName(editingRow.user)}` : ""}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-type">Tipo</Label>
+                  <Select
+                    value={editForm.type}
+                    onValueChange={(v) => setEditForm({ ...editForm, type: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vacation">Ferie</SelectItem>
+                      <SelectItem value="sick_leave">Malattia</SelectItem>
+                      <SelectItem value="personal">Permesso</SelectItem>
+                      <SelectItem value="late_entry">Ingresso in ritardo</SelectItem>
+                      <SelectItem value="early_exit">Uscita anticipata</SelectItem>
+                      <SelectItem value="overtime">Straordinario</SelectItem>
+                      <SelectItem value="transfer">Trasferta</SelectItem>
+                      <SelectItem value="remote">Smart Working</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-status">Status</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(v) => setEditForm({ ...editForm, status: v as AbsenceStatus })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleziona status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">In Attesa</SelectItem>
+                      <SelectItem value="approved">Approvato</SelectItem>
+                      <SelectItem value="rejected">Rifiutato</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-startDate">Data Inizio</Label>
+                  <Input
+                    id="edit-startDate"
+                    type="date"
+                    value={editForm.startDate}
+                    onChange={(e) => setEditForm({ ...editForm, startDate: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-endDate">Data Fine</Label>
+                  <Input
+                    id="edit-endDate"
+                    type="date"
+                    value={editForm.endDate}
+                    onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <Label htmlFor="edit-isFullDay" className="cursor-pointer">Tutto il giorno</Label>
+                  <Switch
+                    id="edit-isFullDay"
+                    checked={editForm.isFullDay}
+                    onCheckedChange={(checked) => setEditForm({ ...editForm, isFullDay: checked })}
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-reason">Causale / Dettagli orario</Label>
+                  <Textarea
+                    id="edit-reason"
+                    value={editForm.reason}
+                    onChange={(e) => setEditForm({ ...editForm, reason: e.target.value })}
+                    placeholder="Es: Tutto il giorno, oppure Dalle 14:30 alle 15:00"
+                    rows={3}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={closeEditDialog}>
+                  Annulla
+                </Button>
+                <Button type="submit" disabled={editSaving}>
+                  {editSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Salva Modifiche
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

@@ -77,6 +77,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (body.endDate) updateData.endDate = new Date(body.endDate);
     if (body.type) updateData.type = body.type;
     if (body.reason !== undefined) updateData.reason = body.reason;
+    if (body.isFullDay !== undefined) updateData.isFullDay = body.isFullDay;
+
+    // Validate year is complete (prevent 2-digit years like "26" -> year 0026)
+    if (body.startDate && new Date(body.startDate).getFullYear() < 2000) {
+      return NextResponse.json({ error: "Data inizio non valida. Inserire anno completo (es. 2026)." }, { status: 400 });
+    }
+    if (body.endDate && new Date(body.endDate).getFullYear() < 2000) {
+      return NextResponse.json({ error: "Data fine non valida. Inserire anno completo (es. 2026)." }, { status: 400 });
+    }
+    // Validate startDate <= endDate
+    const effectiveStart = body.startDate ? new Date(body.startDate) : existingAbsence.startDate;
+    const effectiveEnd = body.endDate ? new Date(body.endDate) : existingAbsence.endDate;
+    if (effectiveStart > effectiveEnd) {
+      return NextResponse.json({ error: "La data di inizio deve essere precedente alla data di fine." }, { status: 400 });
+    }
 
     // Check if there's anything to update
     if (Object.keys(updateData).length === 0) {

@@ -256,6 +256,13 @@ export default function CalendarPage() {
       return;
     }
 
+    const startYear = new Date(newAbsence.startDate).getFullYear();
+    const endYear = new Date(newAbsence.endDate).getFullYear();
+    if (startYear < 2000 || endYear < 2000) {
+      toast.error("Anno non valido. Inserisci l'anno completo (es. 2026, non 26).");
+      return;
+    }
+
     try {
       const url = editingAbsence ? `/api/absences/${editingAbsence.id}` : "/api/absences";
       const method = editingAbsence ? "PUT" : "POST";

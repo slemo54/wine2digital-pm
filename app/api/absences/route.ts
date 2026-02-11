@@ -144,6 +144,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Validate year is complete (prevent 2-digit years like "26" -> year 0026)
+    const startYear = new Date(startDate).getFullYear();
+    const endYear = new Date(endDate).getFullYear();
+    if (startYear < 2000 || endYear < 2000) {
+      return NextResponse.json({ error: "Anno non valido. Inserisci l'anno completo (es. 2026)." }, { status: 400 });
+    }
+    if (new Date(startDate) > new Date(endDate)) {
+      return NextResponse.json({ error: "La data di inizio deve essere precedente alla data di fine." }, { status: 400 });
+    }
+
     const absence = await prisma.absence.create({
       data: {
         userId,
