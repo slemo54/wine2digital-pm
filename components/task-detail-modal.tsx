@@ -210,11 +210,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const toggleSubtaskMutation = useToggleSubtask(taskId);
   
   // Derive data from React Query
+  // Note: API returns { task: { subtasks, comments, attachments, activities }, meta }
   const task = taskFullData?.task || null;
-  const subtasks: Subtask[] = taskFullData?.subtasks || [];
-  const comments: Comment[] = taskFullData?.comments || [];
-  const attachments: Attachment[] = taskFullData?.attachments || [];
-  const activityEvents = taskFullData?.activity || [];
+  const subtasks: Subtask[] = task?.subtasks || [];
+  const comments: Comment[] = task?.comments || [];
+  const attachments: Attachment[] = task?.attachments || [];
+  const activityEvents = task?.activities || [];
   
   // Fetch project lists and tags separately (project-level data)
   const effectiveProjectId = task?.projectId || projectId;
@@ -411,7 +412,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     // Update React Query cache
     queryClient.setQueryData(['task-full', taskId], (old: any) => {
       if (!old) return old;
-      return { ...old, subtasks: newItems };
+      return { ...old, task: { ...old.task, subtasks: newItems } };
     });
   };
 
@@ -430,7 +431,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
              // Update cache with sorted subtasks
              queryClient.setQueryData(['task-full', taskId], (old: any) => {
                if (!old) return old;
-               return { ...old, subtasks: sorted };
+               return { ...old, task: { ...old.task, subtasks: sorted } };
              });
         }
       } catch {}
@@ -533,7 +534,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       // Update React Query cache
       queryClient.setQueryData(['task-full', taskId], (old: any) => {
         if (!old) return old;
-        return { ...old, subtasks: [...(old.subtasks || []), data] };
+        return { ...old, task: { ...old.task, subtasks: [...(old.task?.subtasks || []), data] } };
       });
       
       setNewSubtask("");
@@ -569,7 +570,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       // Update React Query cache
       queryClient.setQueryData(['task-full', taskId], (old: any) => {
         if (!old) return old;
-        return { ...old, subtasks: (old.subtasks || []).filter((s: any) => s.id !== subtaskId) };
+        return { ...old, task: { ...old.task, subtasks: (old.task?.subtasks || []).filter((s: any) => s.id !== subtaskId) } };
       });
       
       if (selectedSubtask?.id === subtaskId) {
@@ -599,7 +600,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       // Update React Query cache
       queryClient.setQueryData(['task-full', taskId], (old: any) => {
         if (!old) return old;
-        return { ...old, comments: [...(old.comments || []), data] };
+        return { ...old, task: { ...old.task, comments: [...(old.task?.comments || []), data] } };
       });
       
       setNewCommentHtml("");
@@ -641,7 +642,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       // Update React Query cache
       queryClient.setQueryData(['task-full', taskId], (old: any) => {
         if (!old) return old;
-        return { ...old, comments: (old.comments || []).map((c: any) => (c.id === editingCommentId ? data : c)) };
+        return { ...old, task: { ...old.task, comments: (old.task?.comments || []).map((c: any) => (c.id === editingCommentId ? data : c)) } };
       });
       
       cancelEditComment();
@@ -663,7 +664,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       // Update React Query cache
       queryClient.setQueryData(['task-full', taskId], (old: any) => {
         if (!old) return old;
-        return { ...old, comments: (old.comments || []).filter((c: any) => c.id !== commentId) };
+        return { ...old, task: { ...old.task, comments: (old.task?.comments || []).filter((c: any) => c.id !== commentId) } };
       });
       
       if (editingCommentId === commentId) cancelEditComment();
@@ -697,7 +698,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         // Update React Query cache
         queryClient.setQueryData(['task-full', taskId], (old: any) => {
           if (!old) return old;
-          return { ...old, attachments: [...(old.attachments || []), attachment] };
+          return { ...old, task: { ...old.task, attachments: [...(old.task?.attachments || []), attachment] } };
         });
         
         toast.success("File caricato");
@@ -726,7 +727,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         // Update React Query cache
         queryClient.setQueryData(['task-full', taskId], (old: any) => {
           if (!old) return old;
-          return { ...old, attachments: (old.attachments || []).filter((a: any) => a.id !== attachmentId) };
+          return { ...old, task: { ...old.task, attachments: (old.task?.attachments || []).filter((a: any) => a.id !== attachmentId) } };
         });
         
         toast.success("File eliminato");
@@ -779,9 +780,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         if (!old) return old;
         return {
           ...old,
-          subtasks: (old.subtasks || []).map((s: any) => 
-            s.id === selectedSubtask.id ? { ...s, description: subtaskDraftDescription } : s
-          ),
+          task: {
+            ...old.task,
+            subtasks: (old.task?.subtasks || []).map((s: any) => 
+              s.id === selectedSubtask.id ? { ...s, description: subtaskDraftDescription } : s
+            ),
+          },
         };
       });
     } catch (e) {
@@ -824,11 +828,14 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         if (!old) return old;
         return {
           ...old,
-          subtasks: (old.subtasks || []).map((s: any) =>
-            s.id === subtaskId
-              ? { ...(s as any), ...(data as any), ...(nextAssignee !== undefined ? { assignee: nextAssignee } : {}) }
-              : s
-          ),
+          task: {
+            ...old.task,
+            subtasks: (old.task?.subtasks || []).map((s: any) =>
+              s.id === subtaskId
+                ? { ...(s as any), ...(data as any), ...(nextAssignee !== undefined ? { assignee: nextAssignee } : {}) }
+                : s
+            ),
+          },
         };
       });
       
@@ -884,11 +891,14 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         if (!old) return old;
         return {
           ...old,
-          subtasks: (old.subtasks || []).map((s: any) =>
-            s.id === selectedSubtask.id
-              ? { ...(s as any), dependencies: [...(s.dependencies || []), data as any] }
-              : s
-          ),
+          task: {
+            ...old.task,
+            subtasks: (old.task?.subtasks || []).map((s: any) =>
+              s.id === selectedSubtask.id
+                ? { ...(s as any), dependencies: [...(s.dependencies || []), data as any] }
+                : s
+            ),
+          },
         };
       });
       
@@ -922,11 +932,14 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         if (!old) return old;
         return {
           ...old,
-          subtasks: (old.subtasks || []).map((s: any) =>
-            s.id === selectedSubtask.id
-              ? { ...(s as any), dependencies: (s.dependencies || []).filter((d: any) => d.id !== dependencyId) }
-              : s
-          ),
+          task: {
+            ...old.task,
+            subtasks: (old.task?.subtasks || []).map((s: any) =>
+              s.id === selectedSubtask.id
+                ? { ...(s as any), dependencies: (s.dependencies || []).filter((d: any) => d.id !== dependencyId) }
+                : s
+            ),
+          },
         };
       });
       
