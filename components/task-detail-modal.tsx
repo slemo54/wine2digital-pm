@@ -65,6 +65,8 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useTaskFull, useUpdateTask, useToggleSubtask } from "@/hooks/use-task";
 
 const RichTextEditor = dynamic(
   () => import("@/components/ui/rich-text-editor").then((m) => m.RichTextEditor),
@@ -200,19 +202,57 @@ interface TaskDetailModalProps {
 
 export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, initialSubtaskId }: TaskDetailModalProps) {
   const { data: session } = useSession();
-  const [task, setTask] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
-  const [subtasks, setSubtasks] = useState<Subtask[]>([]);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [activityEvents, setActivityEvents] = useState<any[]>([]);
+  const queryClient = useQueryClient();
+  
+  // React Query hooks for data fetching and mutations
+  const { data: taskFullData, isLoading, isPending } = useTaskFull(taskId, { enabled: open && !!taskId });
+  const updateTaskMutation = useUpdateTask(taskId);
+  const toggleSubtaskMutation = useToggleSubtask(taskId);
+  
+  // Derive data from React Query
+  const task = taskFullData?.task || null;
+  const subtasks: Subtask[] = taskFullData?.subtasks || [];
+  const comments: Comment[] = taskFullData?.comments || [];
+  const attachments: Attachment[] = taskFullData?.attachments || [];
+  const activityEvents = taskFullData?.activity || [];
+  
+  // Fetch project lists and tags separately (project-level data)
+  const effectiveProjectId = task?.projectId || projectId;
+  const { data: projectListsData } = useQuery({
+    queryKey: ['project-lists', effectiveProjectId],
+    queryFn: async () => {
+      if (!effectiveProjectId) return { lists: [] };
+      const res = await fetch(`/api/projects/${effectiveProjectId}/lists`);
+      if (!res.ok) throw new Error('Failed to fetch lists');
+      return res.json();
+    },
+    enabled: !!effectiveProjectId && open,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+  
+  const { data: projectTagsData } = useQuery({
+    queryKey: ['project-tags', effectiveProjectId],
+    queryFn: async () => {
+      if (!effectiveProjectId) return { tags: [] };
+      const res = await fetch(`/api/projects/${effectiveProjectId}/tags`);
+      if (!res.ok) throw new Error('Failed to fetch tags');
+      return res.json();
+    },
+    enabled: !!effectiveProjectId && open,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+  
+  const projectLists = projectListsData?.lists?.map((l: any) => ({ id: String(l.id), name: String(l.name) })) || [];
+  const projectTags = projectTagsData?.tags?.map((t: any) => ({ 
+    id: String(t.id), 
+    name: String(t.name), 
+    color: t.color ? String(t.color) : null 
+  })) || [];
+  
   const [activeTab, setActiveTab] = useState<"subtasks" | "extra" | "attachments" | "comments" | "activity">("subtasks");
-  const [isSavingMeta, setIsSavingMeta] = useState(false);
-  const [isDeletingTask, setIsDeletingTask] = useState(false);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [draftAssigneeIds, setDraftAssigneeIds] = useState<string[]>([]);
   const [tagsPickerOpen, setTagsPickerOpen] = useState(false);
-  const [projectTags, setProjectTags] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
   const [tagQuery, setTagQuery] = useState("");
   const [draftTagIds, setDraftTagIds] = useState<string[]>([]);
   const [newTagName, setNewTagName] = useState("");
@@ -233,7 +273,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [editingMentionedUserIds, setEditingMentionedUserIds] = useState<string[]>([]);
   const [savingCommentEdit, setSavingCommentEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [projectLists, setProjectLists] = useState<Array<{ id: string; name: string }>>([]);
   const [isEditingTaskTitle, setIsEditingTaskTitle] = useState(false);
   const [taskDraftTitle, setTaskDraftTitle] = useState("");
   const [savingTaskTitle, setSavingTaskTitle] = useState(false);
@@ -256,6 +295,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [editingSubtaskCommentHtml, setEditingSubtaskCommentHtml] = useState<string>("");
   const [editingSubtaskMentionedUserIds, setEditingSubtaskMentionedUserIds] = useState<string[]>([]);
   const [savingSubtaskCommentEdit, setSavingSubtaskCommentEdit] = useState(false);
+  const [isDeletingTask, setIsDeletingTask] = useState(false);
 
   const didOpenInitialSubtaskRef = useRef<string | null>(null);
   const didMarkTaskNotificationsReadRef = useRef<string | null>(null);
@@ -296,12 +336,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     // Auto-read on open (subtask-level): mark anything linked to this subtask as read.
     void markTaskNotificationsRead(taskId, { subtaskId: selectedSubtask.id }).catch(() => { });
   }, [open, taskId, subtaskDetailOpen, selectedSubtask?.id]);
-
-  useEffect(() => {
-    if (open && taskId) {
-      fetchTaskDetails();
-    }
-  }, [open, taskId]);
 
   useEffect(() => {
     didOpenInitialSubtaskRef.current = null;
@@ -366,15 +400,18 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    setSubtasks((items) => {
-      const oldIndex = items.findIndex((s) => s.id === active.id);
-      const newIndex = items.findIndex((s) => s.id === over.id);
-      const newItems = arrayMove(items, oldIndex, newIndex);
+    // Note: subtasks are now managed by React Query, so we need to update the cache
+    const oldIndex = subtasks.findIndex((s) => s.id === active.id);
+    const newIndex = subtasks.findIndex((s) => s.id === over.id);
+    const newItems = arrayMove(subtasks, oldIndex, newIndex);
 
-      const orderMap = newItems.reduce((acc, item, index) => ({ ...acc, [item.id]: index }), {});
-      localStorage.setItem(`task_subtask_order_${taskId}`, JSON.stringify(orderMap));
+    const orderMap = newItems.reduce((acc, item, index) => ({ ...acc, [item.id]: index }), {});
+    localStorage.setItem(`task_subtask_order_${taskId}`, JSON.stringify(orderMap));
 
-      return newItems;
+    // Update React Query cache
+    queryClient.setQueryData(['task-full', taskId], (old: any) => {
+      if (!old) return old;
+      return { ...old, subtasks: newItems };
     });
   };
 
@@ -390,109 +427,29 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
             return posA - posB;
         });
         if (JSON.stringify(sorted.map(s => s.id)) !== JSON.stringify(subtasks.map(s => s.id))) {
-             setSubtasks(sorted);
+             // Update cache with sorted subtasks
+             queryClient.setQueryData(['task-full', taskId], (old: any) => {
+               if (!old) return old;
+               return { ...old, subtasks: sorted };
+             });
         }
       } catch {}
     }
-  }, [taskId, subtasks]);
+  }, [taskId, subtasks.length, queryClient]);
 
-  const fetchTaskDetails = async () => {
-    setLoading(true);
-    try {
-      const [taskRes, subtasksRes, commentsRes, attachmentsRes, activityRes] = await Promise.all([
-        fetch(`/api/tasks/${taskId}`),
-        fetch(`/api/tasks/${taskId}/subtasks`),
-        fetch(`/api/tasks/${taskId}/comments`),
-        fetch(`/api/tasks/${taskId}/attachments`),
-        fetch(`/api/tasks/${taskId}/activity`),
-      ]);
-
-      const [taskData, subtasksData, commentsData, attachmentsData, activityData] = await Promise.all([
-        taskRes.json(),
-        subtasksRes.json(),
-        commentsRes.json(),
-        attachmentsRes.json(),
-        activityRes.json(),
-      ]);
-
-      setTask(taskData);
-      setSubtasks(subtasksData);
-      setComments(commentsData);
-      setAttachments(attachmentsData);
-      setActivityEvents(Array.isArray(activityData?.events) ? activityData.events : []);
-
-      // Lists sono per-progetto: quando il modal viene aperto da /tasks (scope globale),
-      // il caller potrebbe non conoscere subito il projectId. In quel caso lo deduciamo dal task.
-      const taskProjectId =
-        typeof (taskData as any)?.projectId === "string" ? String((taskData as any).projectId) : "";
-      const effectiveProjectId = taskProjectId || (projectId && projectId !== "_global" ? projectId : "");
-      if (!effectiveProjectId) {
-        setProjectLists([]);
-        setProjectTags([]);
-      } else {
-        try {
-          const [listsRes, tagsRes] = await Promise.all([
-            fetch(`/api/projects/${effectiveProjectId}/lists`, { cache: "no-store" }),
-            fetch(`/api/projects/${effectiveProjectId}/tags`, { cache: "no-store" }),
-          ]);
-
-          const [listsData, tagsData] = await Promise.all([
-            listsRes.json().catch(() => ({})),
-            tagsRes.json().catch(() => ({})),
-          ]);
-
-          if (listsRes.ok && Array.isArray((listsData as any)?.lists)) {
-            setProjectLists((listsData as any).lists.map((l: any) => ({ id: String(l.id), name: String(l.name) })));
-          } else {
-            setProjectLists([]);
-          }
-
-          if (tagsRes.ok && Array.isArray((tagsData as any)?.tags)) {
-            setProjectTags(
-              (tagsData as any).tags.map((t: any) => ({
-                id: String(t.id),
-                name: String(t.name),
-                color: t.color ? String(t.color) : null,
-              }))
-            );
-          } else {
-            setProjectTags([]);
-          }
-        } catch {
-          setProjectLists([]);
-          setProjectTags([]);
-        }
-      }
-    } catch (error) {
-      console.error("Failed to fetch task details:", error);
-      toast.error("Errore durante il caricamento del task");
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Use React Query mutation for task updates
   const updateTaskMeta = async (
     patch: Record<string, any>,
     opts?: { successMessage?: string; silent?: boolean }
   ) => {
-    setIsSavingMeta(true);
     try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error || "Update failed");
+      await updateTaskMutation.mutateAsync(patch);
+      if (!opts?.silent && opts?.successMessage) {
+        toast.success(opts.successMessage);
       }
-      if (!opts?.silent) toast.success(opts?.successMessage || "Aggiornato");
-      await fetchTaskDetails();
       onUpdate?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Errore aggiornamento");
-    } finally {
-      setIsSavingMeta(false);
+      // Error is already handled by the mutation
     }
   };
 
@@ -545,6 +502,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Eliminazione fallita");
       toast.success("Task eliminata");
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
       onUpdate?.();
       onClose();
     } catch (e) {
@@ -571,7 +529,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Errore durante l'aggiunta del subtask");
-      setSubtasks((prev) => [...prev, data as any]);
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return { ...old, subtasks: [...(old.subtasks || []), data] };
+      });
+      
       setNewSubtask("");
       toast.success("Subtask aggiunto");
     } catch (error) {
@@ -581,24 +545,16 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     }
   };
 
+  // Use React Query mutation for toggle subtask
   const toggleSubtask = async (subtaskId: string, completed: boolean) => {
     try {
-      const res = await fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed }),
+      await toggleSubtaskMutation.mutateAsync({
+        subtaskId,
+        completed,
+        status: completed ? "done" : "todo",
       });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as any)?.error || "Errore aggiornamento subtask");
-
-      setSubtasks(subtasks.map(st =>
-        st.id === subtaskId
-          ? { ...st, completed, status: completed ? "done" : "todo" }
-          : st
-      ));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Errore durante l'aggiornamento del subtask");
+      // Error is handled by the mutation
     }
   };
 
@@ -609,7 +565,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const res = await fetch(`/api/tasks/${taskId}/subtasks/${subtaskId}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Eliminazione fallita");
-      setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return { ...old, subtasks: (old.subtasks || []).filter((s: any) => s.id !== subtaskId) };
+      });
+      
       if (selectedSubtask?.id === subtaskId) {
         setSelectedSubtask(null);
         setSubtaskDetailOpen(false);
@@ -633,7 +595,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Errore durante l'aggiunta del commento");
-      setComments((prev) => [...prev, data as any]);
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return { ...old, comments: [...(old.comments || []), data] };
+      });
+      
       setNewCommentHtml("");
       setMentionedUserIds([]);
       toast.success("Commento aggiunto");
@@ -669,7 +637,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Errore salvataggio");
-      setComments((prev) => prev.map((c) => (c.id === editingCommentId ? (data as any) : c)));
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return { ...old, comments: (old.comments || []).map((c: any) => (c.id === editingCommentId ? data : c)) };
+      });
+      
       cancelEditComment();
       toast.success("Commento aggiornato");
     } catch (e) {
@@ -685,7 +659,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const res = await fetch(`/api/tasks/${taskId}/comments/${commentId}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Errore eliminazione");
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return { ...old, comments: (old.comments || []).filter((c: any) => c.id !== commentId) };
+      });
+      
       if (editingCommentId === commentId) cancelEditComment();
       toast.success("Commento eliminato");
     } catch (e) {
@@ -713,7 +693,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
       if (res.ok) {
         const attachment = await res.json();
-        setAttachments([...attachments, attachment]);
+        
+        // Update React Query cache
+        queryClient.setQueryData(['task-full', taskId], (old: any) => {
+          if (!old) return old;
+          return { ...old, attachments: [...(old.attachments || []), attachment] };
+        });
+        
         toast.success("File caricato");
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -737,7 +723,12 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       });
 
       if (res.ok) {
-        setAttachments(attachments.filter((a) => a.id !== attachmentId));
+        // Update React Query cache
+        queryClient.setQueryData(['task-full', taskId], (old: any) => {
+          if (!old) return old;
+          return { ...old, attachments: (old.attachments || []).filter((a: any) => a.id !== attachmentId) };
+        });
+        
         toast.success("File eliminato");
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -782,7 +773,17 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       }
       toast.success("Descrizione subtask salvata");
       setSelectedSubtask((prev) => (prev ? { ...prev, description: subtaskDraftDescription } : prev));
-      setSubtasks((prev) => prev.map((s) => (s.id === selectedSubtask.id ? { ...s, description: subtaskDraftDescription } : s)));
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          subtasks: (old.subtasks || []).map((s: any) => 
+            s.id === selectedSubtask.id ? { ...s, description: subtaskDraftDescription } : s
+          ),
+        };
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Salvataggio fallito");
     } finally {
@@ -817,13 +818,20 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           ? { ...(prev as any), ...(data as any), ...(nextAssignee !== undefined ? { assignee: nextAssignee } : {}) }
           : prev
       );
-      setSubtasks((prev) =>
-        prev.map((s) =>
-          s.id === subtaskId
-            ? { ...(s as any), ...(data as any), ...(nextAssignee !== undefined ? { assignee: nextAssignee } : {}) }
-            : s
-        )
-      );
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          subtasks: (old.subtasks || []).map((s: any) =>
+            s.id === subtaskId
+              ? { ...(s as any), ...(data as any), ...(nextAssignee !== undefined ? { assignee: nextAssignee } : {}) }
+              : s
+          ),
+        };
+      });
+      
       toast.success("Subtask aggiornata");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Aggiornamento fallito");
@@ -870,13 +878,20 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           }
           : prev
       );
-      setSubtasks((prev) =>
-        prev.map((s) =>
-          s.id === selectedSubtask.id
-            ? { ...(s as any), dependencies: [...(s.dependencies || []), data as any] }
-            : s
-        )
-      );
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          subtasks: (old.subtasks || []).map((s: any) =>
+            s.id === selectedSubtask.id
+              ? { ...(s as any), dependencies: [...(s.dependencies || []), data as any] }
+              : s
+          ),
+        };
+      });
+      
       toast.success("Dipendenza aggiunta");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore aggiunta dipendenza");
@@ -901,13 +916,20 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           }
           : prev
       );
-      setSubtasks((prev) =>
-        prev.map((s) =>
-          s.id === selectedSubtask.id
-            ? { ...(s as any), dependencies: (s.dependencies || []).filter((d: any) => d.id !== dependencyId) }
-            : s
-        )
-      );
+      
+      // Update React Query cache
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          subtasks: (old.subtasks || []).map((s: any) =>
+            s.id === selectedSubtask.id
+              ? { ...(s as any), dependencies: (s.dependencies || []).filter((d: any) => d.id !== dependencyId) }
+              : s
+          ),
+        };
+      });
+      
       toast.success("Dipendenza rimossa");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore rimozione dipendenza");
@@ -1084,7 +1106,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     setIsEditingTaskTitle(false);
   }, [taskId, task?.updatedAt, currentAssigneeKey, task]);
 
-  if (loading) {
+  if (isLoading || isPending) {
     return (
       <Sheet open={open} onOpenChange={onClose}>
         <SheetContent side="right" className="w-[95vw] sm:max-w-5xl max-h-[90vh] max-h-[90dvh] overflow-hidden p-0">
@@ -1158,7 +1180,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
   const amountLabel = typeof task?.amountCents === "number" ? formatEurCents(task.amountCents) : null;
 
-  const filteredProjectTags = projectTags.filter((t) => {
+  const filteredProjectTags = projectTags.filter((t: { id: string; name: string; color?: string | null }) => {
     const q = tagQuery.trim().toLowerCase();
     if (!q) return true;
     return String(t.name || "").toLowerCase().includes(q);
@@ -1191,17 +1213,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
   const refreshTags = async () => {
     if (!currentProjectId) return;
-    const res = await fetch(`/api/projects/${currentProjectId}/tags`, { cache: "no-store" });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && Array.isArray((data as any)?.tags)) {
-      setProjectTags(
-        (data as any).tags.map((t: any) => ({
-          id: String(t.id),
-          name: String(t.name),
-          color: t.color ? String(t.color) : null,
-        }))
-      );
-    }
+    queryClient.invalidateQueries({ queryKey: ['project-tags', currentProjectId] });
   };
 
   const createTag = async () => {
@@ -1222,7 +1234,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       const data = await res.json().catch(() => ({}));
       if (res.status === 409) {
         await refreshTags();
-        const existing = projectTags.find((t) => t.name === name);
+        const existing = projectTags.find((t: { id: string; name: string; color?: string | null }) => t.name === name);
         if (existing) setDraftTagIds((prev) => (prev.includes(existing.id) ? prev : [...prev, existing.id]));
         toast.success("Tag già presente");
         setNewTagName("");
@@ -1237,7 +1249,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           name: String(created.name || name),
           color: created.color ? String(created.color) : null,
         };
-        setProjectTags((prev) => [...prev, tag].sort((a, b) => a.name.localeCompare(b.name)));
+        // Update cache
+        queryClient.setQueryData(['project-tags', currentProjectId], (old: any) => {
+          if (!old) return old;
+          return { ...old, tags: [...(old.tags || []), created].sort((a: any, b: any) => a.name.localeCompare(b.name)) };
+        });
         setDraftTagIds((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]));
       } else {
         await refreshTags();
@@ -1253,7 +1269,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   };
 
   const startRenameTag = (tagId: string) => {
-    const t = projectTags.find((x) => x.id === tagId);
+    const t = projectTags.find((x: { id: string; name: string; color?: string | null }) => x.id === tagId);
     if (!t) return;
     setRenamingTagId(tagId);
     setRenamingTagName(t.name);
@@ -1274,7 +1290,16 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Impossibile aggiornare tag");
-      setProjectTags((prev) => prev.map((t) => (t.id === renamingTagId ? { ...t, name, color: renamingTagColor } : t)).sort((a, b) => a.name.localeCompare(b.name)));
+      
+      // Update cache
+      queryClient.setQueryData(['project-tags', currentProjectId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          tags: (old.tags || []).map((t: any) => (t.id === renamingTagId ? { ...t, name, color: renamingTagColor } : t)).sort((a: any, b: any) => a.name.localeCompare(b.name))
+        };
+      });
+      
       setRenamingTagId(null);
       setRenamingTagName("");
       setRenamingTagColor("#94a3b8");
@@ -1289,15 +1314,21 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const deleteTag = async (tagId: string) => {
     if (!currentProjectId) return;
     if (!canManageProjectTags) return;
-    const t = projectTags.find((x) => x.id === tagId);
+    const t = projectTags.find((x: { id: string; name: string; color?: string | null }) => x.id === tagId);
     if (!t) return;
-    if (!confirm(`Eliminare il tag “${t.name}”? Verrà rimosso anche dalle task.`)) return;
+    if (!confirm(`Eliminare il tag "${t.name}"? Verrà rimosso anche dalle task.`)) return;
     setTagMutationBusy(true);
     try {
       const res = await fetch(`/api/projects/${currentProjectId}/tags/${tagId}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || "Impossibile eliminare tag");
-      setProjectTags((prev) => prev.filter((x) => x.id !== tagId));
+      
+      // Update cache
+      queryClient.setQueryData(['project-tags', currentProjectId], (old: any) => {
+        if (!old) return old;
+        return { ...old, tags: (old.tags || []).filter((x: any) => x.id !== tagId) };
+      });
+      
       setDraftTagIds((prev) => prev.filter((x) => x !== tagId));
       toast.success("Tag eliminato");
     } catch (e) {
@@ -1363,13 +1394,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         <Input
                           value={taskDraftTitle}
                           onChange={(e) => setTaskDraftTitle(e.target.value)}
-                          disabled={!canEditTaskDetails || isSavingMeta || savingTaskTitle}
+                          disabled={!canEditTaskDetails || updateTaskMutation.isPending || savingTaskTitle}
                           className="h-10"
                         />
                         <Button
                           type="button"
                           onClick={saveTaskTitle}
-                          disabled={!canEditTaskDetails || isSavingMeta || savingTaskTitle || !taskDraftTitle.trim()}
+                          disabled={!canEditTaskDetails || updateTaskMutation.isPending || savingTaskTitle || !taskDraftTitle.trim()}
                         >
                           Salva
                         </Button>
@@ -1464,7 +1495,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     <div className="mt-3">
                       <Popover open={assigneePickerOpen} onOpenChange={setAssigneePickerOpen}>
                         <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" disabled={isSavingMeta}>
+                          <Button variant="outline" size="sm" disabled={updateTaskMutation.isPending}>
                             Modifica
                           </Button>
                         </PopoverTrigger>
@@ -1501,7 +1532,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             <Button
                               variant="ghost"
                               size="sm"
-                              disabled={isSavingMeta}
+                              disabled={updateTaskMutation.isPending}
                               onClick={() => {
                                 setDraftAssigneeIds(currentAssigneeIds);
                                 setAssigneePickerOpen(false);
@@ -1511,14 +1542,14 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             </Button>
                             <Button
                               size="sm"
-                              disabled={isSavingMeta}
+                              disabled={updateTaskMutation.isPending}
                               onClick={() =>
                                 updateTaskMeta({ assigneeIds: draftAssigneeIds }).then(() =>
                                   setAssigneePickerOpen(false)
                                 )
                               }
                             >
-                              {isSavingMeta ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                              {updateTaskMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                               Salva
                             </Button>
                           </div>
@@ -1546,7 +1577,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                     {canEditTaskDetails ? (
                       <Input
                         type="date"
-                        disabled={isSavingMeta}
+                        disabled={updateTaskMutation.isPending}
                         value={task.dueDate ? format(new Date(task.dueDate), "yyyy-MM-dd") : ""}
                         onChange={(e) => {
                           const v = e.target.value;
@@ -1597,7 +1628,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               const mapped = legacyTags
                                 .map((name) => {
                                   const n = normalizeProjectTagName(String(name));
-                                  return projectTags.find((t) => t.name === n)?.id || null;
+                                  return projectTags.find((t: { id: string; name: string; color?: string | null }) => t.name === n)?.id || null;
                                 })
                                 .filter(Boolean) as string[];
                               setDraftTagIds(Array.from(new Set(mapped)));
@@ -1613,7 +1644,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         }}
                       >
                         <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" disabled={isSavingMeta}>
+                          <Button variant="outline" size="sm" disabled={updateTaskMutation.isPending}>
                             Modifica
                           </Button>
                         </PopoverTrigger>
@@ -1638,7 +1669,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             {filteredProjectTags.length === 0 ? (
                               <div className="text-xs text-muted-foreground py-2">Nessun tag</div>
                             ) : (
-                              filteredProjectTags.map((t) => {
+                              filteredProjectTags.map((t: { id: string; name: string; color?: string | null }) => {
                                 const checked = draftTagIds.includes(t.id);
                                 const isRenaming = renamingTagId === t.id;
                                 return (
@@ -1782,7 +1813,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             <Button
                               variant="ghost"
                               size="sm"
-                              disabled={isSavingMeta}
+                              disabled={updateTaskMutation.isPending}
                               onClick={() => {
                                 setTagsPickerOpen(false);
                               }}
@@ -1791,10 +1822,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             </Button>
                             <Button
                               size="sm"
-                              disabled={isSavingMeta}
+                              disabled={updateTaskMutation.isPending}
                               onClick={() => void saveSelectedTags().then(() => setTagsPickerOpen(false))}
                             >
-                              {isSavingMeta ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                              {updateTaskMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                               Salva
                             </Button>
                           </div>
@@ -1830,7 +1861,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         }}
                       >
                         <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" disabled={isSavingMeta}>
+                          <Button variant="outline" size="sm" disabled={updateTaskMutation.isPending}>
                             Modifica
                           </Button>
                         </PopoverTrigger>
@@ -1840,7 +1871,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             value={draftAmountInput}
                             onChange={(e) => setDraftAmountInput(e.target.value)}
                             placeholder="Es. 1.234,56"
-                            disabled={isSavingMeta}
+                            disabled={updateTaskMutation.isPending}
                             onKeyDown={(e) => {
                               if (e.key === "Enter") {
                                 e.preventDefault();
@@ -1852,7 +1883,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             <Button
                               variant="ghost"
                               size="sm"
-                              disabled={isSavingMeta}
+                              disabled={updateTaskMutation.isPending}
                               onClick={() => {
                                 setDraftAmountInput("");
                                 void updateTaskMeta({ amountCents: null }, { successMessage: "Importo rimosso" }).then(() =>
@@ -1866,13 +1897,13 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                disabled={isSavingMeta}
+                                disabled={updateTaskMutation.isPending}
                                 onClick={() => setAmountPickerOpen(false)}
                               >
                                 Annulla
                               </Button>
-                              <Button size="sm" disabled={isSavingMeta} onClick={() => void saveAmount()}>
-                                {isSavingMeta ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                              <Button size="sm" disabled={updateTaskMutation.isPending} onClick={() => void saveAmount()}>
+                                {updateTaskMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                                 Salva
                               </Button>
                             </div>
@@ -1902,7 +1933,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       <Select
                         value={task.listId || ""}
                         onValueChange={(v) => updateTaskMeta({ listId: v || null })}
-                        disabled={isSavingMeta || projectLists.length === 0}
+                        disabled={updateTaskMutation.isPending || projectLists.length === 0}
                       >
                         <SelectTrigger className="h-9">
                           <SelectValue
@@ -1910,7 +1941,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           />
                         </SelectTrigger>
                         <SelectContent>
-                          {projectLists.map((l) => (
+                          {projectLists.map((l: { id: string; name: string }) => (
                             <SelectItem key={l.id} value={l.id}>
                               {l.name}
                             </SelectItem>
@@ -1950,7 +1981,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                           { successMessage: v === "archived" ? "Task archiviata" : "Aggiornato" }
                         );
                       }}
-                      disabled={!canEditStatus || isSavingMeta || (task.status === "archived" && !canEditMeta)}
+                      disabled={!canEditStatus || updateTaskMutation.isPending || (task.status === "archived" && !canEditMeta)}
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue placeholder="Stato" />
@@ -2036,7 +2067,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                                   return (
                                     <Checkbox
                                       checked={subtask.completed}
-                                      disabled={!canWriteThisSubtask}
+                                      disabled={!canWriteThisSubtask || toggleSubtaskMutation.isPending}
                                       onCheckedChange={(checked) => toggleSubtask(subtask.id, !!checked)}
                                     />
                                   );
@@ -2297,7 +2328,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
               {activeTab === "activity" ? (
                 <div className="space-y-3">
-                  {activityEvents.map((e) => (
+                  {activityEvents.map((e: any) => (
                     <div key={e.id} className="flex gap-3">
                       <Avatar className="w-8 h-8">
                         <AvatarImage src={e.actor?.image || undefined} />

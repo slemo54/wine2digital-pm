@@ -247,6 +247,7 @@ model ProjectMember {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId])
+  @@index([userId])
 }
 
 // Task model for Kanban board
@@ -430,6 +431,8 @@ model TaskComment {
   // Relations
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }
 
 // Task Dependencies - Tasks that depend on other tasks
@@ -459,6 +462,8 @@ model TaskAttachment {
 
   // Relations
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }
 
 // NextAuth required models

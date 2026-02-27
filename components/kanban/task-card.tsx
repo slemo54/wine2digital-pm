@@ -13,6 +13,8 @@ import { useState } from "react";
 import { EditTaskDialog } from "../edit-task-dialog";
 import { TaskDetailModal } from "../task-detail-modal";
 import { toast } from "react-hot-toast";
+import { useQueryClient } from '@tanstack/react-query';
+import { usePrefetchTaskFull } from "@/hooks/use-task";
 
 interface Task {
   id: string;
@@ -43,6 +45,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const queryClient = useQueryClient();
+  const prefetchTask = usePrefetchTaskFull();
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -76,10 +80,14 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
     }
   };
 
-  // Random progress for demo (in real app, calculate from subtasks)
+  // Calculate progress deterministically from task ID to avoid hydration mismatch
   const getProgress = () => {
     if (task?.status === "done") return 100;
-    if (task?.status === "in_progress") return Math.floor(Math.random() * 70) + 20;
+    if (task?.status === "in_progress") {
+      // Use task ID to generate stable pseudo-random value (20-90%)
+      const hash = task?.id?.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) || 0;
+      return 20 + (hash % 71); // 20-90 range
+    }
     return 0;
   };
 
@@ -105,7 +113,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
       }
 
       toast.success("Task deleted successfully");
-      window.location.reload();
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['task-full'] });
     } catch (error) {
       toast.error("Failed to delete task");
     } finally {
@@ -121,6 +130,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         {...attributes}
         {...listeners}
         className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary"
+        onMouseEnter={() => prefetchTask(task.id)}
       >
         <CardContent 
           className="p-4 space-y-3"
@@ -224,7 +234,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         onClose={() => setShowEditDialog(false)}
         onSuccess={() => {
           setShowEditDialog(false);
-          window.location.reload();
+          queryClient.invalidateQueries({ queryKey: ['tasks'] });
+          queryClient.invalidateQueries({ queryKey: ['task-full'] });
         }}
         task={task}
       />
@@ -235,7 +246,10 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
           onClose={() => setShowDetailModal(false)}
           taskId={task.id}
           projectId={projectId}
-          onUpdate={() => window.location.reload()}
+          onUpdate={() => {
+            queryClient.invalidateQueries({ queryKey: ['tasks'] });
+            queryClient.invalidateQueries({ queryKey: ['task-full'] });
+          }}
         />
       )}
     </>

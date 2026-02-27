@@ -11,6 +11,9 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
   images: { unoptimized: true },
+  experimental: {
+    optimizePackageImports: ['lucide-react', 'date-fns', 'lodash', '@radix-ui/react-icons']
+  }
 };
 
 module.exports = nextConfig;

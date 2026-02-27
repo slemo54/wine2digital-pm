@@ -576,7 +576,7 @@ export function ProjectTaskLists(props: {
       const stamp = new Date().toISOString().slice(0, 10);
       const projLabel = safeFileStem(String((all[0] as any)?.project?.name || projectId));
 
-      const buffer = buildXlsxAccounting({ header, rows, sheetName: "Tasks" });
+      const buffer = await buildXlsxAccounting({ header, rows, sheetName: "Tasks" });
       downloadXlsxFile(`tasks_accounting_${projLabel}_${stamp}.xlsx`, buffer);
       toast.success("Export XLSX pronto");
     } catch (e) {

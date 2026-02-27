@@ -8,6 +8,7 @@ import { AppShell } from "@/components/app-shell";
 
 const inter = Inter({ subsets: ["latin"] });
 
+// Force dynamic to prevent prerendering issues with useSearchParams
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {

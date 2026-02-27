@@ -1,6 +1,6 @@
 "use client";
 
-import * as XLSX from "xlsx";
+// xlsx is dynamically imported only when needed to reduce bundle size
 
 export function escapeCsvCell(value: unknown): string {
   const raw = value === null || value === undefined ? "" : String(value);
@@ -114,11 +114,14 @@ export function centsToEuros(cents: number | null | undefined): number | null {
   return cents / 100;
 }
 
-export function buildXlsxAccounting(opts: {
+export async function buildXlsxAccounting(opts: {
   header: string[];
   rows: unknown[][];
   sheetName?: string;
-}): ArrayBuffer {
+}): Promise<ArrayBuffer> {
+  // Dynamic import to reduce initial bundle size
+  const XLSX = await import("xlsx");
+  
   const header = opts.header;
   const rows = opts.rows;
   const sheetName = opts.sheetName || "Tasks";

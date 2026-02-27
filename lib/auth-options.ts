@@ -140,7 +140,12 @@ export const authOptions: NextAuthOptions = {
       }
 
       // Keep role/isActive synced with DB (avoid stale sessions after admin changes)
-      if (gToken.id) {
+      // Time-gated: only sync every 5 minutes to reduce DB load
+      const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+      const now = Date.now();
+      const shouldSync = gToken.id && (!gToken.lastDbSync || now - gToken.lastDbSync > SYNC_INTERVAL_MS);
+      
+      if (shouldSync) {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: gToken.id },
@@ -152,6 +157,7 @@ export const authOptions: NextAuthOptions = {
             gToken.department = dbUser.department || null;
             gToken.calendarEnabled = dbUser.calendarEnabled;
           }
+          gToken.lastDbSync = now;
         } catch {
           // Best-effort: keep previous token values
         }
@@ -241,6 +247,7 @@ type GoogleToken = JWT & {
   department?: string | null;
   calendarEnabled?: boolean;
   isActive?: boolean;
+  lastDbSync?: number; // Timestamp of last DB sync for role/isActive
 };
 
 export async function refreshGoogleAccessToken(token: GoogleToken): Promise<GoogleToken> {
