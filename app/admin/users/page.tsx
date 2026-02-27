@@ -74,15 +74,15 @@ export default function AdminUsersPage() {
       id: u.id,
       email: u.email,
       name: u.name,
-      firstName: null,
-      lastName: null,
+      firstName: u.firstName,
+      lastName: u.lastName,
       department: u.department,
       role: u.role,
-      isActive: u.active,
-      calendarEnabled: false, // Default value as API doesn't return this
-      disabledAt: null,
+      isActive: u.isActive,
+      calendarEnabled: u.calendarEnabled,
+      disabledAt: u.disabledAt,
       createdAt: u.createdAt,
-      updatedAt: u.createdAt,
+      updatedAt: u.updatedAt,
     })) as AdminUser[];
   }, [data]);
 

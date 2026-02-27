@@ -21,12 +21,17 @@ export interface AdminAbsencesFilters {
 interface AdminUser {
   id: string;
   name: string | null;
+  firstName: string | null;
+  lastName: string | null;
   email: string;
   role: string;
-  active: boolean;
+  isActive: boolean;
+  calendarEnabled: boolean;
   image: string | null;
   department: string | null;
+  disabledAt: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export type AdminAbsenceStatus = "pending" | "approved" | "rejected";
