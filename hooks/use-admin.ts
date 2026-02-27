@@ -100,7 +100,7 @@ export function useUpdateAdminUser() {
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<AdminUser> }) => {
       const res = await fetch(`/api/admin/users/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
@@ -108,7 +108,8 @@ export function useUpdateAdminUser() {
         const error = await res.json();
         throw new Error(error.error || 'Failed to update user');
       }
-      return res.json() as Promise<AdminUser>;
+      const result = await res.json();
+      return result.user as AdminUser;
     },
 
     // OPTIMISTIC UPDATE - UI updates immediately
