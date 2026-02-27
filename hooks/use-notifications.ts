@@ -12,13 +12,18 @@ export interface Notification {
   createdAt: string;
 }
 
+interface NotificationsResponse {
+  notifications: Notification[];
+  unreadCount: number;
+}
+
 /**
  * Hook to fetch notifications
  */
 export function useNotifications() {
   return useQuery({
     queryKey: ['notifications'],
-    queryFn: async (): Promise<Notification[]> => {
+    queryFn: async (): Promise<NotificationsResponse> => {
       const res = await fetch('/api/notifications');
       if (!res.ok) throw new Error('Failed to fetch notifications');
       return res.json();

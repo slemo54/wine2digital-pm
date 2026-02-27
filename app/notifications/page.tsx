@@ -69,7 +69,8 @@ function NotificationCard({ notification }: { notification: Notification }) {
 export default function NotificationsPage() {
   const { status } = useSession();
   const router = useRouter();
-  const { data: notifications = [], isLoading } = useNotifications();
+  const { data: notificationsData, isLoading } = useNotifications();
+  const notifications = notificationsData?.notifications || [];
   const markAllMutation = useMarkAllRead();
 
   useEffect(() => {
@@ -97,7 +98,7 @@ export default function NotificationsPage() {
     );
   }
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadCount = notificationsData?.unreadCount ?? notifications.filter((n) => !n.isRead).length;
 
   return (
     <div className="min-h-screen min-h-[100dvh] bg-secondary">
