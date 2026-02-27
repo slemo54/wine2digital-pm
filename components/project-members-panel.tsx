@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, UserPlus, Link2, Copy, Trash2, Shield } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { canManageProjectMembers } from "@/lib/project-permissions";
+import { useUsersList } from "@/hooks/use-users-list";
 
 type Member = {
   id: string;
@@ -69,8 +70,6 @@ export function ProjectMembersPanel(props: {
   );
 
   // Add internal user state
-  const [users, setUsers] = useState<UserLite[]>([]);
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const [userQuery, setUserQuery] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
   const [selectedRole, setSelectedRole] = useState<"member" | "manager">("member");
@@ -88,6 +87,11 @@ export function ProjectMembersPanel(props: {
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
 
   const existingIds = useMemo(() => new Set(members.map((m) => m.userId)), [members]);
+
+  // Use React Query hook for fetching users
+  const { data: usersData, isLoading: loadingUsers } = useUsersList(open && canManage);
+  const users = usersData?.users || [];
+
   const filteredUsers = useMemo(() => {
     const q = userQuery.trim().toLowerCase();
     const available = users.filter((u) => !existingIds.has(u.id));
@@ -103,30 +107,6 @@ export function ProjectMembersPanel(props: {
     setInviteLink("");
     setTab("members");
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!canManage) return;
-    if (users.length > 0) return;
-    let cancelled = false;
-    setLoadingUsers(true);
-    (async () => {
-      try {
-        const res = await fetch("/api/users");
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Errore caricamento utenti");
-        const list = Array.isArray(data?.users) ? (data.users as UserLite[]) : [];
-        if (!cancelled) setUsers(list);
-      } catch (e) {
-        if (!cancelled) toast.error(e instanceof Error ? e.message : "Errore caricamento utenti");
-      } finally {
-        if (!cancelled) setLoadingUsers(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, canManage, users.length]);
 
   const addUser = async () => {
     if (!selectedUserId) return;
@@ -459,5 +439,3 @@ export function ProjectMembersPanel(props: {
 function UsersIcon(props: { className?: string }) {
   return <UserPlus className={props.className} />;
 }
-
-

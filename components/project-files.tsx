@@ -1,89 +1,41 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FileIcon, Download, Trash2, Upload, Loader2 } from "lucide-react";
-import { toast } from "react-hot-toast";
-
-interface FileUpload {
-  id: string;
-  fileName: string;
-  fileSize: number;
-  mimeType: string;
-  filePath: string;
-  createdAt: string;
-  uploader: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-  };
-}
+import { useProjectFiles, useUploadFile, useDeleteFile } from "@/hooks/use-project-files";
 
 interface ProjectFilesProps {
   projectId: string;
 }
 
 export function ProjectFiles({ projectId }: ProjectFilesProps) {
-  const [files, setFiles] = useState<FileUpload[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(50);
-  const [total, setTotal] = useState(0);
 
-  useEffect(() => {
-    void fetchFiles({ page: 1, replace: true });
-  }, [projectId]);
+  const { data, isLoading } = useProjectFiles(projectId, page, pageSize);
+  const files = data?.files || [];
+  const total = data?.total || 0;
 
-  const fetchFiles = async (opts: { page: number; replace: boolean }) => {
-    try {
-      const response = await fetch(
-        `/api/files?projectId=${projectId}&page=${opts.page}&pageSize=${pageSize}`
-      );
-      const data = await response.json();
-      if (response.ok) {
-        const nextFiles = Array.isArray(data.files) ? (data.files as FileUpload[]) : [];
-        setTotal(Number.isFinite(data?.total) ? Number(data.total) : nextFiles.length);
-        setFiles((prev) => (opts.replace ? nextFiles : [...prev, ...nextFiles]));
-        setPage(opts.page);
-      }
-    } catch (error) {
-      toast.error("Failed to load files");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const uploadMutation = useUploadFile();
+  const deleteMutation = useDeleteFile();
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("projectId", projectId);
 
     try {
-      const response = await fetch("/api/files", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        toast.success("File uploaded successfully");
-        await fetchFiles({ page: 1, replace: true });
-      } else {
-        const data = await response.json().catch(() => ({}));
-        const message = String((data as any)?.error || "Failed to upload file");
-        throw new Error(message);
-      }
+      await uploadMutation.mutateAsync({ file, projectId });
+      // Reset page to 1 after successful upload
+      setPage(1);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to upload file";
-      toast.error(message);
+      // Error is already handled by the mutation's onError
     } finally {
       setIsUploading(false);
       e.target.value = "";
@@ -93,20 +45,7 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
   const handleDelete = async (fileId: string) => {
     if (!confirm("Are you sure you want to delete this file?")) return;
 
-    try {
-      const response = await fetch(`/api/files/${fileId}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        toast.success("File deleted successfully");
-        await fetchFiles({ page: 1, replace: true });
-      } else {
-        throw new Error();
-      }
-    } catch (error) {
-      toast.error("Failed to delete file");
-    }
+    deleteMutation.mutate({ fileId, projectId });
   };
 
   const formatFileSize = (bytes: number) => {
@@ -208,7 +147,7 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
                 onClick={async () => {
                   setIsLoadingMore(true);
                   try {
-                    await fetchFiles({ page: page + 1, replace: false });
+                    setPage((prev) => prev + 1);
                   } finally {
                     setIsLoadingMore(false);
                   }

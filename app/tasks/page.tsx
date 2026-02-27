@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -15,6 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { TaskDetailModal } from "@/components/task-detail-modal";
 import { ArrowLeft, Loader2, Search, Calendar, Paperclip, MessageCircle, ListChecks, Plus } from "lucide-react";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
+import { useTasksList, useAssignedSubtasks, useProjectsForFilter } from "@/hooks/use-tasks-list";
 
 type ProjectLite = { id: string; name: string };
 
@@ -60,17 +61,10 @@ export default function TasksPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [projects, setProjects] = useState<ProjectLite[]>([]);
-  const [tasks, setTasks] = useState<TaskListItem[]>([]);
-  const [loadingList, setLoadingList] = useState(false);
-  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const pageSize = 100;
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
-  const [assignedSubtasks, setAssignedSubtasks] = useState<SubtaskListItem[]>([]);
   const [showCreateTask, setShowCreateTask] = useState(false);
 
   const [filters, setFilters] = useState<{
@@ -93,6 +87,21 @@ export default function TasksPage() {
     tag: "",
   });
 
+  // React Query hooks
+  const { data: tasksData, isLoading: loadingList } = useTasksList({
+    ...filters,
+    page,
+    pageSize,
+  });
+  const { data: subtasksData, isLoading: loadingSubtasks } = useAssignedSubtasks(filters);
+  const { data: projectsData } = useProjectsForFilter();
+
+  // Extract data
+  const tasks: TaskListItem[] = tasksData?.tasks || [];
+  const total = tasksData?.total || 0;
+  const assignedSubtasks: SubtaskListItem[] = subtasksData?.subtasks || [];
+  const projects: ProjectLite[] = projectsData?.projects || [];
+
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/login");
@@ -113,55 +122,10 @@ export default function TasksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Reset page when filters change
   useEffect(() => {
-    if (status !== "authenticated") return;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await fetch("/api/projects?page=1&limit=200");
-        if (!res.ok) return;
-        const data = await res.json();
-        const list = Array.isArray(data.projects) ? (data.projects as any[]) : [];
-        const mapped = list
-          .map((p) => ({ id: String(p.id), name: String(p.name) }))
-          .filter((p) => p.id && p.name);
-        if (!cancelled) setProjects(mapped);
-      } catch {
-        // ignore
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [status]);
-
-  const baseQueryString = useMemo(() => {
-    const sp = new URLSearchParams();
-    sp.set("scope", filters.scope);
-    if (filters.status && filters.status !== "all") sp.set("status", filters.status);
-    if (filters.priority && filters.priority !== "all") sp.set("priority", filters.priority);
-    if (filters.projectId && filters.projectId !== "all") sp.set("projectId", filters.projectId);
-    if (filters.dueFrom) sp.set("dueFrom", filters.dueFrom);
-    if (filters.dueTo) sp.set("dueTo", filters.dueTo);
-    if (filters.q.trim()) sp.set("q", filters.q.trim());
-    if (filters.tag.trim()) sp.set("tag", filters.tag.trim());
-    return sp.toString();
-  }, [filters]);
-
-  const baseSubtasksQueryString = useMemo(() => {
-    if (filters.scope !== "assigned") return "";
-    const sp = new URLSearchParams();
-    sp.set("scope", "assigned");
-    if (filters.status && filters.status !== "all") sp.set("status", filters.status);
-    if (filters.priority && filters.priority !== "all") sp.set("priority", filters.priority);
-    if (filters.projectId && filters.projectId !== "all") sp.set("projectId", filters.projectId);
-    if (filters.dueFrom) sp.set("dueFrom", filters.dueFrom);
-    if (filters.dueTo) sp.set("dueTo", filters.dueTo);
-    if (filters.q.trim()) sp.set("q", filters.q.trim());
-    return sp.toString();
-  }, [filters.scope, filters.status, filters.priority, filters.projectId, filters.dueFrom, filters.dueTo, filters.q]);
+    setPage(1);
+  }, [filters.scope, filters.status, filters.priority, filters.projectId, filters.dueFrom, filters.dueTo, filters.q, filters.tag]);
 
   const openTaskDetail = (opts: { taskId: string; subtaskId?: string | null }) => {
     setSelectedTaskId(opts.taskId);
@@ -172,88 +136,6 @@ export default function TasksPage() {
     else params.delete("subtaskId");
     router.push(`/tasks?${params.toString()}`);
   };
-
-  const fetchTasksPage = async (opts: { page: number; append: boolean }) => {
-    const sp = new URLSearchParams(baseQueryString);
-    sp.set("page", String(opts.page));
-    sp.set("pageSize", String(pageSize));
-    const res = await fetch(`/api/tasks?${sp.toString()}`);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error((data as any)?.error || "Failed to load tasks");
-    const list = Array.isArray((data as any)?.tasks) ? ((data as any).tasks as TaskListItem[]) : [];
-    const nextTotal = Number.isFinite((data as any)?.total) ? Number((data as any).total) : list.length;
-    setTotal(nextTotal);
-    setTasks((prev) => (opts.append ? [...prev, ...list] : list));
-    setPage(opts.page);
-  };
-
-  const fetchAssignedSubtasks = async () => {
-    if (filters.scope !== "assigned") {
-      setAssignedSubtasks([]);
-      return;
-    }
-    if (!baseSubtasksQueryString) {
-      setAssignedSubtasks([]);
-      return;
-    }
-    setLoadingSubtasks(true);
-    try {
-      const sp = new URLSearchParams(baseSubtasksQueryString);
-      sp.set("page", "1");
-      sp.set("pageSize", "100");
-      const res = await fetch(`/api/subtasks?${sp.toString()}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as any)?.error || "Failed to load subtasks");
-      const list = Array.isArray((data as any)?.subtasks) ? ((data as any).subtasks as SubtaskListItem[]) : [];
-      setAssignedSubtasks(list);
-    } catch {
-      setAssignedSubtasks([]);
-    } finally {
-      setLoadingSubtasks(false);
-    }
-  };
-
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    let cancelled = false;
-    setLoadingList(true);
-    setPage(1);
-
-    const t = setTimeout(async () => {
-      try {
-        await fetchTasksPage({ page: 1, append: false });
-      } catch {
-        if (!cancelled) {
-          setTasks([]);
-          setTotal(0);
-        }
-      } finally {
-        if (!cancelled) setLoadingList(false);
-      }
-    }, 200);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [status, baseQueryString]);
-
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        await fetchAssignedSubtasks();
-      } finally {
-        // ignore
-      }
-    }, 200);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, baseSubtasksQueryString]);
 
   if (status === "loading") {
     return (
@@ -593,18 +475,11 @@ export default function TasksPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          disabled={loadingMore}
+                          disabled={loadingList}
                           className="text-muted-foreground hover:text-foreground"
-                          onClick={async () => {
-                            setLoadingMore(true);
-                            try {
-                              await fetchTasksPage({ page: page + 1, append: true });
-                            } finally {
-                              setLoadingMore(false);
-                            }
-                          }}
+                          onClick={() => setPage((p) => p + 1)}
                         >
-                          {loadingMore ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                          {loadingList ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                           Carica altre ({total - tasks.length})
                         </Button>
                       </div>
@@ -620,8 +495,7 @@ export default function TasksPage() {
           open={showCreateTask}
           onClose={() => setShowCreateTask(false)}
           onSuccess={() => {
-            // reload tasks after create (queryString already reflects filters)
-            fetchTasksPage({ page: 1, append: false }).catch(() => {});
+            // React Query will refetch automatically due to cache invalidation
           }}
           defaultProjectId={filters.projectId !== "all" ? filters.projectId : undefined}
         />
@@ -644,8 +518,7 @@ export default function TasksPage() {
             projectId={"_global"}
             initialSubtaskId={selectedSubtaskId || undefined}
             onUpdate={() => {
-              // refresh list after edits
-              fetchTasksPage({ page: 1, append: false }).catch(() => {});
+              // React Query will refetch automatically due to cache invalidation
             }}
           />
         ) : null}
@@ -653,4 +526,3 @@ export default function TasksPage() {
     </div>
   );
 }
-

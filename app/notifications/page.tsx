@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { toast } from "react-hot-toast";
 import Link from "next/link";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { markAllRead, markNotificationRead } from "@/lib/notifications-client";
+import { useNotifications, useMarkAllRead, useMarkOneRead } from "@/hooks/use-notifications";
 
 interface Notification {
   id: string;
@@ -22,12 +22,55 @@ interface Notification {
   createdAt: string;
 }
 
+// Separate component for each notification to use the hook properly
+function NotificationCard({ notification }: { notification: Notification }) {
+  const router = useRouter();
+  const markOneMutation = useMarkOneRead(notification.id);
+
+  return (
+    <Card className={`transition-colors ${notification.isRead ? "opacity-80" : "border-primary/50 bg-primary/5"}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h3 className="font-semibold text-foreground">{notification.title}</h3>
+              {!notification.isRead && (
+                <Badge variant="default" className="h-5 px-1.5 text-[10px]">
+                  New
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">{notification.message}</p>
+            <p className="text-xs text-muted-foreground pt-1">
+              {format(new Date(notification.createdAt), "PPp", { locale: it })}
+            </p>
+          </div>
+          {notification.link && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await markOneMutation.mutateAsync();
+                } finally {
+                  router.push(notification.link!);
+                }
+              }}
+            >
+              Apri
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function NotificationsPage() {
   const { status } = useSession();
   const router = useRouter();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [markingRead, setMarkingRead] = useState(false);
+  const { data: notifications = [], isLoading } = useNotifications();
+  const markAllMutation = useMarkAllRead();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -35,40 +78,18 @@ export default function NotificationsPage() {
     }
   }, [status, router]);
 
-  const fetchNotifications = async () => {
-    try {
-      const res = await fetch("/api/notifications");
-      if (!res.ok) throw new Error("Errore caricamento");
-      const data = await res.json();
-      setNotifications(data.notifications || []);
-    } catch (e) {
-      toast.error("Impossibile caricare le notifiche");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchNotifications();
-    }
-  }, [status]);
-
   const markAllAsRead = async () => {
-    setMarkingRead(true);
-    try {
-      const r = await markAllRead();
-      if (!r.ok) throw new Error("Errore");
-      await fetchNotifications();
-      toast.success("Tutte le notifiche segnate come lette");
-    } catch {
-      toast.error("Errore durante l'aggiornamento");
-    } finally {
-      setMarkingRead(false);
-    }
+    markAllMutation.mutate(undefined, {
+      onSuccess: () => {
+        toast.success("Tutte le notifiche segnate come lette");
+      },
+      onError: () => {
+        toast.error("Errore durante l'aggiornamento");
+      },
+    });
   };
 
-  if (status === "loading" || loading) {
+  if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -91,8 +112,8 @@ export default function NotificationsPage() {
             </p>
           </div>
           {unreadCount > 0 && (
-            <Button onClick={markAllAsRead} disabled={markingRead} variant="outline">
-              {markingRead ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
+            <Button onClick={markAllAsRead} disabled={markAllMutation.isPending} variant="outline">
+              {markAllMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Check className="h-4 w-4 mr-2" />}
               Segna tutte come lette
             </Button>
           )}
@@ -107,41 +128,7 @@ export default function NotificationsPage() {
             </Card>
           ) : (
             notifications.map((n) => (
-              <Card key={n.id} className={`transition-colors ${n.isRead ? "opacity-80" : "border-primary/50 bg-primary/5"}`}>
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-foreground">{n.title}</h3>
-                        {!n.isRead && (
-                          <Badge variant="default" className="h-5 px-1.5 text-[10px]">
-                            New
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{n.message}</p>
-                      <p className="text-xs text-muted-foreground pt-1">
-                        {format(new Date(n.createdAt), "PPp", { locale: it })}
-                      </p>
-                    </div>
-                    {n.link && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            await markNotificationRead(n.id);
-                          } finally {
-                            router.push(n.link!);
-                          }
-                        }}
-                      >
-                        Apri
-                      </Button>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <NotificationCard key={n.id} notification={n} />
             ))
           )}
         </div>

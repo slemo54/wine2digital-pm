@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { signOut } from "next-auth/react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -63,7 +63,20 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const globalRole = (session?.user as any)?.role as string | undefined;
   const isAdmin = globalRole === "admin";
   const calendarEnabled = (session?.user as any)?.calendarEnabled !== false;
-  const [unreadCount, setUnreadCount] = useState(0);
+  
+  // React Query per unread count - sostituisce polling manuale
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: async () => {
+      const res = await fetch('/api/notifications');
+      if (!res.ok) throw new Error('Failed to fetch notifications');
+      const data = await res.json();
+      return data.unreadCount || 0;
+    },
+    refetchInterval: 60_000, // Refetch ogni 60 secondi
+    staleTime: 30_000, // Considera stale dopo 30 secondi
+    enabled: status === 'authenticated',
+  });
 
   const filteredNav = NAV.filter((item) => {
     if (item.href === "/calendar") {
@@ -71,39 +84,6 @@ export function AppSidebar({ className }: AppSidebarProps) {
     }
     return true;
   });
-
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    let cancelled = false;
-
-    const refresh = () => {
-      // Semplice fetch per il badge. In app reale usare SWR/React Query o Context.
-      fetch("/api/notifications")
-        .then((res) => res.json())
-        .then((data) => {
-          if (cancelled) return;
-          setUnreadCount(data.unreadCount || 0);
-        })
-        .catch(() => {});
-    };
-
-    refresh();
-
-    const onChanged = (ev: Event) => {
-      const detail = (ev as any)?.detail;
-      const next = detail?.unreadCount;
-      if (typeof next === "number" && Number.isFinite(next)) {
-        setUnreadCount(next);
-        return;
-      }
-      refresh();
-    };
-    window.addEventListener("notifications:changed", onChanged as any);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("notifications:changed", onChanged as any);
-    };
-  }, [status, pathname]); // Aggiorna al cambio pagina
 
   return (
     <aside className={cn("w-64 shrink-0 border-r border-border bg-background sticky top-0 h-screen h-[100dvh]", className)}>

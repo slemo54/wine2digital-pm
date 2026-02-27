@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -22,31 +22,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar as CalendarIcon, Plus, Check, X, Loader2, Clock, User, ChevronRight, LayoutList, CalendarDays } from "lucide-react";
+import { Calendar as CalendarIcon, Plus, Check, X, Loader2, Clock, ChevronRight, LayoutList, CalendarDays } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { format, isAfter, isBefore, isSameDay, startOfDay, differenceInDays } from "date-fns";
 import { AbsenceTable } from "@/components/calendar/AbsenceTable";
 import { AbsenceFilters } from "@/components/calendar/AbsenceFilters";
-
-interface Absence {
-  id: string;
-  type: string;
-  startDate: string;
-  endDate: string;
-  isFullDay: boolean;
-  startTime?: string;
-  endTime?: string;
-  reason?: string;
-  status: string;
-  user: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    name?: string;
-    department?: string | null;
-  };
-  createdAt: string;
-}
+import { useCalendarAbsences, useCreateAbsence, useApproveAbsence, useRejectAbsence, type Absence } from "@/hooks/use-calendar";
 
 type AbsenceCounts = {
   pending: number;
@@ -66,20 +47,11 @@ export default function CalendarPage() {
   const isAdmin = userRole === "admin";
   const isAccessDenied = !isAdmin && !calendarEnabled;
 
-  const [pendingAbsences, setPendingAbsences] = useState<Absence[]>([]);
-  const [approvedAbsences, setApprovedAbsences] = useState<Absence[]>([]);
-  const [rejectedAbsences, setRejectedAbsences] = useState<Absence[]>([]);
-  const [calendarAbsences, setCalendarAbsences] = useState<Absence[]>([]);
   const [counts, setCounts] = useState<AbsenceCounts>({ pending: 0, approved: 0, rejected: 0, total: 0 });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingManagement, setIsLoadingManagement] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
   const [visibleMonth, setVisibleMonth] = useState<Date>(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [pendingTake, setPendingTake] = useState(500);
-  const [approvedTake, setApprovedTake] = useState(25);
-  const [rejectedTake, setRejectedTake] = useState(25);
 
   // New State for Admin Features
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
@@ -98,125 +70,44 @@ export default function CalendarPage() {
     reason: "",
   });
 
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.replace("/auth/login");
-    } else if (status === "authenticated" && isAccessDenied) {
-      toast.error("Accesso negato al calendario.");
-      router.replace("/dashboard");
-    }
-  }, [status, router, isAccessDenied]);
+  // React Query hooks
+  const filters = { statusFilter, typeFilter, searchQuery };
+  const { data: absencesData, isLoading } = useCalendarAbsences(filters);
+  const absences = absencesData?.absences || [];
+  
+  // Update counts when data changes
+  if (absencesData?.counts && absencesData.counts !== counts) {
+    setCounts(absencesData.counts);
+  }
 
-  useEffect(() => {
-    if (isAccessDenied) return;
-    fetchAbsences();
-  }, [isAccessDenied]);
+  const createAbsenceMutation = useCreateAbsence();
+  const approveAbsenceMutation = useApproveAbsence();
+  const rejectAbsenceMutation = useRejectAbsence();
 
-  useEffect(() => {
-    if (isAccessDenied) return;
-    void fetchCalendarAbsences(visibleMonth);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visibleMonth, isAccessDenied]);
+  // Filter absences by status for the management lists
+  const pendingAbsences = absences.filter((a) => a.status === "pending");
+  const approvedAbsences = absences.filter((a) => a.status === "approved");
+  const rejectedAbsences = absences.filter((a) => a.status === "rejected");
 
-  const fetchCounts = async () => {
-    try {
-      const response = await fetch("/api/absences?includeCounts=true&take=0");
-      if (response.status === 401) {
-        router.replace("/auth/login");
-        return;
-      }
+  // Calendar absences - filter by visible month
+  const calendarAbsences = absences.filter((a) => {
+    const from = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1, 0, 0, 0, 0);
+    const to = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+    const start = new Date(a.startDate);
+    const end = new Date(a.endDate);
+    return start <= to && end >= from;
+  });
 
-      let data: any = null;
-      try {
-        data = await response.json();
-      } catch {
-        // ignore
-      }
+  if (status === "unauthenticated") {
+    router.replace("/auth/login");
+    return null;
+  }
 
-      if (!response.ok) {
-        const msg = String(data?.error || "Failed to load absences");
-        setLoadError(msg);
-        toast.error(msg);
-        return;
-      }
-
-      const c = data?.counts;
-      if (c && typeof c === "object") {
-        setCounts({
-          pending: Number(c.pending || 0),
-          approved: Number(c.approved || 0),
-          rejected: Number(c.rejected || 0),
-          total: Number(c.total || 0),
-        });
-      }
-      setLoadError(null);
-    } catch (error) {
-      setLoadError("Failed to load absences");
-      toast.error("Failed to load absences");
-    }
-  };
-
-  const fetchManagementLists = async (opts?: { pendingTake?: number; approvedTake?: number; rejectedTake?: number }) => {
-    const nextPendingTake = typeof opts?.pendingTake === "number" ? opts.pendingTake : pendingTake;
-    const nextApprovedTake = typeof opts?.approvedTake === "number" ? opts.approvedTake : approvedTake;
-    const nextRejectedTake = typeof opts?.rejectedTake === "number" ? opts.rejectedTake : rejectedTake;
-    try {
-      setIsLoadingManagement(true);
-      const [pendingRes, approvedRes, rejectedRes] = await Promise.all([
-        fetch(`/api/absences?status=pending&take=${nextPendingTake}`),
-        fetch(`/api/absences?status=approved&take=${nextApprovedTake}`),
-        fetch(`/api/absences?status=rejected&take=${nextRejectedTake}`),
-      ]);
-
-      const [pendingData, approvedData, rejectedData] = await Promise.all([
-        pendingRes.json().catch(() => ({})),
-        approvedRes.json().catch(() => ({})),
-        rejectedRes.json().catch(() => ({})),
-      ]);
-
-      if (!pendingRes.ok) throw new Error(pendingData?.error || "Failed to load pending");
-      if (!approvedRes.ok) throw new Error(approvedData?.error || "Failed to load approved");
-      if (!rejectedRes.ok) throw new Error(rejectedData?.error || "Failed to load rejected");
-
-      setPendingAbsences(Array.isArray(pendingData?.absences) ? pendingData.absences : []);
-      setApprovedAbsences(Array.isArray(approvedData?.absences) ? approvedData.absences : []);
-      setRejectedAbsences(Array.isArray(rejectedData?.absences) ? rejectedData.absences : []);
-      setLoadError(null);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load absences";
-      setLoadError(msg);
-      toast.error(msg);
-    } finally {
-      setIsLoadingManagement(false);
-    }
-  };
-
-  const fetchCalendarAbsences = async (month: Date) => {
-    const from = new Date(month.getFullYear(), month.getMonth(), 1, 0, 0, 0, 0);
-    const to = new Date(month.getFullYear(), month.getMonth() + 1, 0, 23, 59, 59, 999);
-    const qs = new URLSearchParams({
-      from: from.toISOString(),
-      to: to.toISOString(),
-      take: "2000",
-    });
-    try {
-      const res = await fetch(`/api/absences?${qs.toString()}`);
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Failed to load calendar absences");
-      setCalendarAbsences(Array.isArray(data?.absences) ? data.absences : []);
-    } catch {
-      setCalendarAbsences([]);
-    }
-  };
-
-  const fetchAbsences = async () => {
-    setIsLoading(true);
-    try {
-      await Promise.all([fetchCounts(), fetchManagementLists(), fetchCalendarAbsences(visibleMonth)]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  if (status === "authenticated" && isAccessDenied) {
+    toast.error("Accesso negato al calendario.");
+    router.replace("/dashboard");
+    return null;
+  }
 
   const handleEditClick = (absence: Absence) => {
     setEditingAbsence(absence);
@@ -264,23 +155,31 @@ export default function CalendarPage() {
     }
 
     try {
-      const url = editingAbsence ? `/api/absences/${editingAbsence.id}` : "/api/absences";
-      const method = editingAbsence ? "PUT" : "POST";
+      if (editingAbsence) {
+        // For editing, we still use the traditional fetch approach
+        const response = await fetch(`/api/absences/${editingAbsence.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newAbsence),
+        });
 
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newAbsence),
-      });
+        const data = await response.json();
 
-      const data = await response.json();
-
-      if (response.ok) {
-        toast.success(editingAbsence ? "Absence updated successfully" : "Absence request submitted");
-        handleDialogChange(false);
-        fetchAbsences();
+        if (response.ok) {
+          toast.success("Absence updated successfully");
+          handleDialogChange(false);
+        } else {
+          throw new Error(data.error || "Failed to submit");
+        }
       } else {
-        throw new Error(data.error || "Failed to submit");
+        // Use mutation for creating
+        await createAbsenceMutation.mutateAsync({
+          type: newAbsence.type,
+          startDate: newAbsence.startDate,
+          endDate: newAbsence.endDate,
+          notes: newAbsence.reason,
+        });
+        handleDialogChange(false);
       }
     } catch (error: any) {
       toast.error(error.message || "Failed to submit absence request");
@@ -289,39 +188,17 @@ export default function CalendarPage() {
 
   const handleApprove = async (id: string) => {
     try {
-      const response = await fetch(`/api/absences/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "approved" }),
-      });
-
-      if (response.ok) {
-        toast.success("Absence approved");
-        fetchAbsences();
-      } else {
-        throw new Error();
-      }
+      await approveAbsenceMutation.mutateAsync({ id });
     } catch (error) {
-      toast.error("Failed to approve absence");
+      // Error is handled by the mutation
     }
   };
 
   const handleReject = async (id: string) => {
     try {
-      const response = await fetch(`/api/absences/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "rejected" }),
-      });
-
-      if (response.ok) {
-        toast.success("Absence rejected");
-        fetchAbsences();
-      } else {
-        throw new Error();
-      }
+      await rejectAbsenceMutation.mutateAsync({ id });
     } catch (error) {
-      toast.error("Failed to reject absence");
+      // Error is handled by the mutation
     }
   };
 
@@ -350,7 +227,7 @@ export default function CalendarPage() {
 
   const canApproveAbsence = (absence: Absence) => {
     if (userRole === "admin") return true;
-    if (userRole === "manager" && userDepartment && absence.user.department === userDepartment) return true;
+    if (userRole === "manager" && userDepartment && absence.user?.department === userDepartment) return true;
     return false;
   };
 
@@ -380,25 +257,25 @@ export default function CalendarPage() {
   }
 
   const absencesForSelectedDay = selectedDay
-    ? calendarAbsences.filter((a) => isBetweenInclusive(selectedDay, new Date(a.startDate), new Date(a.endDate)))
+    ? calendarAbsences.filter((a: Absence) => isBetweenInclusive(selectedDay, new Date(a.startDate), new Date(a.endDate)))
     : [];
 
   // Filter logic for Table View
-  const filteredAbsences = calendarAbsences.filter(a => {
+  const filteredAbsences = calendarAbsences.filter((a: Absence) => {
     const matchesStatus = statusFilter === 'all' || a.status === statusFilter;
     const matchesType = typeFilter === 'all' || a.type === typeFilter;
     const searchLower = searchQuery.toLowerCase();
-    const userName = a.user.name || `${a.user.firstName} ${a.user.lastName}`;
+    const userName = a.user?.name || `${a.user?.firstName || ''} ${a.user?.lastName || ''}`.trim();
     const matchesSearch = !searchQuery ||
       userName.toLowerCase().includes(searchLower) ||
-      a.user.email.toLowerCase().includes(searchLower);
+      a.user?.email?.toLowerCase().includes(searchLower);
 
     return matchesStatus && matchesType && matchesSearch;
   });
 
   const sickDaysCount = filteredAbsences
-    .filter(a => a.type === 'sick_leave' && a.status === 'approved')
-    .reduce((acc, curr) => {
+    .filter((a: Absence) => a.type === 'sick_leave' && a.status === 'approved')
+    .reduce((acc: number, curr: Absence) => {
       const start = new Date(curr.startDate);
       const end = new Date(curr.endDate);
       return acc + (differenceInDays(end, start) + 1);
@@ -423,7 +300,7 @@ export default function CalendarPage() {
               <CardDescription>{loadError}</CardDescription>
             </CardHeader>
             <CardContent className="flex gap-2">
-              <Button variant="outline" onClick={() => fetchAbsences()}>
+              <Button variant="outline" onClick={() => window.location.reload()}>
                 Retry
               </Button>
             </CardContent>
@@ -467,7 +344,7 @@ export default function CalendarPage() {
                   <DialogHeader>
                     <DialogTitle>{editingAbsence ? "Edit Absence" : "Request Absence"}</DialogTitle>
                     <DialogDescription>
-                      {editingAbsence ? `Modify absence request for ${editingAbsence.user.firstName}` : "Submit a new absence request for approval"}
+                      {editingAbsence ? `Modify absence request for ${editingAbsence.user?.firstName || ''}` : "Submit a new absence request for approval"}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
@@ -532,7 +409,14 @@ export default function CalendarPage() {
                     <Button type="button" variant="outline" onClick={() => handleDialogChange(false)}>
                       Cancel
                     </Button>
-                    <Button type="submit" className="bg-primary hover:bg-primary/90">
+                    <Button 
+                      type="submit" 
+                      className="bg-primary hover:bg-primary/90"
+                      disabled={createAbsenceMutation.isPending}
+                    >
+                      {createAbsenceMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
                       {editingAbsence ? "Update Request" : "Submit Request"}
                     </Button>
                   </DialogFooter>
@@ -675,18 +559,18 @@ export default function CalendarPage() {
                 ) : null}
 
                 {selectedDay
-                  ? absencesForSelectedDay.map((a) => (
+                  ? absencesForSelectedDay.map((a: Absence) => (
                     <div key={a.id} className="group relative rounded-xl border p-4 hover:border-primary/30 transition-colors bg-secondary/5 shadow-sm">
                       <div className="flex items-start justify-between gap-3 mb-2">
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9 border-2 border-white shadow-sm">
                             <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-                              {getInitials(a.user.name || `${a.user.firstName} ${a.user.lastName}`)}
+                              {getInitials(a.user?.name || `${a.user?.firstName || ''} ${a.user?.lastName || ''}`.trim())}
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
                             <div className="text-sm font-semibold text-foreground truncate max-w-[140px]">
-                              {a.user.name || `${a.user.firstName} ${a.user.lastName}`}
+                              {a.user?.name || `${a.user?.firstName || ''} ${a.user?.lastName || ''}`.trim() || 'Unknown'}
                             </div>
                             <div className="text-[10px] text-muted-foreground uppercase tracking-tight">
                               {getTypeLabel(a.type)}
@@ -760,18 +644,12 @@ export default function CalendarPage() {
                   viewerDepartment={userDepartment}
                   onEdit={handleEditClick}
                   onDelete={(id) => {
-                    // TODO: Add delete confirmation? For now just handleReject or implement delete logic
-                    // The original code uses buttons, here table uses actions.
-                    // Let's reuse handleReject for now or verify if we need strict delete.
-                    // The API has specific DELETE endpoint.
-                    // Let's implement delete logic briefly here or use handleReject if appropriate?
-                    // Actually let's use a simple delete fetch.
                     if (confirm("Are you sure you want to delete this absence?")) {
                       fetch(`/api/absences/${id}`, { method: "DELETE" })
                         .then(res => {
                           if (res.ok) {
                             toast.success("Absence deleted");
-                            fetchAbsences();
+                            window.location.reload();
                           } else {
                             toast.error("Failed to delete");
                           }
@@ -811,21 +689,21 @@ export default function CalendarPage() {
                     </CardContent>
                   </Card>
                 ) : (
-                  pendingAbsences.map((absence) => (
+                  pendingAbsences.map((absence: Absence) => (
                     <Card key={absence.id} className="bg-white hover:shadow-lg transition-all duration-300 border-none shadow-sm">
                       <CardContent className="p-5">
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex items-center gap-3">
                             <Avatar className="h-10 w-10 border-2 border-secondary">
                               <AvatarFallback className="bg-warning/10 text-warning text-xs font-bold">
-                                {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                                {getInitials(absence.user?.name || `${absence.user?.firstName || ""} ${absence.user?.lastName || ""}`.trim() || "Unknown")}
                               </AvatarFallback>
                             </Avatar>
                             <div>
                               <p className="text-sm font-bold text-foreground leading-tight">
-                                {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                                {absence.user?.name || `${absence.user?.firstName || ""} ${absence.user?.lastName || ""}`.trim() || "Unknown"}
                               </p>
-                              <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                              <p className="text-[11px] text-muted-foreground">{absence.user?.email}</p>
                             </div>
                           </div>
                           <Badge variant="outline" className="text-[10px] bg-warning/5 text-warning border-warning/30 font-bold px-2">
@@ -853,8 +731,13 @@ export default function CalendarPage() {
                               size="sm"
                               className="flex-1 bg-success hover:bg-success/90 text-white shadow-sm shadow-success/20 font-bold"
                               onClick={() => handleApprove(absence.id)}
+                              disabled={approveAbsenceMutation.isPending}
                             >
-                              <Check className="h-4 w-4 mr-1.5" />
+                              {approveAbsenceMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                              ) : (
+                                <Check className="h-4 w-4 mr-1.5" />
+                              )}
                               Approve
                             </Button>
                             <Button
@@ -862,8 +745,13 @@ export default function CalendarPage() {
                               variant="outline"
                               className="flex-1 text-destructive border-destructive/30 hover:bg-destructive hover:text-white font-bold"
                               onClick={() => handleReject(absence.id)}
+                              disabled={rejectAbsenceMutation.isPending}
                             >
-                              <X className="h-4 w-4 mr-1.5" />
+                              {rejectAbsenceMutation.isPending ? (
+                                <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                              ) : (
+                                <X className="h-4 w-4 mr-1.5" />
+                              )}
                               Reject
                             </Button>
                           </div>
@@ -872,21 +760,6 @@ export default function CalendarPage() {
                     </Card>
                   ))
                 )}
-
-                {pendingAbsences.length > 0 && pendingAbsences.length < counts.pending ? (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    disabled={isLoadingManagement}
-                    onClick={() => {
-                      const next = pendingTake + 200;
-                      setPendingTake(next);
-                      void fetchManagementLists({ pendingTake: next });
-                    }}
-                  >
-                    Carica altre ({counts.pending - pendingAbsences.length})
-                  </Button>
-                ) : null}
               </div>
             </div>
 
@@ -908,21 +781,21 @@ export default function CalendarPage() {
                   </Card>
                 ) : (
                   <>
-                    {approvedVisible.map((absence) => (
+                    {approvedVisible.map((absence: Absence) => (
                       <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm group">
                         <CardContent className="p-5">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
                               <Avatar className="h-10 w-10">
                                 <AvatarFallback className="bg-success/10 text-success text-xs font-bold">
-                                  {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                                  {getInitials(absence.user?.name || `${absence.user?.firstName || ""} ${absence.user?.lastName || ""}`.trim() || "Unknown")}
                                 </AvatarFallback>
                               </Avatar>
                               <div>
                                 <p className="text-sm font-bold text-foreground">
-                                  {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                                  {absence.user?.name || `${absence.user?.firstName || ""} ${absence.user?.lastName || ""}`.trim() || "Unknown"}
                                 </p>
-                                <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                                <p className="text-[11px] text-muted-foreground">{absence.user?.email}</p>
                               </div>
                             </div>
                             <Badge
@@ -949,20 +822,6 @@ export default function CalendarPage() {
                         </CardContent>
                       </Card>
                     ))}
-                    {approvedAbsences.length < counts.approved ? (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        disabled={isLoadingManagement}
-                        onClick={() => {
-                          const next = approvedTake + 25;
-                          setApprovedTake(next);
-                          void fetchManagementLists({ approvedTake: next });
-                        }}
-                      >
-                        Carica altre ({counts.approved - approvedAbsences.length})
-                      </Button>
-                    ) : null}
                   </>
                 )}
               </div>
@@ -986,21 +845,21 @@ export default function CalendarPage() {
                   </Card>
                 ) : (
                   <>
-                    {rejectedVisible.map((absence) => (
+                    {rejectedVisible.map((absence: Absence) => (
                       <Card key={absence.id} className="bg-white hover:shadow-md transition-all border-none shadow-sm">
                         <CardContent className="p-5">
                           <div className="flex items-start justify-between mb-4">
                             <div className="flex items-center gap-3">
                               <Avatar className="h-10 w-10">
                                 <AvatarFallback className="bg-destructive/10 text-destructive text-xs font-bold">
-                                  {getInitials(absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`)}
+                                  {getInitials(absence.user?.name || `${absence.user?.firstName || ""} ${absence.user?.lastName || ""}`.trim() || "Unknown")}
                                 </AvatarFallback>
                               </Avatar>
                               <div>
                                 <p className="text-sm font-bold text-foreground">
-                                  {absence.user.name || `${absence.user.firstName} ${absence.user.lastName}`}
+                                  {absence.user?.name || `${absence.user?.firstName || ""} ${absence.user?.lastName || ""}`.trim() || "Unknown"}
                                 </p>
-                                <p className="text-[11px] text-muted-foreground">{absence.user.email}</p>
+                                <p className="text-[11px] text-muted-foreground">{absence.user?.email}</p>
                               </div>
                             </div>
                             <Badge
@@ -1027,20 +886,6 @@ export default function CalendarPage() {
                         </CardContent>
                       </Card>
                     ))}
-                    {rejectedAbsences.length < counts.rejected ? (
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        disabled={isLoadingManagement}
-                        onClick={() => {
-                          const next = rejectedTake + 25;
-                          setRejectedTake(next);
-                          void fetchManagementLists({ rejectedTake: next });
-                        }}
-                      >
-                        Carica altre ({counts.rejected - rejectedAbsences.length})
-                      </Button>
-                    ) : null}
                   </>
                 )}
               </div>

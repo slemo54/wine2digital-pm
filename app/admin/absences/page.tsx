@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -53,6 +53,7 @@ import {
 import { toast } from "react-hot-toast";
 import { buildDelimitedText, downloadCsvFile, isoDate } from "@/lib/export";
 import { getAbsenceTypeLabel } from "@/lib/absence-labels";
+import { useAdminAbsences, useDeleteAbsence } from "@/hooks/use-admin";
 
 type AbsenceStatus = "pending" | "approved" | "rejected";
 
@@ -153,10 +154,6 @@ export default function AdminAbsencesArchivePage() {
   const [take, setTake] = useState(50);
   const [page, setPage] = useState(0);
 
-  const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<AbsenceRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [counts, setCounts] = useState<Counts | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -182,41 +179,27 @@ export default function AdminAbsencesArchivePage() {
   });
   const [editSaving, setEditSaving] = useState(false);
 
+  // React Query hooks
+  const filters = {
+    q,
+    statusFilter: statusFilter === "all" ? undefined : statusFilter,
+    typeFilter: typeFilter === "all" ? undefined : typeFilter,
+    from: from || undefined,
+    to: to || undefined,
+    page,
+    take,
+  };
+
+  const { data, isLoading, refetch } = useAdminAbsences(filters);
+  const deleteAbsenceMutation = useDeleteAbsence();
+
+  const rows: AbsenceRow[] = data?.absences || [];
+  const total = data?.total || 0;
+  const counts: Counts | null = data?.counts || null;
+
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/login");
   }, [status, router]);
-
-  const queryString = useMemo(() => {
-    const sp = new URLSearchParams();
-    if (q.trim()) sp.set("q", q.trim());
-    if (statusFilter !== "all") sp.set("status", statusFilter);
-    if (typeFilter !== "all") sp.set("type", typeFilter);
-    if (from) sp.set("from", new Date(from).toISOString());
-    if (to) sp.set("to", new Date(to).toISOString());
-    if (createdFrom) sp.set("createdFrom", new Date(createdFrom).toISOString());
-    if (createdTo) sp.set("createdTo", new Date(createdTo).toISOString());
-    sp.set("take", String(take));
-    sp.set("skip", String(page * take));
-    sp.set("includeCounts", "true");
-    return sp.toString();
-  }, [q, statusFilter, typeFilter, from, to, createdFrom, createdTo, take, page]);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/absences?${queryString}`, { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Errore caricamento archivio");
-      setRows(Array.isArray(data.absences) ? data.absences : []);
-      setTotal(Number(data.total || 0));
-      setCounts(data.counts || null);
-      setSelectedIds([]);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Errore caricamento archivio");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleExport = async () => {
     const MAX_EXPORT = 5000;
@@ -248,7 +231,7 @@ export default function AdminAbsencesArchivePage() {
         params.set("take", String(take));
         params.set("skip", String(i * take));
         params.set("includeCounts", "false");
-        const res = await fetch(`/api/admin/absences?${params.toString()}`, { cache: "no-store" });
+        const res = await fetch(`/api/admin/absences?${params.toString()}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error((data as any)?.error || "Export fallito");
         const chunk = Array.isArray((data as any)?.absences) ? ((data as any).absences as AbsenceRow[]) : [];
@@ -300,14 +283,6 @@ export default function AdminAbsencesArchivePage() {
     }
   };
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    if (!isAdmin) return;
-    const t = setTimeout(load, 200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, isAdmin, queryString]);
-
   const toggleAllOnPage = (checked: boolean) => {
     if (!checked) return setSelectedIds([]);
     setSelectedIds(rows.map((r) => r.id));
@@ -316,7 +291,7 @@ export default function AdminAbsencesArchivePage() {
   const toggleOne = (id: string, checked: boolean) => {
     setSelectedIds((prev) => {
       if (checked) return prev.includes(id) ? prev : [...prev, id];
-      return prev.filter((x) => x !== id);
+      return prev.filter((x) => x !== x);
     });
   };
 
@@ -351,12 +326,9 @@ export default function AdminAbsencesArchivePage() {
 
     try {
       if (confirm.mode === "row" && confirm.payload.rowId) {
-        const res = await fetch(`/api/admin/absences/${confirm.payload.rowId}`, { method: "DELETE" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Eliminazione fallita");
-        toast.success("Eliminata");
+        await deleteAbsenceMutation.mutateAsync(confirm.payload.rowId);
         setConfirm({ open: false });
-        await load();
+        setSelectedIds((prev) => prev.filter((id) => id !== confirm.payload.rowId));
         return;
       }
 
@@ -370,7 +342,9 @@ export default function AdminAbsencesArchivePage() {
       if (!res.ok) throw new Error(data?.error || "Bulk delete fallito");
       toast.success(`Eliminate: ${data.deletedCount ?? 0}`);
       setConfirm({ open: false });
-      await load();
+      // Invalidate and refetch
+      refetch();
+      setSelectedIds([]);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Operazione fallita");
     }
@@ -444,7 +418,7 @@ export default function AdminAbsencesArchivePage() {
 
       toast.success("Richiesta aggiornata con successo");
       closeEditDialog();
-      await load();
+      refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Modifica fallita");
     } finally {
@@ -565,7 +539,7 @@ export default function AdminAbsencesArchivePage() {
                   <Button variant="outline" onClick={handleExport} className="h-10 gap-2" disabled={isExporting || total <= 0}>
                     {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export CSV
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={load} className="h-10 w-10 border border-border/50">
+                  <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-10 w-10 border border-border/50">
                     <RefreshCw className="w-4 h-4" />
                   </Button>
                 </div>
@@ -691,7 +665,7 @@ export default function AdminAbsencesArchivePage() {
               </div>
             </div>
 
-            {loading ? (
+            {isLoading ? (
               <div className="py-20 flex flex-col items-center justify-center gap-4 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p>Caricamento archivio...</p>
@@ -986,4 +960,3 @@ export default function AdminAbsencesArchivePage() {
     </div>
   );
 }
-

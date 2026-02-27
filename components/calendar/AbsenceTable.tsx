@@ -15,25 +15,7 @@ import { Edit2, Trash2, Check, X, Clock } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { cn } from "@/lib/utils";
 
-interface Absence {
-    id: string;
-    type: string;
-    startDate: string;
-    endDate: string;
-    isFullDay: boolean;
-    startTime?: string;
-    endTime?: string;
-    reason?: string;
-    status: string;
-    createdAt: string;
-    user: {
-        firstName: string;
-        lastName: string;
-        email: string;
-        name?: string;
-        department?: string | null;
-    };
-}
+import type { Absence } from "@/hooks/use-calendar";
 
 interface AbsenceTableProps {
     absences: Absence[];
@@ -61,7 +43,7 @@ export function AbsenceTable({
 
     const canApproveAbsence = (absence: Absence) => {
         if (isAdmin) return true;
-        if (isManager && viewerDepartment && absence.user.department === viewerDepartment) return true;
+        if (isManager && viewerDepartment && absence.user?.department === viewerDepartment) return true;
         return false;
     };
 
@@ -133,8 +115,8 @@ export function AbsenceTable({
                         const end = new Date(absence.endDate);
                         const days = differenceInDays(end, start) + 1;
                         const userName =
-                            absence.user.name ||
-                            `${absence.user.firstName} ${absence.user.lastName}`;
+                            absence.user?.name ||
+                            `${absence.user?.firstName || ''} ${absence.user?.lastName || ''}`.trim() || 'Unknown';
 
                         return (
                             <TableRow key={absence.id} className="group hover:bg-secondary/10">
@@ -148,7 +130,7 @@ export function AbsenceTable({
                                         <div className="flex flex-col">
                                             <span className="font-medium text-sm">{userName}</span>
                                             <span className="text-[10px] text-muted-foreground">
-                                                {absence.user.email}
+                                                {absence.user?.email}
                                             </span>
                                         </div>
                                     </div>

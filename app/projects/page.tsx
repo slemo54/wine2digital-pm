@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -18,6 +18,7 @@ import { EditProjectDialog } from "@/components/edit-project-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate } from "@/lib/export";
+import { useProjectsList } from "@/hooks/use-projects-list";
 
 interface Project {
   id: string;
@@ -78,16 +79,40 @@ export default function ProjectsPage() {
   const meId = (session?.user as any)?.id as string | undefined;
   const globalRole = String((session?.user as any)?.role || "member");
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [pagination, setPagination] = useState<PaginationInfo | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [isBulkLoading, setIsBulkLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  // Filters & sorting from URL
+  const page = parseInt(searchParams.get("page") || "1", 10);
+  const search = searchParams.get("search") || "";
+  const statusFilter = searchParams.get("status") || "";
+  const startDate = searchParams.get("startDate") || "";
+  const endDate = searchParams.get("endDate") || "";
+  const orderBy = (searchParams.get("orderBy") || "createdAt") as OrderBy;
+  const order = (searchParams.get("order") || "desc") as Order;
+
+  // Build filters object for React Query
+  const filters = useMemo(() => ({
+    page,
+    limit: 10,
+    search,
+    status: statusFilter,
+    orderBy,
+    order,
+  }), [page, search, statusFilter, orderBy, order]);
+
+  // Use React Query hook for fetching projects
+  const { data, isLoading, error: queryError, refetch } = useProjectsList(filters);
+  const projects: Project[] = data?.projects || [];
+  const pagination: PaginationInfo | null = data?.pagination ? {
+    ...data.pagination,
+    hasNext: data.pagination.page < data.pagination.totalPages,
+    hasPrev: data.pagination.page > 1,
+  } : null;
 
   const stats = useMemo(() => {
     const totalProjects = pagination?.total ?? projects.length;
@@ -101,63 +126,8 @@ export default function ProjectsPage() {
     return { totalProjects, running, avgCompletion, finishedTasks };
   }, [projects, pagination]);
 
-  // Filters & sorting from URL
-  const page = parseInt(searchParams.get("page") || "1", 10);
-  const search = searchParams.get("search") || "";
-  const statusFilter = searchParams.get("status") || "";
-  const startDate = searchParams.get("startDate") || "";
-  const endDate = searchParams.get("endDate") || "";
-  const orderBy = (searchParams.get("orderBy") || "createdAt") as OrderBy;
-  const order = (searchParams.get("order") || "desc") as Order;
-
-  const queryString = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set("page", page.toString());
-    params.set("limit", "10");
-    if (search) params.set("search", search);
-    if (statusFilter) params.set("status", statusFilter);
-    if (startDate) params.set("startDate", startDate);
-    if (endDate) params.set("endDate", endDate);
-    if (orderBy) params.set("orderBy", orderBy);
-    if (order) params.set("order", order);
-    return params.toString();
-  }, [page, search, statusFilter, startDate, endDate, orderBy, order]);
-
-  useEffect(() => {
-    if (status === "unauthenticated") {
-      router.push("/auth/login");
-    }
-  }, [status, router]);
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchProjects();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, queryString]);
-
-  const fetchProjects = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/projects?${queryString}`);
-      if (!response.ok) {
-        throw new Error("Failed to load projects");
-      }
-      const data = await response.json();
-      setProjects(data?.projects || []);
-      setPagination(data?.pagination || null);
-      setSelectedProjects(new Set());
-    } catch (err) {
-      setError("Impossibile caricare i progetti");
-      toast.error("Failed to load projects");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleProjectCreated = async () => {
-    await fetchProjects();
+    await refetch();
     setShowCreateDialog(false);
   };
 
@@ -328,7 +298,8 @@ export default function ProjectsPage() {
             : `Eliminati ${processed} progetti.`
         );
       }
-      await fetchProjects();
+      await refetch();
+      setSelectedProjects(new Set());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Impossibile completare l'azione");
     } finally {
@@ -342,7 +313,7 @@ export default function ProjectsPage() {
   };
 
   const handleProjectUpdated = async () => {
-    await fetchProjects();
+    await refetch();
     setShowEditDialog(false);
     setEditingProject(null);
   };
@@ -365,7 +336,7 @@ export default function ProjectsPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(String((data as any)?.error || "Archive failed"));
       toast.success("Progetto archiviato");
-      await fetchProjects();
+      await refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Archive failed");
     }
@@ -384,11 +355,25 @@ export default function ProjectsPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(String((data as any)?.error || "Delete failed"));
       toast.success("Progetto eliminato");
-      await fetchProjects();
+      await refetch();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Delete failed");
     }
   };
+
+  // Build query string for export (includes all filters + date range)
+  const queryString = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("page", page.toString());
+    params.set("limit", "10");
+    if (search) params.set("search", search);
+    if (statusFilter) params.set("status", statusFilter);
+    if (startDate) params.set("startDate", startDate);
+    if (endDate) params.set("endDate", endDate);
+    if (orderBy) params.set("orderBy", orderBy);
+    if (order) params.set("order", order);
+    return params.toString();
+  }, [page, search, statusFilter, startDate, endDate, orderBy, order]);
 
   const exportProjects = async (format: "csv" | "json") => {
     const total = pagination?.total ?? projects.length;
@@ -617,12 +602,19 @@ export default function ProjectsPage() {
     );
   };
 
-  if (status === "loading" || isLoading) {
+  // Handle session loading state
+  if (status === "loading") {
     return (
       <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
+  }
+
+  // Handle unauthenticated state
+  if (status === "unauthenticated") {
+    router.push("/auth/login");
+    return null;
   }
 
   return (
@@ -770,10 +762,17 @@ export default function ProjectsPage() {
             {/* Projects Table */}
             <Card className="border-border/50 bg-card/50 shadow-sm overflow-hidden">
               <CardContent className="p-0">
-                {error && (
-                  <div className="p-4 text-sm text-destructive bg-destructive/10 border-b border-destructive/20">{error}</div>
+                {queryError && (
+                  <div className="p-4 text-sm text-destructive bg-destructive/10 border-b border-destructive/20">
+                    Impossibile caricare i progetti
+                  </div>
                 )}
-                {projects.length === 0 && !error ? (
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                    <p>Loading projects...</p>
+                  </div>
+                ) : projects.length === 0 && !queryError ? (
                   <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                     <Folder className="h-12 w-12 mb-4 opacity-20" />
                     <p className="mb-4">No projects found</p>

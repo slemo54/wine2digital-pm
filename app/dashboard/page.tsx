@@ -14,6 +14,7 @@ import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
 import { markAllRead, markNotificationRead } from "@/lib/notifications-client";
+import { useDashboardData } from "@/hooks/use-dashboard";
 
 interface Project {
   id: string;
@@ -72,18 +73,22 @@ export default function DashboardPage() {
   const { data: session, status } = useSession() || {};
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoadingProjects, setIsLoadingProjects] = useState(true);
-  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
-  const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(true);
-  const [isLoadingNotifications, setIsLoadingNotifications] = useState(true);
-
-  const [myTasks, setMyTasks] = useState<TaskListItem[]>([]);
-  const [mySubtasks, setMySubtasks] = useState<SubtaskListItem[]>([]);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [unreadCount, setUnreadCount] = useState<number>(0);
-  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
-  const [isLoadingActivity, setIsLoadingActivity] = useState(true);
+  
+  // React Query hook per tutti i dati della dashboard
+  const {
+    projects,
+    tasks,
+    subtasks,
+    notifications,
+    activity,
+    isLoading,
+    isLoadingProjects,
+    isLoadingTasks,
+    isLoadingSubtasks,
+    isLoadingNotifications,
+    isLoadingActivity,
+    refetch,
+  } = useDashboardData();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showCreateTaskDialog, setShowCreateTaskDialog] = useState(false);
@@ -105,107 +110,36 @@ export default function DashboardPage() {
     }
   }, [status, router]);
 
-  useEffect(() => {
-    if (status === "authenticated") {
-      fetchProjects();
-      fetchMyTasks();
-      fetchMySubtasks();
-      fetchNotifications();
-      fetchActivity();
-    }
-  }, [status]);
-
-  const fetchProjects = async () => {
-    try {
-      const response = await fetch("/api/projects");
-      const data = await response.json();
-      setProjects(data?.projects || []);
-    } catch (error) {
-      toast.error("Failed to load projects");
-    } finally {
-      setIsLoadingProjects(false);
-    }
-  };
-
-  const fetchMyTasks = async () => {
-    try {
-      // Keep this aligned with /tasks?scope=assigned (pageSize=100)
-      const response = await fetch("/api/tasks?scope=assigned&page=1&pageSize=100&view=dashboard");
-      const data = await response.json();
-      setMyTasks(Array.isArray(data?.tasks) ? data.tasks : []);
-    } catch {
-      setMyTasks([]);
-    } finally {
-      setIsLoadingTasks(false);
-    }
-  };
-
-  const fetchMySubtasks = async () => {
-    try {
-      // Keep this aligned with /tasks?scope=assigned subtasks fetch (pageSize=100)
-      const response = await fetch("/api/subtasks?scope=assigned&page=1&pageSize=100");
-      const data = await response.json();
-      setMySubtasks(Array.isArray(data?.subtasks) ? data.subtasks : []);
-    } catch {
-      setMySubtasks([]);
-    } finally {
-      setIsLoadingSubtasks(false);
-    }
-  };
-
-  const fetchNotifications = async () => {
-    try {
-      const response = await fetch("/api/notifications");
-      const data = await response.json();
-      setNotifications(Array.isArray(data?.notifications) ? data.notifications : []);
-      setUnreadCount(Number.isFinite(data?.unreadCount) ? data.unreadCount : 0);
-    } catch {
-      setNotifications([]);
-      setUnreadCount(0);
-    } finally {
-      setIsLoadingNotifications(false);
-    }
-  };
+  // Estrai dati dalle risposte React Query
+  const projectsList = projects?.projects || [];
+  const myTasks: TaskListItem[] = tasks?.tasks || [];
+  const mySubtasks: SubtaskListItem[] = subtasks?.subtasks || [];
+  const notificationsList: NotificationItem[] = notifications?.notifications || [];
+  const unreadCount = notifications?.unreadCount || 0;
+  const activityEvents: ActivityEvent[] = activity?.events || [];
 
   const openNotification = async (n: NotificationItem) => {
     if (!n?.link) return;
     try {
-      const r = await markNotificationRead(n.id);
-      setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
-      if (typeof r.unreadCount === "number") setUnreadCount(r.unreadCount);
-      else if (!n.isRead) setUnreadCount((prev) => Math.max(0, prev - 1));
+      await markNotificationRead(n.id);
+      // Invalida la cache delle notifiche per aggiornare lo stato
+      refetch();
     } finally {
       router.push(n.link);
     }
   };
 
-  const fetchActivity = async () => {
-    try {
-      const response = await fetch("/api/activity");
-      const data = await response.json();
-      setActivityEvents(Array.isArray(data?.events) ? data.events : []);
-    } catch {
-      setActivityEvents([]);
-    } finally {
-      setIsLoadingActivity(false);
-    }
-  };
-
   const handleProjectCreated = () => {
-    fetchProjects();
+    refetch();
     setShowCreateDialog(false);
   };
 
   const handleTaskCreated = () => {
-    fetchMyTasks();
-    fetchMySubtasks();
-    fetchProjects();
-    fetchNotifications();
-    fetchActivity();
+    refetch();
     setShowCreateTaskDialog(false);
   };
 
-  if (status === "loading" || isLoadingProjects) {
+  if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen min-h-[100dvh] flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -475,7 +409,7 @@ export default function DashboardPage() {
                   <div className="text-sm text-muted-foreground py-8 text-center">All caught up!</div>
                 ) : (
                   <div className="space-y-3">
-                    {notifications.slice(0, 5).map((n) => (
+                    {notificationsList.slice(0, 5).map((n) => (
                       <div key={n.id} className={`p-3 rounded-lg border ${n.isRead ? 'bg-muted/20 border-transparent' : 'bg-card border-l-2 border-l-orange-500 border-y border-r border-border shadow-sm'}`}>
                         <div className="flex justify-between items-start gap-2 mb-1">
                           <span className="font-semibold text-sm line-clamp-1">{n.title}</span>
@@ -505,7 +439,7 @@ export default function DashboardPage() {
                       onClick={async () => {
                         try {
                           await markAllRead();
-                          fetchNotifications();
+                          refetch();
                         } catch {}
                       }}
                       disabled={unreadCount === 0}
@@ -547,9 +481,7 @@ export default function DashboardPage() {
           taskId={selectedTaskId}
           initialSubtaskId={selectedSubtaskId || undefined}
           onUpdate={() => {
-            fetchMyTasks();
-            fetchMySubtasks();
-            fetchActivity();
+            refetch();
           }}
         />
       )}

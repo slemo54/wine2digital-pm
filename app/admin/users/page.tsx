@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Shield } from "lucide-react";
-import { toast } from "react-hot-toast";
 import { DEPARTMENTS } from "@/lib/departments";
+import { useAdminUsers, useUpdateAdminUser } from "@/hooks/use-admin";
 
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned__";
 
@@ -42,56 +42,59 @@ export default function AdminUsersPage() {
   const isAdmin = role === "admin";
 
   const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [activeFilter, setActiveFilter] = useState("all");
-  const [loading, setLoading] = useState(true);
-  const [users, setUsers] = useState<AdminUser[]>([]);
+
+  // Debounce search query to 500ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQ(q);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [q]);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/auth/login");
   }, [status, router]);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const sp = new URLSearchParams();
-      if (q.trim()) sp.set("q", q.trim());
-      if (roleFilter !== "all") sp.set("role", roleFilter);
-      if (activeFilter !== "all") sp.set("active", activeFilter);
-      const res = await fetch(`/api/admin/users?${sp.toString()}`, { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Errore caricamento utenti");
-      setUsers(Array.isArray(data.users) ? data.users : []);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Errore caricamento utenti");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const filters = useMemo(() => ({
+    q: debouncedQ.trim() || undefined,
+    role: roleFilter !== "all" ? roleFilter : undefined,
+    active: activeFilter !== "all" ? activeFilter : undefined,
+  }), [debouncedQ, roleFilter, activeFilter]);
 
-  useEffect(() => {
-    if (status !== "authenticated") return;
-    if (!isAdmin) return;
-    const t = setTimeout(load, 200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, isAdmin, q, roleFilter, activeFilter]);
+  const { data, isLoading, refetch } = useAdminUsers(filters);
+  const updateMutation = useUpdateAdminUser();
+
+  const users = useMemo(() => {
+    if (!data?.users) return [];
+    // Map the API response to match our local AdminUser type
+    return data.users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      firstName: null,
+      lastName: null,
+      department: u.department,
+      role: u.role,
+      isActive: u.active,
+      calendarEnabled: false, // Default value as API doesn't return this
+      disabledAt: null,
+      createdAt: u.createdAt,
+      updatedAt: u.createdAt,
+    })) as AdminUser[];
+  }, [data]);
 
   const updateUser = async (id: string, patch: { role?: string; isActive?: boolean; department?: string | null; calendarEnabled?: boolean }) => {
-    try {
-      const res = await fetch(`/api/admin/users/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Update fallito");
-      setUsers((prev) => prev.map((u) => (u.id === id ? data.user : u)));
-      toast.success("Aggiornato");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Errore update");
-      await load();
-    }
+    // Map our patch to match the API expectations
+    const apiPatch: Partial<{ role: string; active: boolean; department: string | null; calendarEnabled: boolean }> = {};
+    if (patch.role !== undefined) apiPatch.role = patch.role;
+    if (patch.isActive !== undefined) apiPatch.active = patch.isActive;
+    if (patch.department !== undefined) apiPatch.department = patch.department;
+    if (patch.calendarEnabled !== undefined) apiPatch.calendarEnabled = patch.calendarEnabled;
+
+    updateMutation.mutate({ id, data: apiPatch });
   };
 
   const header = useMemo(() => {
@@ -161,13 +164,13 @@ export default function AdminUsersPage() {
                 </Select>
               </div>
               <div className="md:col-span-1">
-                <Button variant="outline" onClick={load}>
+                <Button variant="outline" onClick={() => refetch()}>
                   Aggiorna
                 </Button>
               </div>
             </div>
 
-            {loading ? (
+            {isLoading ? (
               <div className="py-8 flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Caricamento…
               </div>
@@ -277,5 +280,3 @@ export default function AdminUsersPage() {
     </div>
   );
 }
-
-
