@@ -40,9 +40,10 @@ export function useMarkAllRead() {
 
   return useMutation({
     mutationFn: async () => {
-      const res = await fetch('/api/notifications/mark-all-read', {
-        method: 'POST',
+      const res = await fetch('/api/notifications', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ markAllRead: true }),
       });
       if (!res.ok) throw new Error('Failed to mark all notifications as read');
       return res.json();
@@ -55,13 +56,17 @@ export function useMarkAllRead() {
       await queryClient.cancelQueries({ queryKey: ['dashboard', 'notifications'] });
 
       // Snapshot previous values
-      const previousNotifications = queryClient.getQueryData<Notification[]>(['notifications']);
+      const previousNotifications = queryClient.getQueryData<NotificationsResponse>(['notifications']);
       const previousDashboardNotifications = queryClient.getQueryData(['dashboard', 'notifications']);
 
       // Optimistically update all notifications to read
-      queryClient.setQueryData<Notification[]>(['notifications'], (old) => {
+      queryClient.setQueryData<NotificationsResponse>(['notifications'], (old) => {
         if (!old) return old;
-        return old.map((notification) => ({ ...notification, isRead: true }));
+        return {
+          ...old,
+          unreadCount: 0,
+          notifications: old.notifications.map((n) => ({ ...n, isRead: true })),
+        };
       });
 
       queryClient.setQueryData(['dashboard', 'notifications'], (old: any) => {
@@ -101,9 +106,10 @@ export function useMarkOneRead(id: string) {
 
   return useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/notifications/${id}/read`, {
-        method: 'POST',
+      const res = await fetch('/api/notifications', {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationId: id }),
       });
       if (!res.ok) throw new Error('Failed to mark notification as read');
       return res.json();
@@ -116,15 +122,20 @@ export function useMarkOneRead(id: string) {
       await queryClient.cancelQueries({ queryKey: ['dashboard', 'notifications'] });
 
       // Snapshot previous values
-      const previousNotifications = queryClient.getQueryData<Notification[]>(['notifications']);
+      const previousNotifications = queryClient.getQueryData<NotificationsResponse>(['notifications']);
       const previousDashboardNotifications = queryClient.getQueryData(['dashboard', 'notifications']);
 
       // Optimistically update single notification to read
-      queryClient.setQueryData<Notification[]>(['notifications'], (old) => {
+      queryClient.setQueryData<NotificationsResponse>(['notifications'], (old) => {
         if (!old) return old;
-        return old.map((notification) =>
-          notification.id === id ? { ...notification, isRead: true } : notification
+        const notifications = old.notifications.map((n) =>
+          n.id === id ? { ...n, isRead: true } : n
         );
+        return {
+          ...old,
+          notifications,
+          unreadCount: notifications.filter((n) => !n.isRead).length,
+        };
       });
 
       queryClient.setQueryData(['dashboard', 'notifications'], (old: any) => {
