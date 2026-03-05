@@ -405,7 +405,7 @@ export default function DashboardPage() {
                   <div className="text-sm text-muted-foreground flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading…
                   </div>
-                ) : notifications.length === 0 ? (
+                ) : notificationsList.length === 0 ? (
                   <div className="text-sm text-muted-foreground py-8 text-center">All caught up!</div>
                 ) : (
                   <div className="space-y-3">
