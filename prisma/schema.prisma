@@ -169,6 +169,9 @@ model Project {
   taskLists TaskList[]
   tags      ProjectTag[]
   customFields CustomField[]
+
+  @@index([creatorId])
+  @@index([status])
 }
 
 model TaskList {
