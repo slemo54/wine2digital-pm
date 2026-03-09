@@ -1,18 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
 /**
- * Find users who should be notified about a new absence request (pending status)
- * Returns only user IDs for in-app notifications
- */
-export async function findAbsenceRequestRecipients(opts: {
-  requesterUserId: string;
-  requesterDepartment?: string | null;
-}): Promise<string[]> {
-  const recipients = await findAbsenceRequestRecipientsWithEmails(opts);
-  return recipients.map((r) => r.id);
-}
-
-/**
  * Find users who should be notified about a new absence request
  * Returns full user objects with email for email notifications
  *
