@@ -43,7 +43,7 @@ export async function POST(
         // but with potentially large files, we might want to do it in chunks.
         // For simplicity, we'll do it sequentially for now or a small balance.
 
-        for (const record of records) {
+        for (const record of records as Record<string, string>[]) {
             const title = record[Object.keys(mapping).find(h => mapping[h] === "title")!] || "Untitled Task";
             const description = record[Object.keys(mapping).find(h => mapping[h] === "description")!] || "";
             const status = (record[Object.keys(mapping).find(h => mapping[h] === "status")!] || "todo").toLowerCase();

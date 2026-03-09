@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <Sheet>
           <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" aria-label="Apri menu" title="Apri menu">
               <Menu className="h-6 w-6" />
             </Button>
           </SheetTrigger>
