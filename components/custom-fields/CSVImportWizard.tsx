@@ -90,12 +90,14 @@ export function CSVImportWizard({ open, onClose, projectId, onSuccess }: CSVImpo
             // 1. First, create necessary custom fields
             const customFieldMappings = Object.entries(mapping).filter(([_, target]) => target === "custom");
 
-            for (const [header, _] of customFieldMappings) {
-                await fetch(`/api/projects/${projectId}/custom-fields`, {
-                    method: 'POST',
-                    body: JSON.stringify({ name: header, type: 'text' })
-                }).then(res => res.json().catch(() => ({})));
-            }
+            await Promise.all(
+                customFieldMappings.map(([header, _]) =>
+                    fetch(`/api/projects/${projectId}/custom-fields`, {
+                        method: 'POST',
+                        body: JSON.stringify({ name: header, type: 'text' })
+                    }).then(res => res.json().catch(() => ({})))
+                )
+            );
 
             // 2. Read full file and send to backend for processing
             const reader = new FileReader();
