@@ -319,6 +319,7 @@ export default function CalendarPage() {
                 size="sm"
                 onClick={() => setViewMode("calendar")}
                 title="Calendar View"
+                aria-label="Calendar View"
               >
                 <CalendarDays className="h-4 w-4" />
               </Button>
@@ -327,6 +328,7 @@ export default function CalendarPage() {
                 size="sm"
                 onClick={() => setViewMode("list")}
                 title="List View"
+                aria-label="List View"
               >
                 <LayoutList className="h-4 w-4" />
               </Button>
@@ -386,7 +388,7 @@ export default function CalendarPage() {
                     </div>
 
                     <div className="flex items-center justify-between py-2">
-                      <Label htmlFor="isFullDay" className="cursor-pointer">Tutto il giorno</Label>
+                      <Label htmlFor="isFullDay" className="cursor-pointer">Full Day</Label>
                       <Switch
                         id="isFullDay"
                         checked={newAbsence.isFullDay}
@@ -395,12 +397,12 @@ export default function CalendarPage() {
                     </div>
 
                     <div className="grid gap-2">
-                      <Label htmlFor="reason">Dettagli di Orario (tutto il giorno - da ora a ora)</Label>
+                      <Label htmlFor="reason">Schedule Details (full day - from time to time)</Label>
                       <Textarea
                         id="reason"
                         value={newAbsence.reason}
                         onChange={(e) => setNewAbsence({ ...newAbsence, reason: e.target.value })}
-                        placeholder="Es: Tutto il giorno, oppure Dalle 14:30 alle 15:00"
+                        placeholder="Ex: Full day, or from 2:30 PM to 3:00 PM"
                         rows={3}
                       />
                     </div>
@@ -484,11 +486,25 @@ export default function CalendarPage() {
             <Card className="lg:col-span-8 shadow-md border-none overflow-hidden">
               <CardHeader className="bg-muted/50 border-b">
                 <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl">Team Calendar</CardTitle>
-                    <CardDescription>
-                      Overview of all absence requests
-                    </CardDescription>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <CardTitle className="text-xl">Team Calendar</CardTitle>
+                      <CardDescription>
+                        Overview of all absence requests
+                      </CardDescription>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => {
+                        const today = new Date();
+                        setVisibleMonth(today);
+                        setSelectedDay(today);
+                      }}
+                    >
+                      Today
+                    </Button>
                   </div>
                   <div className="flex flex-wrap items-center gap-4 text-xs font-medium uppercase tracking-wider">
                     <div className="flex items-center gap-1.5">
@@ -552,9 +568,28 @@ export default function CalendarPage() {
               </CardHeader>
               <CardContent className="p-6 flex-1 overflow-auto max-h-[500px] space-y-4">
                 {selectedDay && absencesForSelectedDay.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-6 sm:p-8 opacity-60">
-                    <CalendarIcon className="h-12 w-14 mb-4 text-muted-foreground/30" />
-                    <p className="text-sm text-muted-foreground italic">No absences scheduled for this date.</p>
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 sm:p-8 space-y-4">
+                    <div className="opacity-40 flex flex-col items-center">
+                      <CalendarIcon className="h-12 w-14 mb-4 text-muted-foreground/30" />
+                      <p className="text-sm text-muted-foreground italic">No absences scheduled for this date.</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => {
+                        const dateStr = format(selectedDay, "yyyy-MM-dd");
+                        setNewAbsence({
+                          ...newAbsence,
+                          startDate: dateStr,
+                          endDate: dateStr,
+                        });
+                        setIsDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="h-3 w-3 mr-2" />
+                      Request for this day
+                    </Button>
                   </div>
                 ) : null}
 
