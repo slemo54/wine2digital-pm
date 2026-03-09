@@ -173,7 +173,7 @@ export function CSVImportWizard({ open, onClose, projectId, onSuccess }: CSVImpo
                                 <AlertCircle className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
                                 <div className="text-sm text-blue-800 dark:text-blue-300">
                                     Mappa le colonne del tuo CSV ai campi della piattaforma.
-                                    Le colonne mappate come <strong>"Campo Personalizzato"</strong> verranno create automaticamente se non esistono.
+                                    Le colonne mappate come <strong>&quot;Campo Personalizzato&quot;</strong> verranno create automaticamente se non esistono.
                                 </div>
                             </div>
 

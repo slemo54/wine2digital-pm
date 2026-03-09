@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@next/swc-wasm-nodejs": "13.5.1",
+    "@types/csv-parse": "^1.2.5",
     "@types/node": "20.6.2",
     "@types/react": "18.2.22",
     "@types/react-dom": "18.2.7",
@@ -92,6 +93,7 @@
     "cmdk": "1.0.0",
     "cookie": "1.0.2",
     "csv": "6.3.11",
+    "csv-parse": "^6.1.0",
     "date-fns": "3.6.0",
     "dayjs": "1.11.13",
     "dotenv": "16.5.0",
