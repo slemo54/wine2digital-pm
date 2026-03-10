@@ -18,18 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProjectMembersPanel } from "@/components/project-members-panel";
 import { TaskDetailModal } from "@/components/task-detail-modal";
 import { CustomFieldDefinitionsManager } from "@/components/custom-fields/CustomFieldDefinitionsManager";
-
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  status: string;
-  startDate?: string;
-  endDate?: string;
-  creator: any;
-  members: any[];
-  tasks: any[];
-}
+import { useProject } from "@/hooks/use-project";
 
 export default function ProjectPage() {
   const { data: session, status } = useSession() || {};
@@ -51,48 +40,21 @@ export default function ProjectPage() {
   const sessionUserId = (session?.user as any)?.id as string | undefined;
   const sessionGlobalRole = (session?.user as any)?.role as string | undefined;
 
-  const [project, setProject] = useState<Project | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isFetching, setIsFetching] = useState(false);
+  // React Query hook per caching e background updates
+  const { data: project, isLoading, error, refetch } = useProject(projectId);
+
+  useEffect(() => {
+    if (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to load project");
+      router.push("/dashboard");
+    }
+  }, [error, router]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
       router.push("/auth/login");
     }
   }, [status, router]);
-
-  useEffect(() => {
-    if (status === "authenticated" && projectId) {
-      fetchProject();
-    }
-  }, [status, projectId]);
-
-  const fetchProject = async () => {
-    // Prevent concurrent fetches
-    if (isFetching) return;
-
-    setIsFetching(true);
-    try {
-      const response = await fetch(`/api/projects/${projectId}`, {
-        cache: 'no-store',
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data?.error || "Failed to load project");
-      }
-
-      setProject(data?.project);
-    } catch (error) {
-      toast.error("Failed to load project");
-      if (isLoading) {
-        router.push("/dashboard");
-      }
-    } finally {
-      setIsLoading(false);
-      setIsFetching(false);
-    }
-  };
 
   const getInitials = (name?: string | null) => {
     if (!name) return "U";
@@ -164,7 +126,7 @@ export default function ProjectPage() {
                     members={project.members || []}
                     sessionUserId={sessionUserId || null}
                     sessionGlobalRole={sessionGlobalRole || null}
-                    onChanged={fetchProject}
+                    onChanged={() => refetch()}
                   />
                 </div>
               </div>
@@ -231,7 +193,7 @@ export default function ProjectPage() {
             onClose={() => router.replace(`/project/${projectId}`)}
             taskId={taskFromSearch}
             projectId={projectId}
-            onUpdate={fetchProject}
+            onUpdate={() => refetch()}
           />
         ) : null}
       </div>
