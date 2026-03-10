@@ -72,6 +72,7 @@ export function AbsenceFilters({
                     className="self-end sm:self-auto"
                     onClick={onClear}
                     title="Clear filters"
+                    aria-label="Clear filters"
                 >
                     <FilterX className="h-4 w-4" />
                 </Button>

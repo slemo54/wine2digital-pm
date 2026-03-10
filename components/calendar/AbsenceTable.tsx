@@ -179,6 +179,8 @@ export function AbsenceTable({
                                                         size="icon"
                                                         className="h-8 w-8"
                                                         onClick={() => onEdit(absence)}
+                                                        title="Edit absence"
+                                                        aria-label="Edit absence"
                                                     >
                                                         <Edit2 className="h-4 w-4" />
                                                     </Button>
@@ -190,6 +192,8 @@ export function AbsenceTable({
                                                             size="icon"
                                                             className="h-8 w-8 text-success hover:text-success/90"
                                                             onClick={() => onApprove(absence.id)}
+                                                            title="Approve absence"
+                                                            aria-label="Approve absence"
                                                         >
                                                             <Check className="h-4 w-4" />
                                                         </Button>
@@ -198,6 +202,8 @@ export function AbsenceTable({
                                                             size="icon"
                                                             className="h-8 w-8 text-destructive hover:text-destructive/90"
                                                             onClick={() => onReject(absence.id)}
+                                                            title="Reject absence"
+                                                            aria-label="Reject absence"
                                                         >
                                                             <X className="h-4 w-4" />
                                                         </Button>
@@ -209,6 +215,8 @@ export function AbsenceTable({
                                                         size="icon"
                                                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                                         onClick={() => onDelete(absence.id)}
+                                                        title="Delete absence"
+                                                        aria-label="Delete absence"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
                                                     </Button>
