@@ -2196,6 +2196,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               e.preventDefault();
                               deleteAttachment(attachment.id);
                             }}
+                            aria-label="Elimina allegato"
+                            title="Elimina allegato"
                           >
                             <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                           </Button>
@@ -2720,6 +2722,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                             e.preventDefault();
                             deleteSubtaskAttachment(a.id);
                           }}
+                          aria-label="Elimina allegato"
+                          title="Elimina allegato"
                         >
                           <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                         </Button>
