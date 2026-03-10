@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List, ListChecks } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
@@ -986,7 +986,7 @@ export function ProjectTaskLists(props: {
                             }}
                           >
                             <Plus className="h-4 w-4 mr-2" />
-                            Add task
+                            Aggiungi task
                           </Button>
                           <Button
                             size="icon"
@@ -1019,7 +1019,29 @@ export function ProjectTaskLists(props: {
                     </AccordionTrigger>
                     <AccordionContent className="px-4">
                       {!isOpen ? null : listTasks.length === 0 ? (
-                        <div className="text-sm text-muted-foreground py-3">Nessuna task in questa categoria.</div>
+                        <div className="flex flex-col items-center justify-center py-10 px-4 text-center border-2 border-dashed rounded-xl border-muted-foreground/10 bg-muted/5 mt-2 mb-4">
+                          <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mb-4">
+                            <ListChecks className="h-6 w-6 text-muted-foreground/40" />
+                          </div>
+                          <p className="text-sm font-medium text-foreground mb-1">Nessuna task in questa categoria</p>
+                          <p className="text-xs text-muted-foreground mb-6 max-w-[240px]">
+                            Inizia ad organizzare il lavoro aggiungendo la prima task in questa lista.
+                          </p>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-background shadow-sm hover:bg-accent h-9"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDefaultListIdForNewTask(l.id);
+                              setShowCreateTask(true);
+                            }}
+                          >
+                            <Plus className="h-4 w-4 mr-2" />
+                            Aggiungi la prima task
+                          </Button>
+                        </div>
                       ) : (
                         <SortableContext items={listTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                           <div className="space-y-2 min-h-[10px]">
