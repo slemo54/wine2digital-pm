@@ -4,6 +4,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getClientLocale, t } from "@/lib/i18n";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Calendar, AlertCircle, Clock, MoreVertical, MessageCircle, Paperclip } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -47,6 +48,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const queryClient = useQueryClient();
   const prefetchTask = usePrefetchTaskFull();
+  const locale = getClientLocale();
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -129,8 +131,18 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         style={style}
         {...attributes}
         {...listeners}
-        className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary"
+        className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary focus-visible:ring-2 focus-visible:ring-primary focus-visible:outline-none"
         onMouseEnter={() => prefetchTask(task.id)}
+        onKeyDown={(e) => {
+          // Open detail modal on Enter.
+          // We DO NOT handle Space here to avoid breaking dnd-kit's keyboard sensor.
+          // We check e.target === e.currentTarget to ensure we only trigger on the card itself,
+          // not when Enter is pressed on inner interactive elements like the dropdown menu.
+          if (e.key === "Enter" && e.target === e.currentTarget) {
+            e.preventDefault();
+            setShowDetailModal(true);
+          }
+        }}
       >
         <CardContent 
           className="p-4 space-y-3"
@@ -154,6 +166,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  aria-label={t(locale, "common.moreOptions")}
+                  title={t(locale, "common.moreOptions")}
                 >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
