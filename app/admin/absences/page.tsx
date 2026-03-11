@@ -539,7 +539,7 @@ export default function AdminAbsencesArchivePage() {
                   <Button variant="outline" onClick={handleExport} className="h-10 gap-2" disabled={isExporting || total <= 0}>
                     {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export CSV
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-10 w-10 border border-border/50">
+                  <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-10 w-10 border border-border/50" aria-label="Aggiorna dati" title="Aggiorna dati">
                     <RefreshCw className="w-4 h-4" />
                   </Button>
                 </div>
@@ -747,6 +747,8 @@ export default function AdminAbsencesArchivePage() {
                                   size="icon"
                                   className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10"
                                   onClick={() => openEditDialog(r)}
+                                  aria-label="Modifica richiesta"
+                                  title="Modifica richiesta"
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
@@ -762,6 +764,8 @@ export default function AdminAbsencesArchivePage() {
                                       payload: { rowId: r.id },
                                     })
                                   }
+                                  aria-label="Elimina richiesta"
+                                  title="Elimina richiesta"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </Button>
