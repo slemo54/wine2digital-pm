@@ -193,9 +193,10 @@ export function useApproveAbsence() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/admin/absences/${id}/approve`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/absences/${id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'approved' }),
       });
       if (!res.ok) {
         const error = await res.json();
@@ -248,9 +249,10 @@ export function useRejectAbsence() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/admin/absences/${id}/reject`, {
-        method: 'PATCH',
+      const res = await fetch(`/api/absences/${id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'rejected' }),
       });
       if (!res.ok) {
         const error = await res.json();
