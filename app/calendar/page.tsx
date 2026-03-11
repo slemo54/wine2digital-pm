@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,7 @@ export default function CalendarPage() {
     setCounts(absencesData.counts);
   }
 
+  const queryClient = useQueryClient();
   const createAbsenceMutation = useCreateAbsence();
   const approveAbsenceMutation = useApproveAbsence();
   const rejectAbsenceMutation = useRejectAbsence();
@@ -167,6 +169,7 @@ export default function CalendarPage() {
 
         if (response.ok) {
           toast.success("Absence updated successfully");
+          queryClient.invalidateQueries({ queryKey: ['calendar-absences'] });
           handleDialogChange(false);
         } else {
           throw new Error(data.error || "Failed to submit");
@@ -177,7 +180,10 @@ export default function CalendarPage() {
           type: newAbsence.type,
           startDate: newAbsence.startDate,
           endDate: newAbsence.endDate,
-          notes: newAbsence.reason,
+          isFullDay: newAbsence.isFullDay,
+          startTime: newAbsence.startTime,
+          endTime: newAbsence.endTime,
+          reason: newAbsence.reason,
         });
         handleDialogChange(false);
       }
