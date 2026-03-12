@@ -243,6 +243,8 @@ export function SubtasksTab({ taskId, subtasks, projectMembers, onUpdate, canEdi
                                                         size="sm"
                                                         className="h-6 w-6 p-0 hover:bg-muted"
                                                         onClick={() => toggleExpand(st.id)}
+                                                        aria-label={expandedSubtasks.has(st.id) ? "Comprimi subtask" : "Espandi subtask"}
+                                                        title={expandedSubtasks.has(st.id) ? "Comprimi subtask" : "Espandi subtask"}
                                                     >
                                                         {expandedSubtasks.has(st.id) ? (
                                                             <ChevronUp className="w-4 h-4 text-muted-foreground" />
@@ -283,6 +285,8 @@ export function SubtasksTab({ taskId, subtasks, projectMembers, onUpdate, canEdi
                                                 className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                                                 onClick={() => handleDelete(st.id)}
                                                 disabled={!canEdit}
+                                                aria-label="Elimina subtask"
+                                                title="Elimina subtask"
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
