@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
+import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 
 type ProjectLite = { id: string; name: string };
 type ProjectMemberLite = { user: { id: string; firstName?: string | null; lastName?: string | null; name?: string | null; email: string } };
@@ -161,7 +162,7 @@ export function CreateTaskGlobalDialog(props: {
         const data = await res.json().catch(() => ({}));
         throw new Error(data?.error || "Creazione task fallita");
       }
-      toast.success("Task creato");
+      toast.success("Task creata");
       setFormData({
         title: "",
         description: "",
@@ -224,7 +225,7 @@ export function CreateTaskGlobalDialog(props: {
 
             <div className="space-y-2">
               <Label htmlFor="description">Descrizione</Label>
-              <Input
+              <AutosizeTextarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
