@@ -212,43 +212,24 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   // Derive data from React Query
   // Note: API returns { task: { subtasks, comments, attachments, activities }, meta }
   const task = taskFullData?.task || null;
-  const subtasks: Subtask[] = task?.subtasks || [];
-  const comments: Comment[] = task?.comments || [];
-  const attachments: Attachment[] = task?.attachments || [];
-  const activityEvents = task?.activities || [];
+  const subtasks: Subtask[] = useMemo(() => task?.subtasks || [], [task?.subtasks]);
+  const comments: Comment[] = useMemo(() => task?.comments || [], [task?.comments]);
+  const attachments: Attachment[] = useMemo(() => task?.attachments || [], [task?.attachments]);
+  const activityEvents = useMemo(() => task?.activities || [], [task?.activities]);
   
-  // Fetch project lists and tags separately (project-level data)
-  const effectiveProjectId = task?.projectId || projectId;
-  const { data: projectListsData } = useQuery({
-    queryKey: ['project-lists', effectiveProjectId],
-    queryFn: async () => {
-      if (!effectiveProjectId) return { lists: [] };
-      const res = await fetch(`/api/projects/${effectiveProjectId}/lists`);
-      if (!res.ok) throw new Error('Failed to fetch lists');
-      return res.json();
-    },
-    enabled: !!effectiveProjectId && open,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
-  
-  const { data: projectTagsData } = useQuery({
-    queryKey: ['project-tags', effectiveProjectId],
-    queryFn: async () => {
-      if (!effectiveProjectId) return { tags: [] };
-      const res = await fetch(`/api/projects/${effectiveProjectId}/tags`);
-      if (!res.ok) throw new Error('Failed to fetch tags');
-      return res.json();
-    },
-    enabled: !!effectiveProjectId && open,
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
-  
-  const projectLists = projectListsData?.lists?.map((l: any) => ({ id: String(l.id), name: String(l.name) })) || [];
-  const projectTags = projectTagsData?.tags?.map((t: any) => ({ 
-    id: String(t.id), 
-    name: String(t.name), 
-    color: t.color ? String(t.color) : null 
-  })) || [];
+  // Project lists and tags are now included in the unified taskFullData
+  const projectLists = useMemo(() =>
+    task?.project?.taskLists?.map((l: any) => ({ id: String(l.id), name: String(l.name) })) || [],
+    [task?.project?.taskLists]
+  );
+  const projectTags = useMemo(() =>
+    task?.project?.tags?.map((t: any) => ({
+      id: String(t.id),
+      name: String(t.name),
+      color: t.color ? String(t.color) : null
+    })) || [],
+    [task?.project?.tags]
+  );
   
   const [activeTab, setActiveTab] = useState<"subtasks" | "extra" | "attachments" | "comments" | "activity">("subtasks");
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
@@ -436,7 +417,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
         }
       } catch {}
     }
-  }, [taskId, subtasks.length, queryClient]);
+  }, [taskId, subtasks, queryClient]);
 
   // Use React Query mutation for task updates
   const updateTaskMeta = async (
@@ -1109,7 +1090,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     if (!u) return null;
     return u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email;
   };
-  const currentAssigneeIds = Array.isArray(task?.assignees) ? task.assignees.map((a: any) => a.userId) : [];
+  const currentAssigneeIds = useMemo(() =>
+    Array.isArray(task?.assignees) ? task.assignees.map((a: any) => a.userId) : [],
+    [task?.assignees]
+  );
   const currentAssigneeKey = currentAssigneeIds.join(",");
 
   useEffect(() => {
@@ -1117,7 +1101,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     setDraftAssigneeIds(currentAssigneeIds);
     setTaskDraftTitle(String(task?.title || ""));
     setIsEditingTaskTitle(false);
-  }, [taskId, task?.updatedAt, currentAssigneeKey, task]);
+  }, [taskId, task?.updatedAt, currentAssigneeKey, task, currentAssigneeIds]);
 
   if (isLoading || isPending) {
     return (
@@ -1225,8 +1209,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       .toUpperCase();
 
   const refreshTags = async () => {
-    if (!currentProjectId) return;
-    queryClient.invalidateQueries({ queryKey: ['project-tags', currentProjectId] });
+    if (!taskId) return;
+    queryClient.invalidateQueries({ queryKey: ['task-full', taskId] });
   };
 
   const createTag = async () => {
@@ -1263,9 +1247,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           color: created.color ? String(created.color) : null,
         };
         // Update cache
-        queryClient.setQueryData(['project-tags', currentProjectId], (old: any) => {
-          if (!old) return old;
-          return { ...old, tags: [...(old.tags || []), created].sort((a: any, b: any) => a.name.localeCompare(b.name)) };
+        queryClient.setQueryData(['task-full', taskId], (old: any) => {
+          if (!old?.task?.project) return old;
+          const nextTags = [...(old.task.project.tags || []), created].sort((a: any, b: any) => a.name.localeCompare(b.name));
+          return { ...old, task: { ...old.task, project: { ...old.task.project, tags: nextTags } } };
         });
         setDraftTagIds((prev) => (prev.includes(tag.id) ? prev : [...prev, tag.id]));
       } else {
@@ -1305,12 +1290,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       if (!res.ok) throw new Error((data as any)?.error || "Impossibile aggiornare tag");
       
       // Update cache
-      queryClient.setQueryData(['project-tags', currentProjectId], (old: any) => {
-        if (!old) return old;
-        return {
-          ...old,
-          tags: (old.tags || []).map((t: any) => (t.id === renamingTagId ? { ...t, name, color: renamingTagColor } : t)).sort((a: any, b: any) => a.name.localeCompare(b.name))
-        };
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old?.task?.project) return old;
+        const nextTags = (old.task.project.tags || []).map((t: any) => (t.id === renamingTagId ? { ...t, name, color: renamingTagColor } : t)).sort((a: any, b: any) => a.name.localeCompare(b.name));
+        return { ...old, task: { ...old.task, project: { ...old.task.project, tags: nextTags } } };
       });
       
       setRenamingTagId(null);
@@ -1337,9 +1320,10 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       if (!res.ok) throw new Error((data as any)?.error || "Impossibile eliminare tag");
       
       // Update cache
-      queryClient.setQueryData(['project-tags', currentProjectId], (old: any) => {
-        if (!old) return old;
-        return { ...old, tags: (old.tags || []).filter((x: any) => x.id !== tagId) };
+      queryClient.setQueryData(['task-full', taskId], (old: any) => {
+        if (!old?.task?.project) return old;
+        const nextTags = (old.task.project.tags || []).filter((x: any) => x.id !== tagId);
+        return { ...old, task: { ...old.task, project: { ...old.task.project, tags: nextTags } } };
       });
       
       setDraftTagIds((prev) => prev.filter((x) => x !== tagId));
