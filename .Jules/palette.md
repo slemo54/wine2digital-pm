@@ -1,3 +1,7 @@
-## 2026-02-27 - [Contextual CTAs in Empty States]
-**Learning:** Adding a "Request for this day" button in the empty state of the daily absence details view significantly improves the user flow. It transforms a dead-end into a productive interaction by pre-filling the absence request form with the selected date.
-**Action:** Look for similar "dead-end" empty states in detail panels (e.g., project tasks, comments) and provide contextual actions that pre-fill relevant data.
+## 2026-03-12 - [Accessible Icon Buttons in Task Details]
+**Learning:** Icon-only buttons (like expand/collapse and delete) within complex interactive lists (such as the subtasks and dependencies tabs) often lack clear accessibility labels. Without `aria-label` and `title` attributes, screen readers fail to communicate their function, and sighted users lose helpful tooltips on hover.
+**Action:** Always ensure that any `Button size="icon"` or similar icon-only interactive element includes explicit `aria-label` and `title` attributes, providing context about what the action affects (e.g., "Elimina subtask" instead of just "Elimina").
+
+## 2026-03-12 - [Accessible Icon Buttons in Task Details]
+**Learning:** Icon-only buttons (like expand/collapse and delete) within complex interactive lists (such as the subtasks and dependencies tabs) often lack clear accessibility labels. Without `aria-label` and `title` attributes, screen readers fail to communicate their function, and sighted users lose helpful tooltips on hover.
+**Action:** Always ensure that any `Button size="icon"` or similar icon-only interactive element includes explicit `aria-label` and `title` attributes, providing context about what the action affects (e.g., "Elimina subtask" instead of just "Elimina").
