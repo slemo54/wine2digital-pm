@@ -111,12 +111,55 @@ export default function DashboardPage() {
   }, [status, router]);
 
   // Estrai dati dalle risposte React Query
-  const projectsList = projects?.projects || [];
-  const myTasks: TaskListItem[] = tasks?.tasks || [];
-  const mySubtasks: SubtaskListItem[] = subtasks?.subtasks || [];
-  const notificationsList: NotificationItem[] = notifications?.notifications || [];
+  const projectsList = useMemo(() => projects?.projects || [], [projects]);
+  const myTasks = useMemo(() => (tasks?.tasks as TaskListItem[]) || [], [tasks]);
+  const mySubtasks = useMemo(() => (subtasks?.subtasks as SubtaskListItem[]) || [], [subtasks]);
+  const notificationsList = useMemo(() => (notifications?.notifications as NotificationItem[]) || [], [notifications]);
   const unreadCount = notifications?.unreadCount || 0;
-  const activityEvents: ActivityEvent[] = activity?.events || [];
+  const activityEvents = useMemo(() => (activity?.events as ActivityEvent[]) || [], [activity]);
+
+  const now = useMemo(() => new Date(), []);
+
+  const isOverdue = useMemo(() => (t: { dueDate: string | null; status: string }) =>
+    !!t.dueDate && new Date(t.dueDate).getTime() < now.getTime() && t.status !== "done", [now]);
+
+  const isDueSoon = useMemo(() => (t: { dueDate: string | null; status: string }) => {
+    if (!t.dueDate) return false;
+    const due = new Date(t.dueDate).getTime();
+    const diffDays = (due - now.getTime()) / (1000 * 60 * 60 * 24);
+    return diffDays >= 0 && diffDays <= 7 && t.status !== "done";
+  }, [now]);
+
+  const workItems = useMemo(() => [
+    ...myTasks.map((t) => ({
+      kind: "task" as const,
+      taskId: t.id,
+      subtaskId: null as string | null,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      dueDate: t.dueDate,
+      projectName: t.project?.name || "",
+      taskTitle: t.title,
+    })),
+    ...mySubtasks.map((s) => ({
+      kind: "subtask" as const,
+      taskId: s.taskId,
+      subtaskId: s.id,
+      title: s.title,
+      status: s.status,
+      priority: s.priority,
+      dueDate: s.dueDate,
+      projectName: s.task?.project?.name || "",
+      taskTitle: s.task?.title || "",
+    })),
+  ], [myTasks, mySubtasks]);
+
+  const orderedWorkItems = useMemo(() => [...workItems].sort((a, b) => {
+    const aScore = (isOverdue(a) ? 100 : 0) + (isDueSoon(a) ? 50 : 0) + (a.priority === "high" ? 10 : 0);
+    const bScore = (isOverdue(b) ? 100 : 0) + (isDueSoon(b) ? 50 : 0) + (b.priority === "high" ? 10 : 0);
+    return bScore - aScore;
+  }), [workItems, isOverdue, isDueSoon]);
 
   const openNotification = async (n: NotificationItem) => {
     if (!n?.link) return;
@@ -158,47 +201,6 @@ export default function DashboardPage() {
     const name = session?.user?.name || "";
     return name.split(" ")[0] || "User";
   };
-
-  const now = new Date();
-  const isOverdue = (t: { dueDate: string | null; status: string }) =>
-    !!t.dueDate && new Date(t.dueDate).getTime() < now.getTime() && t.status !== "done";
-  const isDueSoon = (t: { dueDate: string | null; status: string }) => {
-    if (!t.dueDate) return false;
-    const due = new Date(t.dueDate).getTime();
-    const diffDays = (due - now.getTime()) / (1000 * 60 * 60 * 24);
-    return diffDays >= 0 && diffDays <= 7 && t.status !== "done";
-  };
-
-  const workItems = [
-    ...myTasks.map((t) => ({
-      kind: "task" as const,
-      taskId: t.id,
-      subtaskId: null as string | null,
-      title: t.title,
-      status: t.status,
-      priority: t.priority,
-      dueDate: t.dueDate,
-      projectName: t.project?.name || "",
-      taskTitle: t.title,
-    })),
-    ...mySubtasks.map((s) => ({
-      kind: "subtask" as const,
-      taskId: s.taskId,
-      subtaskId: s.id,
-      title: s.title,
-      status: s.status,
-      priority: s.priority,
-      dueDate: s.dueDate,
-      projectName: s.task?.project?.name || "",
-      taskTitle: s.task?.title || "",
-    })),
-  ];
-
-  const orderedWorkItems = [...workItems].sort((a, b) => {
-    const aScore = (isOverdue(a) ? 100 : 0) + (isDueSoon(a) ? 50 : 0) + (a.priority === "high" ? 10 : 0);
-    const bScore = (isOverdue(b) ? 100 : 0) + (isDueSoon(b) ? 50 : 0) + (b.priority === "high" ? 10 : 0);
-    return bScore - aScore;
-  });
 
   const actorLabel = (a: ActivityEvent["actor"]) => {
     if (!a) return "Qualcuno";
