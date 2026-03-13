@@ -416,7 +416,7 @@ export function ProjectMembersPanel(props: {
                     <div className="text-sm font-medium mb-2">Link invito</div>
                     <div className="flex items-center gap-2">
                       <Input readOnly value={inviteLink} />
-                      <Button variant="outline" size="icon" onClick={copyInvite} title="Copia">
+                      <Button variant="outline" size="icon" onClick={copyInvite} aria-label="Copia link invito" title="Copia">
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>
