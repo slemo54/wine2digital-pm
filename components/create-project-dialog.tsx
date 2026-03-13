@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
+import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 import { toast } from "react-hot-toast";
 
 interface CreateProjectDialogProps {
@@ -72,7 +73,7 @@ export function CreateProjectDialog({ open, onClose, onSuccess }: CreateProjectD
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Input
+              <AutosizeTextarea
                 id="description"
                 placeholder="Brief description of the project"
                 value={formData.description}

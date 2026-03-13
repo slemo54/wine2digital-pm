@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 import { toast } from "react-hot-toast";
 
 interface Task {
@@ -95,7 +96,7 @@ export function EditTaskDialog({ open, onClose, onSuccess, task }: EditTaskDialo
             </div>
             <div className="space-y-2">
               <Label htmlFor="description">Description</Label>
-              <Input
+              <AutosizeTextarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
