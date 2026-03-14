@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 
@@ -108,7 +109,7 @@ export function EditProjectDialog(props: {
 
             <div className="space-y-2">
               <Label htmlFor="description">Descrizione</Label>
-              <Input
+              <AutosizeTextarea
                 id="description"
                 placeholder="Breve descrizione del progetto"
                 value={formData.description}
