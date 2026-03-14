@@ -148,7 +148,7 @@ export function DependenciesTab({ taskId, taskTitle, subtasks, onUpdate }: Depen
                                                 ) : (
                                                     <Badge variant="secondary" className="text-[10px]">PENDING</Badge>
                                                 )}
-                                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteDependency(dep.id)}>
+                                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteDependency(dep.id)} aria-label="Rimuovi dipendenza" title="Rimuovi dipendenza">
                                                     <Trash2 className="w-3 h-3 text-muted-foreground hover:text-red-500" />
                                                 </Button>
                                             </div>
