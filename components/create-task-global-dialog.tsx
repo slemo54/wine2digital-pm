@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
@@ -224,7 +225,7 @@ export function CreateTaskGlobalDialog(props: {
 
             <div className="space-y-2">
               <Label htmlFor="description">Descrizione</Label>
-              <Input
+              <AutosizeTextarea
                 id="description"
                 value={formData.description}
                 onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
