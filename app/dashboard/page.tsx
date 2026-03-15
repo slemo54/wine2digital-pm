@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -169,7 +169,7 @@ export default function DashboardPage() {
     return diffDays >= 0 && diffDays <= 7 && t.status !== "done";
   };
 
-  const workItems = [
+  const workItems = useMemo(() => [
     ...myTasks.map((t) => ({
       kind: "task" as const,
       taskId: t.id,
@@ -192,13 +192,13 @@ export default function DashboardPage() {
       projectName: s.task?.project?.name || "",
       taskTitle: s.task?.title || "",
     })),
-  ];
+  ], [myTasks, mySubtasks]);
 
-  const orderedWorkItems = [...workItems].sort((a, b) => {
+  const orderedWorkItems = useMemo(() => [...workItems].sort((a, b) => {
     const aScore = (isOverdue(a) ? 100 : 0) + (isDueSoon(a) ? 50 : 0) + (a.priority === "high" ? 10 : 0);
     const bScore = (isOverdue(b) ? 100 : 0) + (isDueSoon(b) ? 50 : 0) + (b.priority === "high" ? 10 : 0);
     return bScore - aScore;
-  });
+  }), [workItems]);
 
   const actorLabel = (a: ActivityEvent["actor"]) => {
     if (!a) return "Qualcuno";
