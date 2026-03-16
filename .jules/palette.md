@@ -1,0 +1,3 @@
+## 2024-10-24 - Global Tooltip Accessibility
+**Learning:** Adding local tooltip logic for interactive elements across various components causes redundancy. Establishing a global `TooltipProvider` at the root `<Providers />` layout ensures tooltips function properly out-of-the-box for any icon-only buttons globally in the app, preventing visual missing states.
+**Action:** Always verify if a global accessibility provider (like `TooltipProvider`) is configured when noticing missing component wrappers during local testing. Use the pattern `<Tooltip><TooltipTrigger asChild><Button aria-label="..." /></TooltipTrigger><TooltipContent>...</TooltipContent></Tooltip>`.
