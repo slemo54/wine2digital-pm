@@ -1,7 +1,46 @@
 import { useQuery } from '@tanstack/react-query';
 
 /**
- * Hook per ottenere i progetti dell'utente
+ * Hook aggregato che ottiene tutti i dati della dashboard in un'unica richiesta
+ * PERFORMANCE: Riduce il numero di round-trip API da 5 a 1
+ */
+export function useDashboardData() {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: async () => {
+      const res = await fetch('/api/dashboard/summary');
+      if (!res.ok) throw new Error('Failed to fetch dashboard summary');
+      return res.json();
+    },
+    staleTime: 1000 * 60, // 1 minuto
+  });
+
+  return {
+    // Data (mappati per mantenere la compatibilità con il dashboard)
+    projects: data?.projects,
+    tasks: data?.tasks,
+    subtasks: data?.subtasks,
+    notifications: data?.notifications,
+    activity: data?.activity,
+
+    // Loading states
+    isLoading,
+    isLoadingProjects: isLoading,
+    isLoadingTasks: isLoading,
+    isLoadingSubtasks: isLoading,
+    isLoadingNotifications: isLoading,
+    isLoadingActivity: isLoading,
+
+    // Error state
+    error,
+
+    // Refetch function
+    refetch,
+  };
+}
+
+/**
+ * Hook per ottenere i progetti dell'utente (legacy/standalone)
  */
 export function useDashboardProjects() {
   return useQuery({
@@ -16,7 +55,7 @@ export function useDashboardProjects() {
 }
 
 /**
- * Hook per ottenere i task assegnati all'utente
+ * Hook per ottenere i task assegnati all'utente (legacy/standalone)
  */
 export function useDashboardMyTasks() {
   return useQuery({
@@ -31,7 +70,7 @@ export function useDashboardMyTasks() {
 }
 
 /**
- * Hook per ottenere i subtask dell'utente
+ * Hook per ottenere i subtask dell'utente (legacy/standalone)
  */
 export function useDashboardMySubtasks() {
   return useQuery({
@@ -46,7 +85,7 @@ export function useDashboardMySubtasks() {
 }
 
 /**
- * Hook per ottenere le notifiche
+ * Hook per ottenere le notifiche (legacy/standalone)
  */
 export function useDashboardNotifications() {
   return useQuery({
@@ -62,7 +101,7 @@ export function useDashboardNotifications() {
 }
 
 /**
- * Hook per ottenere l'activity log
+ * Hook per ottenere l'activity log (legacy/standalone)
  */
 export function useDashboardActivity() {
   return useQuery({
@@ -74,58 +113,4 @@ export function useDashboardActivity() {
     },
     staleTime: 1000 * 60 * 5, // 5 minuti
   });
-}
-
-/**
- * Hook aggregato che ottiene tutti i dati della dashboard in parallelo
- * Questo è il modo corretto per caricare dati multipli con React Query
- *
- * PERFORMANCE: Le query vengono eseguite in parallelo automaticamente
- */
-export function useDashboardData() {
-  const projectsQuery = useDashboardProjects();
-  const tasksQuery = useDashboardMyTasks();
-  const subtasksQuery = useDashboardMySubtasks();
-  const notificationsQuery = useDashboardNotifications();
-  const activityQuery = useDashboardActivity();
-
-  return {
-    // Data
-    projects: projectsQuery.data,
-    tasks: tasksQuery.data,
-    subtasks: subtasksQuery.data,
-    notifications: notificationsQuery.data,
-    activity: activityQuery.data,
-
-    // Loading states
-    isLoading:
-      projectsQuery.isLoading ||
-      tasksQuery.isLoading ||
-      subtasksQuery.isLoading ||
-      notificationsQuery.isLoading ||
-      activityQuery.isLoading,
-
-    isLoadingProjects: projectsQuery.isLoading,
-    isLoadingTasks: tasksQuery.isLoading,
-    isLoadingSubtasks: subtasksQuery.isLoading,
-    isLoadingNotifications: notificationsQuery.isLoading,
-    isLoadingActivity: activityQuery.isLoading,
-
-    // Error states
-    error:
-      projectsQuery.error ||
-      tasksQuery.error ||
-      subtasksQuery.error ||
-      notificationsQuery.error ||
-      activityQuery.error,
-
-    // Refetch functions
-    refetch: () => {
-      projectsQuery.refetch();
-      tasksQuery.refetch();
-      subtasksQuery.refetch();
-      notificationsQuery.refetch();
-      activityQuery.refetch();
-    },
-  };
 }
