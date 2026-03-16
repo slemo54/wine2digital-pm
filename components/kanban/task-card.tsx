@@ -154,6 +154,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  aria-label="Options"
+                  title="Options"
                 >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
