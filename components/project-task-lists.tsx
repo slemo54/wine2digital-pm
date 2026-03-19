@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
@@ -988,32 +989,45 @@ export function ProjectTaskLists(props: {
                             <Plus className="h-4 w-4 mr-2" />
                             Add task
                           </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setRenameListId(l.id);
-                              setRenameValue(l.name);
-                            }}
-                            title="Rinomina"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              deleteList(l.id, l.name);
-                            }}
-                            title="Elimina"
-                            disabled={l.name === DEFAULT_LIST_NAME}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setRenameListId(l.id);
+                                  setRenameValue(l.name);
+                                }}
+                                aria-label="Rinomina categoria"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Rinomina categoria</TooltipContent>
+                          </Tooltip>
+
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  deleteList(l.id, l.name);
+                                }}
+                                aria-label="Elimina categoria"
+                                disabled={l.name === DEFAULT_LIST_NAME}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {l.name === DEFAULT_LIST_NAME ? "Categoria predefinita" : "Elimina categoria"}
+                            </TooltipContent>
+                          </Tooltip>
                         </div>
                       </div>
                     </AccordionTrigger>
@@ -1096,32 +1110,45 @@ export function ProjectTaskLists(props: {
                                       </div>
                                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                         {amountEur ? (
-                                          <Badge
-                                            variant="outline"
-                                            className="rounded-md px-4 py-1 text-[11px] font-semibold min-w-[120px] justify-center"
-                                            title="Importo"
-                                          >
-                                            {amountEur}
-                                          </Badge>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Badge
+                                                variant="outline"
+                                                className="rounded-md px-4 py-1 text-[11px] font-semibold min-w-[120px] justify-center"
+                                              >
+                                                {amountEur}
+                                              </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Importo</TooltipContent>
+                                          </Tooltip>
                                         ) : null}
                                         {primaryTag ? (
-                                          <Badge
-                                            variant="default"
-                                            className={`rounded-md px-4 py-1 text-[11px] font-semibold uppercase tracking-wide min-w-[140px] justify-center transition-opacity ${
-                                              primaryTag.color
-                                                ? "text-white border border-black/10 hover:opacity-90"
-                                                : getTagBadgeClass(primaryTag.name)
-                                            }`}
-                                            style={primaryTag.color ? { backgroundColor: primaryTag.color } : undefined}
-                                            title={tags.map((x) => x.name).join(", ")}
-                                          >
-                                            {primaryTag.name}
-                                          </Badge>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Badge
+                                                variant="default"
+                                                className={`rounded-md px-4 py-1 text-[11px] font-semibold uppercase tracking-wide min-w-[140px] justify-center transition-opacity ${
+                                                  primaryTag.color
+                                                    ? "text-white border border-black/10 hover:opacity-90"
+                                                    : getTagBadgeClass(primaryTag.name)
+                                                }`}
+                                                style={primaryTag.color ? { backgroundColor: primaryTag.color } : undefined}
+                                              >
+                                                {primaryTag.name}
+                                              </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Tag: {tags.map((x) => x.name).join(", ")}</TooltipContent>
+                                          </Tooltip>
                                         ) : null}
                                         {extraTagCount > 0 ? (
-                                          <Badge variant="outline" title={tags.map((x) => x.name).join(", ")}>
-                                            +{extraTagCount}
-                                          </Badge>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Badge variant="outline">
+                                                +{extraTagCount}
+                                              </Badge>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Tag aggiuntivi: {tags.map((x) => x.name).join(", ")}</TooltipContent>
+                                          </Tooltip>
                                         ) : null}
                                         <Badge variant={sb.variant} className="capitalize">
                                           {sb.label}
@@ -1131,26 +1158,41 @@ export function ProjectTaskLists(props: {
                                         ) : null}
 
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            className="h-8 w-8"
-                                            onClick={() => startEditTaskTitle(t)}
-                                            disabled={!canManageTasks || isEditing}
-                                            title={canManageTasks ? "Modifica titolo" : noPermissionHint}
-                                          >
-                                            <Pencil className="h-4 w-4" />
-                                          </Button>
-                                          <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            className="h-8 w-8 text-destructive"
-                                            onClick={() => void deleteTask(t)}
-                                            disabled={!canManageTasks || isDeleting || isEditing}
-                                            title={canManageTasks ? "Elimina task" : noPermissionHint}
-                                          >
-                                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                                          </Button>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8"
+                                                onClick={() => startEditTaskTitle(t)}
+                                                disabled={!canManageTasks || isEditing}
+                                                aria-label={canManageTasks ? "Modifica titolo" : noPermissionHint}
+                                              >
+                                                <Pencil className="h-4 w-4" />
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              {canManageTasks ? "Modifica titolo" : noPermissionHint}
+                                            </TooltipContent>
+                                          </Tooltip>
+
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8 text-destructive"
+                                                onClick={() => void deleteTask(t)}
+                                                disabled={!canManageTasks || isDeleting || isEditing}
+                                                aria-label={canManageTasks ? "Elimina task" : noPermissionHint}
+                                              >
+                                                {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                              </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              {canManageTasks ? "Elimina task" : noPermissionHint}
+                                            </TooltipContent>
+                                          </Tooltip>
                                         </div>
                                       </div>
                                     </div>
