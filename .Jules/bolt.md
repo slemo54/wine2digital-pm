@@ -1,0 +1,3 @@
+## 2025-05-15 - Unified Dashboard API & Memoization
+**Learning:** Consolidating multiple dashboard API calls into a single endpoint significantly reduces network overhead and prevents the "waterfall" effect, especially when some of those endpoints were previously pointing to non-existent routes. Frontend memoization of sorted work items prevents redundant O(N log N) operations on every render, which is critical when the dashboard state changes frequently (e.g., opening modals or handling notifications).
+**Action:** Always check if a dashboard-like view is making multiple parallel requests for data that could be unified, and ensure that complex sorting/filtering logic in the render path is wrapped in `useMemo`.
