@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -111,65 +111,25 @@ export default function DashboardPage() {
   }, [status, router]);
 
   // Estrai dati dalle risposte React Query
-  const projectsList = projects?.projects || [];
-  const myTasks: TaskListItem[] = tasks?.tasks || [];
-  const mySubtasks: SubtaskListItem[] = subtasks?.subtasks || [];
-  const notificationsList: NotificationItem[] = notifications?.notifications || [];
+  const projectsList = useMemo(() => projects?.projects || [], [projects]);
+  const myTasks: TaskListItem[] = useMemo(() => tasks?.tasks || [], [tasks]);
+  const mySubtasks: SubtaskListItem[] = useMemo(() => subtasks?.subtasks || [], [subtasks]);
+  const notificationsList: NotificationItem[] = useMemo(() => notifications?.notifications || [], [notifications]);
   const unreadCount = notifications?.unreadCount || 0;
-  const activityEvents: ActivityEvent[] = activity?.events || [];
+  const activityEvents: ActivityEvent[] = useMemo(() => activity?.events || [], [activity]);
 
-  const openNotification = async (n: NotificationItem) => {
-    if (!n?.link) return;
-    try {
-      await markNotificationRead(n.id);
-      // Invalida la cache delle notifiche per aggiornare lo stato
-      refetch();
-    } finally {
-      router.push(n.link);
-    }
-  };
+  const now = useMemo(() => new Date(), []);
+  const isOverdue = useMemo(() => (t: { dueDate: string | null; status: string }) =>
+    !!t.dueDate && new Date(t.dueDate).getTime() < now.getTime() && t.status !== "done", [now]);
 
-  const handleProjectCreated = () => {
-    refetch();
-    setShowCreateDialog(false);
-  };
-
-  const handleTaskCreated = () => {
-    refetch();
-    setShowCreateTaskDialog(false);
-  };
-
-  if (status === "loading" || isLoading) {
-    return (
-      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-      </div>
-    );
-  }
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
-  };
-
-  const getFirstName = () => {
-    const name = session?.user?.name || "";
-    return name.split(" ")[0] || "User";
-  };
-
-  const now = new Date();
-  const isOverdue = (t: { dueDate: string | null; status: string }) =>
-    !!t.dueDate && new Date(t.dueDate).getTime() < now.getTime() && t.status !== "done";
-  const isDueSoon = (t: { dueDate: string | null; status: string }) => {
+  const isDueSoon = useMemo(() => (t: { dueDate: string | null; status: string }) => {
     if (!t.dueDate) return false;
     const due = new Date(t.dueDate).getTime();
     const diffDays = (due - now.getTime()) / (1000 * 60 * 60 * 24);
     return diffDays >= 0 && diffDays <= 7 && t.status !== "done";
-  };
+  }, [now]);
 
-  const workItems = [
+  const workItems = useMemo(() => [
     ...myTasks.map((t) => ({
       kind: "task" as const,
       taskId: t.id,
@@ -192,13 +152,54 @@ export default function DashboardPage() {
       projectName: s.task?.project?.name || "",
       taskTitle: s.task?.title || "",
     })),
-  ];
+  ], [myTasks, mySubtasks]);
 
-  const orderedWorkItems = [...workItems].sort((a, b) => {
+  const orderedWorkItems = useMemo(() => [...workItems].sort((a, b) => {
     const aScore = (isOverdue(a) ? 100 : 0) + (isDueSoon(a) ? 50 : 0) + (a.priority === "high" ? 10 : 0);
     const bScore = (isOverdue(b) ? 100 : 0) + (isDueSoon(b) ? 50 : 0) + (b.priority === "high" ? 10 : 0);
     return bScore - aScore;
-  });
+  }), [workItems, isOverdue, isDueSoon]);
+
+  const openNotification = async (n: NotificationItem) => {
+    if (!n?.link) return;
+    try {
+      await markNotificationRead(n.id);
+      // Invalida la cache delle notifiche per aggiornare lo stato
+      refetch();
+    } finally {
+      router.push(n.link);
+    }
+  };
+
+  const handleProjectCreated = () => {
+    refetch();
+    setShowCreateDialog(false);
+  };
+
+  const handleTaskCreated = () => {
+    refetch();
+    setShowCreateTaskDialog(false);
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const getFirstName = () => {
+    const name = session?.user?.name || "";
+    return name.split(" ")[0] || "User";
+  };
+
+  if (status === "loading" || isLoading) {
+    return (
+      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
 
   const actorLabel = (a: ActivityEvent["actor"]) => {
     if (!a) return "Qualcuno";
