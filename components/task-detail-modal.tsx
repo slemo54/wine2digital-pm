@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1434,44 +1435,59 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                         <div className="text-2xl font-bold pr-2 truncate">{task.title}</div>
                         <div className="flex items-center gap-1">
                           {canEditTaskDetails ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9"
-                              onClick={() => {
-                                setTaskDraftTitle(String(task?.title || ""));
-                                setIsEditingTaskTitle(true);
-                              }}
-                              aria-label="Modifica titolo task"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9"
+                                  onClick={() => {
+                                    setTaskDraftTitle(String(task?.title || ""));
+                                    setIsEditingTaskTitle(true);
+                                  }}
+                                  aria-label="Modifica titolo task"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Modifica titolo task</TooltipContent>
+                            </Tooltip>
                           ) : null}
                           {canEditMeta ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9"
-                              onClick={() => void toggleArchiveTask()}
-                              aria-label={task.status === "archived" ? "Ripristina task" : "Archivia task"}
-                            >
-                              <Archive className="h-4 w-4" />
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9"
+                                  onClick={() => void toggleArchiveTask()}
+                                  aria-label={task.status === "archived" ? "Ripristina task" : "Archivia task"}
+                                >
+                                  <Archive className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>{task.status === "archived" ? "Ripristina task" : "Archivia task"}</TooltipContent>
+                            </Tooltip>
                           ) : null}
                           {canEditMeta ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9 text-destructive"
-                              onClick={() => void deleteThisTask()}
-                              disabled={isDeletingTask}
-                              aria-label="Elimina task"
-                            >
-                              {isDeletingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-9 w-9 text-destructive"
+                                  onClick={() => void deleteThisTask()}
+                                  disabled={isDeletingTask}
+                                  aria-label="Elimina task"
+                                >
+                                  {isDeletingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Elimina task</TooltipContent>
+                            </Tooltip>
                           ) : null}
                         </div>
                       </>
