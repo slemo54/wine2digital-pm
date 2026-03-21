@@ -1,0 +1,3 @@
+## 2026-03-21 - Unified Dashboard Summary Endpoint
+**Learning:** Consolidated multiple API calls into a single `/api/dashboard/summary` endpoint to reduce network round-trips. Used `Promise.allSettled` on the server to handle parallel fetching of projects, tasks, subtasks, notifications, and activity logs. This approach ensures resilience; if one data source fails, the others are still returned.
+**Action:** Always consider batching related API calls that are used together on a single page, especially for initial loads, but ensure the response structure matches what the frontend components already expect to avoid regressions.
