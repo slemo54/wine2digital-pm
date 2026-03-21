@@ -36,6 +36,7 @@ export function TagColorPicker({
             type="button"
             disabled={disabled}
             onClick={() => onChange(color.hex)}
+            aria-label={`Seleziona colore ${color.name}`}
             className={cn(
               "w-6 h-6 rounded-full flex items-center justify-center transition-all hover:scale-110 active:scale-95",
               isSelected ? "ring-2 ring-ring ring-offset-2 ring-offset-background" : "opacity-80 hover:opacity-100",

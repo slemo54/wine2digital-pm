@@ -910,6 +910,7 @@ function MonthView({
                   key={key}
                   type="button"
                   onClick={() => onPickDay(d)}
+                  aria-label={`Seleziona ${d.toLocaleDateString()}`}
                   className={cn(
                     "rounded-md border p-2 text-left transition-colors min-h-[72px]",
                     inMonth ? "bg-background hover:bg-accent/50" : "bg-muted/30 text-muted-foreground hover:bg-muted/40",
