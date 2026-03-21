@@ -78,6 +78,7 @@ function buildMentionSuggestion(users: MentionUser[], getPortalContainer?: () =>
                       e.preventDefault();
                       currentCommand?.({ id: u.id, label: u.label });
                     }}
+                    aria-label={`Menziona ${u.label}`}
                     className={cn(
                       "w-full text-left px-2 py-1.5 rounded-sm text-sm flex items-center justify-between gap-2",
                       idx === selectedIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"

@@ -809,6 +809,7 @@ export default function ProjectsPage() {
                                   )}
                                   onClick={col.sortable ? () => handleSort(col.key as OrderBy) : undefined}
                                   disabled={!col.sortable}
+                                  aria-label={col.sortable ? `Ordina per ${col.label}` : col.label}
                                 >
                                   {col.label}
                                   {col.sortable && sortIcon(col.key as OrderBy)}

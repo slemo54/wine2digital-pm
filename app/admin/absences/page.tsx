@@ -539,7 +539,7 @@ export default function AdminAbsencesArchivePage() {
                   <Button variant="outline" onClick={handleExport} className="h-10 gap-2" disabled={isExporting || total <= 0}>
                     {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export CSV
                   </Button>
-                  <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-10 w-10 border border-border/50">
+                  <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-10 w-10 border border-border/50" aria-label="Aggiorna">
                     <RefreshCw className="w-4 h-4" />
                   </Button>
                 </div>
