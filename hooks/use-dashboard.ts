@@ -1,7 +1,48 @@
 import { useQuery } from '@tanstack/react-query';
 
 /**
- * Hook per ottenere i progetti dell'utente
+ * Hook aggregato che ottiene tutti i dati della dashboard in un'unica richiesta
+ *
+ * PERFORMANCE: Riduce il numero di round-trip HTTP da 5 a 1.
+ */
+export function useDashboardData() {
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: async () => {
+      const res = await fetch('/api/dashboard/summary');
+      if (!res.ok) throw new Error('Failed to fetch dashboard summary');
+      return res.json();
+    },
+    staleTime: 1000 * 30, // 30 secondi
+    refetchInterval: 1000 * 60, // Refetch automatico ogni minuto
+  });
+
+  return {
+    // Reconstruct nested structure for backward compatibility with DashboardPage
+    projects: data ? { projects: data.projects } : undefined,
+    tasks: data ? { tasks: data.tasks } : undefined,
+    subtasks: data ? { subtasks: data.subtasks } : undefined,
+    notifications: data ? Object.assign(data.notifications, { notifications: data.notifications, unreadCount: data.unreadCount }) : undefined,
+    activity: data ? { events: data.events } : undefined,
+
+    // Loading states
+    isLoading,
+    isLoadingProjects: isLoading,
+    isLoadingTasks: isLoading,
+    isLoadingSubtasks: isLoading,
+    isLoadingNotifications: isLoading,
+    isLoadingActivity: isLoading,
+
+    // Error states
+    error,
+
+    // Refetch function
+    refetch,
+  };
+}
+
+/**
+ * @deprecated Use useDashboardData() instead for better performance.
  */
 export function useDashboardProjects() {
   return useQuery({
@@ -11,12 +52,12 @@ export function useDashboardProjects() {
       if (!res.ok) throw new Error('Failed to fetch projects');
       return res.json();
     },
-    staleTime: 1000 * 60 * 5, // 5 minuti
+    staleTime: 1000 * 60 * 5,
   });
 }
 
 /**
- * Hook per ottenere i task assegnati all'utente
+ * @deprecated Use useDashboardData() instead for better performance.
  */
 export function useDashboardMyTasks() {
   return useQuery({
@@ -26,12 +67,12 @@ export function useDashboardMyTasks() {
       if (!res.ok) throw new Error('Failed to fetch tasks');
       return res.json();
     },
-    staleTime: 1000 * 60 * 2, // 2 minuti
+    staleTime: 1000 * 60 * 2,
   });
 }
 
 /**
- * Hook per ottenere i subtask dell'utente
+ * @deprecated Use useDashboardData() instead for better performance.
  */
 export function useDashboardMySubtasks() {
   return useQuery({
@@ -41,12 +82,12 @@ export function useDashboardMySubtasks() {
       if (!res.ok) throw new Error('Failed to fetch subtasks');
       return res.json();
     },
-    staleTime: 1000 * 60 * 2, // 2 minuti
+    staleTime: 1000 * 60 * 2,
   });
 }
 
 /**
- * Hook per ottenere le notifiche
+ * @deprecated Use useDashboardData() instead for better performance.
  */
 export function useDashboardNotifications() {
   return useQuery({
@@ -56,13 +97,13 @@ export function useDashboardNotifications() {
       if (!res.ok) throw new Error('Failed to fetch notifications');
       return res.json();
     },
-    staleTime: 1000 * 30, // 30 secondi - più fresco per notifiche
-    refetchInterval: 1000 * 60, // Refetch automatico ogni minuto
+    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60,
   });
 }
 
 /**
- * Hook per ottenere l'activity log
+ * @deprecated Use useDashboardData() instead for better performance.
  */
 export function useDashboardActivity() {
   return useQuery({
@@ -72,60 +113,6 @@ export function useDashboardActivity() {
       if (!res.ok) throw new Error('Failed to fetch activity');
       return res.json();
     },
-    staleTime: 1000 * 60 * 5, // 5 minuti
+    staleTime: 1000 * 60 * 5,
   });
-}
-
-/**
- * Hook aggregato che ottiene tutti i dati della dashboard in parallelo
- * Questo è il modo corretto per caricare dati multipli con React Query
- *
- * PERFORMANCE: Le query vengono eseguite in parallelo automaticamente
- */
-export function useDashboardData() {
-  const projectsQuery = useDashboardProjects();
-  const tasksQuery = useDashboardMyTasks();
-  const subtasksQuery = useDashboardMySubtasks();
-  const notificationsQuery = useDashboardNotifications();
-  const activityQuery = useDashboardActivity();
-
-  return {
-    // Data
-    projects: projectsQuery.data,
-    tasks: tasksQuery.data,
-    subtasks: subtasksQuery.data,
-    notifications: notificationsQuery.data,
-    activity: activityQuery.data,
-
-    // Loading states
-    isLoading:
-      projectsQuery.isLoading ||
-      tasksQuery.isLoading ||
-      subtasksQuery.isLoading ||
-      notificationsQuery.isLoading ||
-      activityQuery.isLoading,
-
-    isLoadingProjects: projectsQuery.isLoading,
-    isLoadingTasks: tasksQuery.isLoading,
-    isLoadingSubtasks: subtasksQuery.isLoading,
-    isLoadingNotifications: notificationsQuery.isLoading,
-    isLoadingActivity: activityQuery.isLoading,
-
-    // Error states
-    error:
-      projectsQuery.error ||
-      tasksQuery.error ||
-      subtasksQuery.error ||
-      notificationsQuery.error ||
-      activityQuery.error,
-
-    // Refetch functions
-    refetch: () => {
-      projectsQuery.refetch();
-      tasksQuery.refetch();
-      subtasksQuery.refetch();
-      notificationsQuery.refetch();
-      activityQuery.refetch();
-    },
-  };
 }
