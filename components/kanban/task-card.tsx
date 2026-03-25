@@ -5,15 +5,38 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Calendar, AlertCircle, Clock, MoreVertical, MessageCircle, Paperclip } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  Calendar,
+  AlertCircle,
+  Clock,
+  MoreVertical,
+  MessageCircle,
+  Paperclip,
+  Loader2,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useState } from "react";
 import { EditTaskDialog } from "../edit-task-dialog";
 import { TaskDetailModal } from "../task-detail-modal";
 import { toast } from "react-hot-toast";
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from "@tanstack/react-query";
 import { usePrefetchTaskFull } from "@/hooks/use-task";
 
 interface Task {
@@ -45,6 +68,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteAlert, setShowDeleteAlert] = useState(false);
   const queryClient = useQueryClient();
   const prefetchTask = usePrefetchTaskFull();
 
@@ -85,7 +109,10 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
     if (task?.status === "done") return 100;
     if (task?.status === "in_progress") {
       // Use task ID to generate stable pseudo-random value (20-90%)
-      const hash = task?.id?.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) || 0;
+      const hash =
+        task?.id
+          ?.split("")
+          .reduce((acc, char) => acc + char.charCodeAt(0), 0) || 0;
       return 20 + (hash % 71); // 20-90 range
     }
     return 0;
@@ -96,12 +123,16 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
   const getInitials = (name?: string) => {
     if (!name) return "U";
     const names = name.split(" ");
-    return names?.map(n => n?.[0] || "").join("").toUpperCase().slice(0, 2) || "U";
+    return (
+      names
+        ?.map((n) => n?.[0] || "")
+        .join("")
+        .toUpperCase()
+        .slice(0, 2) || "U"
+    );
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this task?")) return;
-
     setIsDeleting(true);
     try {
       const response = await fetch(`/api/tasks/${task?.id}`, {
@@ -113,12 +144,13 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
       }
 
       toast.success("Task deleted successfully");
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['task-full'] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["task-full"] });
     } catch (error) {
       toast.error("Failed to delete task");
     } finally {
       setIsDeleting(false);
+      setShowDeleteAlert(false);
     }
   };
 
@@ -132,7 +164,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary"
         onMouseEnter={() => prefetchTask(task.id)}
       >
-        <CardContent 
+        <CardContent
           className="p-4 space-y-3"
           onClick={(e) => {
             // Don't open modal if clicking on dropdown or dragging
@@ -142,11 +174,16 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         >
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1">
-              <Badge variant="outline" className={`text-xs mb-2 ${getPriorityBgColor(task?.priority)}`}>
+              <Badge
+                variant="outline"
+                className={`text-xs mb-2 ${getPriorityBgColor(task?.priority)}`}
+              >
                 <AlertCircle className="h-3 w-3 mr-1" />
                 {task?.priority || "medium"}
               </Badge>
-              <h4 className="font-semibold text-sm leading-tight text-foreground">{task?.title || "Untitled"}</h4>
+              <h4 className="font-semibold text-sm leading-tight text-foreground">
+                {task?.title || "Untitled"}
+              </h4>
             </div>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -162,7 +199,11 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                 <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDelete} disabled={isDeleting} className="text-destructive">
+                <DropdownMenuItem
+                  onClick={() => setShowDeleteAlert(true)}
+                  disabled={isDeleting}
+                  className="text-destructive"
+                >
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -170,7 +211,9 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
           </div>
 
           {task?.description && (
-            <p className="text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+            <p className="text-xs text-muted-foreground line-clamp-2">
+              {task.description}
+            </p>
           )}
 
           {/* Progress Bar */}
@@ -180,11 +223,14 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                 <span className="text-muted-foreground">Progress</span>
                 <span className="font-medium text-foreground">{progress}%</span>
               </div>
-              <Progress 
-                value={progress} 
+              <Progress
+                value={progress}
                 className={`h-1.5 ${
-                  task?.status === "done" ? "bg-success/20" : 
-                  task?.status === "in_progress" ? "bg-info/20" : "bg-gray-200"
+                  task?.status === "done"
+                    ? "bg-success/20"
+                    : task?.status === "in_progress"
+                      ? "bg-info/20"
+                      : "bg-gray-200"
                 }`}
               />
             </div>
@@ -204,17 +250,21 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                   {task.assignees.slice(0, 3).map((assignee) => (
                     <Avatar key={assignee?.user?.id} className="h-6 w-6">
                       <AvatarFallback className="text-xs bg-accent text-foreground">
-                        {getInitials(`${assignee?.user?.firstName || ""} ${assignee?.user?.lastName || ""}`)}
+                        {getInitials(
+                          `${assignee?.user?.firstName || ""} ${assignee?.user?.lastName || ""}`,
+                        )}
                       </AvatarFallback>
                     </Avatar>
                   ))}
                   {(task?.assignees?.length || 0) > 3 && (
-                    <span className="text-xs text-muted-foreground ml-1">+{task.assignees.length - 3}</span>
+                    <span className="text-xs text-muted-foreground ml-1">
+                      +{task.assignees.length - 3}
+                    </span>
                   )}
                 </>
               )}
             </div>
-            
+
             <div className="flex items-center gap-3 text-muted-foreground">
               <div className="flex items-center gap-1 text-xs">
                 <Paperclip className="h-3 w-3" />
@@ -234,8 +284,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         onClose={() => setShowEditDialog(false)}
         onSuccess={() => {
           setShowEditDialog(false);
-          queryClient.invalidateQueries({ queryKey: ['tasks'] });
-          queryClient.invalidateQueries({ queryKey: ['task-full'] });
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          queryClient.invalidateQueries({ queryKey: ["task-full"] });
         }}
         task={task}
       />
@@ -247,11 +297,41 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
           taskId={task.id}
           projectId={projectId}
           onUpdate={() => {
-            queryClient.invalidateQueries({ queryKey: ['tasks'] });
-            queryClient.invalidateQueries({ queryKey: ['task-full'] });
+            queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            queryClient.invalidateQueries({ queryKey: ["task-full"] });
           }}
         />
       )}
+
+      <AlertDialog open={showDeleteAlert} onOpenChange={setShowDeleteAlert}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Are you sure you want to delete this task?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              task and remove its data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
