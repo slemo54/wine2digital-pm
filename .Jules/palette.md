@@ -5,3 +5,7 @@
 ## 2026-02-28 - [AutosizeTextarea for Modal Descriptions]
 **Learning:** Using a single-line `Input` for description or notes fields in modals severely limits multi-line readability and editing. Replacing it with the existing `AutosizeTextarea` component provides a significantly better micro-UX editing experience without breaking modal layout constraints.
 **Action:** Prefer `AutosizeTextarea` over standard `Input` for any modal field likely to contain multiple lines of text, such as descriptions or notes.
+
+## 2025-05-15 - [AlertDialog for Destructive Actions]
+**Learning:** Replacing native `confirm()` with `AlertDialog` provides a more accessible and consistent UX. Using `e.preventDefault()` in `AlertDialogAction` allows showing a loading spinner during the async operation before the dialog closes.
+**Action:** Use `AlertDialog` with a loading state for all critical destructive actions (delete, archive, etc.) to improve visual feedback and accessibility.
