@@ -2,6 +2,16 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { SideDrawer } from "@/components/side-drawer";
 import { Button } from "@/components/ui/button";
 import { CustomFieldsSection } from "@/components/custom-fields/CustomFieldsSection";
@@ -297,6 +307,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [editingSubtaskMentionedUserIds, setEditingSubtaskMentionedUserIds] = useState<string[]>([]);
   const [savingSubtaskCommentEdit, setSavingSubtaskCommentEdit] = useState(false);
   const [isDeletingTask, setIsDeletingTask] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   const didOpenInitialSubtaskRef = useRef<string | null>(null);
   const didMarkTaskNotificationsReadRef = useRef<string | null>(null);
@@ -495,8 +506,6 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
   const deleteThisTask = async () => {
     if (!task) return;
-    const ok = confirm(`Eliminare definitivamente la task "${task.title}"?`);
-    if (!ok) return;
     setIsDeletingTask(true);
     try {
       const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, { method: "DELETE" });
@@ -510,6 +519,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       toast.error(e instanceof Error ? e.message : "Eliminazione fallita");
     } finally {
       setIsDeletingTask(false);
+      setIsDeleteDialogOpen(false);
     }
   };
 
@@ -1466,7 +1476,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               variant="ghost"
                               size="icon"
                               className="h-9 w-9 text-destructive"
-                              onClick={() => void deleteThisTask()}
+                              onClick={() => setIsDeleteDialogOpen(true)}
                               disabled={isDeletingTask}
                               aria-label="Elimina task"
                             >
@@ -2875,6 +2885,31 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
           </div>
         </div>
       </SideDrawer>
+
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Conferma eliminazione</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sei sicuro di voler eliminare definitivamente la task &quot;{task.title}&quot;? L&apos;azione non può essere annullata.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeletingTask}>Annulla</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void deleteThisTask();
+              }}
+              disabled={isDeletingTask}
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              {isDeletingTask ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Elimina
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }
