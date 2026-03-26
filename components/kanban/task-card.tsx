@@ -5,9 +5,19 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Calendar, AlertCircle, Clock, MoreVertical, MessageCircle, Paperclip } from "lucide-react";
+import { Calendar, AlertCircle, Clock, MoreVertical, MessageCircle, Paperclip, Loader2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { useState } from "react";
 import { EditTaskDialog } from "../edit-task-dialog";
@@ -44,6 +54,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
 
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const queryClient = useQueryClient();
   const prefetchTask = usePrefetchTaskFull();
@@ -99,9 +110,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
     return names?.map(n => n?.[0] || "").join("").toUpperCase().slice(0, 2) || "U";
   };
 
-  const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this task?")) return;
-
+  const handleDelete = async (e?: React.MouseEvent) => {
+    e?.preventDefault();
     setIsDeleting(true);
     try {
       const response = await fetch(`/api/tasks/${task?.id}`, {
@@ -113,6 +123,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
       }
 
       toast.success("Task deleted successfully");
+      setShowDeleteConfirm(false);
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['task-full'] });
     } catch (error) {
@@ -162,7 +173,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                 <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDelete} disabled={isDeleting} className="text-destructive">
+                <DropdownMenuItem onClick={() => setShowDeleteConfirm(true)} disabled={isDeleting} className="text-destructive">
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -252,6 +263,28 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
           }}
         />
       )}
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the task &quot;{task.title}&quot;. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="bg-destructive hover:bg-destructive/90 focus:ring-destructive"
+            >
+              {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {isDeleting ? "Deleting..." : "Delete Task"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
