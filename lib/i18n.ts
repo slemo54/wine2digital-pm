@@ -9,7 +9,10 @@ export type I18nKey =
   | "kanban.empty.in_progress.body"
   | "kanban.empty.done.title"
   | "kanban.empty.done.body"
-  | "kanban.empty.cta";
+  | "kanban.empty.cta"
+  | "dashboard.empty.tasks.title"
+  | "dashboard.empty.tasks.body"
+  | "dashboard.empty.tasks.cta";
 
 const STRINGS: Record<Locale, Record<I18nKey, string>> = {
   en: {
@@ -23,6 +26,10 @@ const STRINGS: Record<Locale, Record<I18nKey, string>> = {
     "kanban.empty.done.title": "No completed tasks yet",
     "kanban.empty.done.body": "Completed tasks will show up here.",
     "kanban.empty.cta": "Add a task",
+
+    "dashboard.empty.tasks.title": "Great job!",
+    "dashboard.empty.tasks.body": "You have no assigned tasks or subtasks at the moment.",
+    "dashboard.empty.tasks.cta": "Create Task",
   },
   it: {
     "theme.switchToDark": "Passa al tema scuro",
@@ -35,6 +42,10 @@ const STRINGS: Record<Locale, Record<I18nKey, string>> = {
     "kanban.empty.done.title": "Nessuna task completata",
     "kanban.empty.done.body": "Le task completate compariranno qui.",
     "kanban.empty.cta": "Aggiungi una task",
+
+    "dashboard.empty.tasks.title": "Ottimo lavoro!",
+    "dashboard.empty.tasks.body": "Non hai task o subtask assegnate al momento.",
+    "dashboard.empty.tasks.cta": "Crea Task",
   },
 };
 

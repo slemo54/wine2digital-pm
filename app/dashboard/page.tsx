@@ -15,6 +15,7 @@ import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
 import { markAllRead, markNotificationRead } from "@/lib/notifications-client";
 import { useDashboardData } from "@/hooks/use-dashboard";
+import { getClientLocale, t } from "@/lib/i18n";
 
 interface Project {
   id: string;
@@ -294,8 +295,23 @@ export default function DashboardPage() {
                     <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading tasks…
                   </div>
                 ) : orderedWorkItems.length === 0 ? (
-                  <div className="text-sm text-muted-foreground py-8 text-center bg-muted/20 rounded-lg border border-dashed">
-                    No assigned tasks/subtasks yet.
+                  <div className="flex flex-col items-center justify-center py-12 px-4 text-center bg-muted/10 rounded-xl border border-dashed border-border/60">
+                    <div className="h-12 w-12 rounded-full bg-background flex items-center justify-center mb-4 shadow-sm">
+                      <CheckSquare className="h-6 w-6 text-muted-foreground/60" />
+                    </div>
+                    <p className="text-sm font-medium text-foreground">{t(getClientLocale(), "dashboard.empty.tasks.title")}</p>
+                    <p className="text-xs text-muted-foreground mt-1 mb-6 max-w-[200px]">
+                      {t(getClientLocale(), "dashboard.empty.tasks.body")}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowCreateTaskDialog(true)}
+                      className="h-8 text-xs border-primary/20 text-primary hover:bg-primary/5 hover:text-primary transition-colors"
+                    >
+                      <Plus className="h-3 w-3 mr-1.5" />
+                      {t(getClientLocale(), "dashboard.empty.tasks.cta")}
+                    </Button>
                   </div>
                 ) : (
                   orderedWorkItems.slice(0, 5).map((t) => (
@@ -405,7 +421,7 @@ export default function DashboardPage() {
                   <div className="text-sm text-muted-foreground flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading…
                   </div>
-                ) : notifications.length === 0 ? (
+                ) : notificationsList.length === 0 ? (
                   <div className="text-sm text-muted-foreground py-8 text-center">All caught up!</div>
                 ) : (
                   <div className="space-y-3">
