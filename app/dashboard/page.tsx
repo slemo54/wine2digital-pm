@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -139,6 +139,54 @@ export default function DashboardPage() {
     setShowCreateTaskDialog(false);
   };
 
+  // Performance: Memoize work items and their derived statuses to avoid recalculations on every render
+  const now = useMemo(() => new Date(), []);
+
+  const isOverdue = useMemo(() => {
+    return (t: { dueDate: string | null; status: string }) =>
+      !!t.dueDate && new Date(t.dueDate).getTime() < now.getTime() && t.status !== "done";
+  }, [now]);
+
+  const isDueSoon = useMemo(() => {
+    return (t: { dueDate: string | null; status: string }) => {
+      if (!t.dueDate) return false;
+      const due = new Date(t.dueDate).getTime();
+      const diffDays = (due - now.getTime()) / (1000 * 60 * 60 * 24);
+      return diffDays >= 0 && diffDays <= 7 && t.status !== "done";
+    };
+  }, [now]);
+
+  const workItems = useMemo(() => [
+    ...(tasks?.tasks || []).map((t: TaskListItem) => ({
+      kind: "task" as const,
+      taskId: t.id,
+      subtaskId: null as string | null,
+      title: t.title,
+      status: t.status,
+      priority: t.priority,
+      dueDate: t.dueDate,
+      projectName: t.project?.name || "",
+      taskTitle: t.title,
+    })),
+    ...(subtasks?.subtasks || []).map((s: SubtaskListItem) => ({
+      kind: "subtask" as const,
+      taskId: s.taskId,
+      subtaskId: s.id,
+      title: s.title,
+      status: s.status,
+      priority: s.priority,
+      dueDate: s.dueDate,
+      projectName: s.task?.project?.name || "",
+      taskTitle: s.task?.title || "",
+    })),
+  ], [tasks, subtasks]);
+
+  const orderedWorkItems = useMemo(() => [...workItems].sort((a, b) => {
+    const aScore = (isOverdue(a) ? 100 : 0) + (isDueSoon(a) ? 50 : 0) + (a.priority === "high" ? 10 : 0);
+    const bScore = (isOverdue(b) ? 100 : 0) + (isDueSoon(b) ? 50 : 0) + (b.priority === "high" ? 10 : 0);
+    return bScore - aScore;
+  }), [workItems, isOverdue, isDueSoon]);
+
   if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen min-h-[100dvh] flex items-center justify-center">
@@ -158,47 +206,6 @@ export default function DashboardPage() {
     const name = session?.user?.name || "";
     return name.split(" ")[0] || "User";
   };
-
-  const now = new Date();
-  const isOverdue = (t: { dueDate: string | null; status: string }) =>
-    !!t.dueDate && new Date(t.dueDate).getTime() < now.getTime() && t.status !== "done";
-  const isDueSoon = (t: { dueDate: string | null; status: string }) => {
-    if (!t.dueDate) return false;
-    const due = new Date(t.dueDate).getTime();
-    const diffDays = (due - now.getTime()) / (1000 * 60 * 60 * 24);
-    return diffDays >= 0 && diffDays <= 7 && t.status !== "done";
-  };
-
-  const workItems = [
-    ...myTasks.map((t) => ({
-      kind: "task" as const,
-      taskId: t.id,
-      subtaskId: null as string | null,
-      title: t.title,
-      status: t.status,
-      priority: t.priority,
-      dueDate: t.dueDate,
-      projectName: t.project?.name || "",
-      taskTitle: t.title,
-    })),
-    ...mySubtasks.map((s) => ({
-      kind: "subtask" as const,
-      taskId: s.taskId,
-      subtaskId: s.id,
-      title: s.title,
-      status: s.status,
-      priority: s.priority,
-      dueDate: s.dueDate,
-      projectName: s.task?.project?.name || "",
-      taskTitle: s.task?.title || "",
-    })),
-  ];
-
-  const orderedWorkItems = [...workItems].sort((a, b) => {
-    const aScore = (isOverdue(a) ? 100 : 0) + (isDueSoon(a) ? 50 : 0) + (a.priority === "high" ? 10 : 0);
-    const bScore = (isOverdue(b) ? 100 : 0) + (isDueSoon(b) ? 50 : 0) + (b.priority === "high" ? 10 : 0);
-    return bScore - aScore;
-  });
 
   const actorLabel = (a: ActivityEvent["actor"]) => {
     if (!a) return "Qualcuno";
