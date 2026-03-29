@@ -1,21 +1,56 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Pencil,
+  Trash2,
+  Search,
+  Download,
+  Upload,
+  List,
+} from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
 import { CSVImportWizard } from "@/components/custom-fields/CSVImportWizard";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatEurCents } from "@/lib/money";
-import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate, safeFileStem, buildXlsxAccounting, downloadXlsxFile, centsToEuros } from "@/lib/export";
+import {
+  buildDelimitedText,
+  buildXlsHtml,
+  downloadCsvFile,
+  downloadXlsFile,
+  isoDate,
+  safeFileStem,
+  buildXlsxAccounting,
+  downloadXlsxFile,
+  centsToEuros,
+} from "@/lib/export";
 import {
   DndContext,
   closestCenter,
@@ -41,7 +76,13 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 
-type ListDto = { id: string; name: string; updatedAt: string; position?: number; _count?: { tasks: number } };
+type ListDto = {
+  id: string;
+  name: string;
+  updatedAt: string;
+  position?: number;
+  _count?: { tasks: number };
+};
 
 type TaskDto = {
   id: string;
@@ -60,7 +101,10 @@ type TaskDto = {
 
 const DEFAULT_LIST_NAME = "Untitled list";
 
-function statusBadge(status: string): { label: string; variant: "secondary" | "outline" | "default" } {
+function statusBadge(status: string): {
+  label: string;
+  variant: "secondary" | "outline" | "default";
+} {
   switch (status) {
     case "todo":
       return { label: "To do", variant: "outline" };
@@ -95,19 +139,38 @@ function getDisplayTags(t: TaskDto): DisplayTag[] {
         .filter((x) => x.name)
     : [];
   if (rel.length > 0) return rel;
-  return parseLegacyTags(t.legacyTags).map((name) => ({ name: String(name || "").trim(), color: null })).filter((x) => x.name);
+  return parseLegacyTags(t.legacyTags)
+    .map((name) => ({ name: String(name || "").trim(), color: null }))
+    .filter((x) => x.name);
 }
 
 function getTagBadgeClass(tagName: string): string {
-  const n = String(tagName || "").trim().toUpperCase();
+  const n = String(tagName || "")
+    .trim()
+    .toUpperCase();
   if (n === "PAGATO") return "bg-emerald-500 text-white border-emerald-600/20";
   if (n === "STAND BY") return "bg-orange-500 text-white border-orange-600/20";
   if (n === "FATTURA EMESSA") return "bg-sky-500 text-white border-sky-600/20";
   return "bg-primary text-primary-foreground border-primary/20";
 }
 
-function SortableTask({ id, children, disabled }: { id: string; children: React.ReactNode; disabled?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+function SortableTask({
+  id,
+  children,
+  disabled,
+}: {
+  id: string;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id,
     data: { type: "Task" },
     disabled,
@@ -122,7 +185,11 @@ function SortableTask({ id, children, disabled }: { id: string; children: React.
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="flex gap-2 items-start group/task">
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="flex gap-2 items-start group/task"
+    >
       {!disabled && (
         <div
           {...attributes}
@@ -137,8 +204,23 @@ function SortableTask({ id, children, disabled }: { id: string; children: React.
   );
 }
 
-function SortableList({ id, children, disabled }: { id: string; children: React.ReactNode; disabled?: boolean }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+function SortableList({
+  id,
+  children,
+  disabled,
+}: {
+  id: string;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id,
     data: { type: "List" },
     disabled,
@@ -177,14 +259,20 @@ export function ProjectTaskLists(props: {
   const { projectId, sessionUserId, sessionGlobalRole, projectMembers } = props;
   const meId = sessionUserId ? String(sessionUserId) : null;
   const globalRole = String(sessionGlobalRole || "member");
-  const myMembership = meId && Array.isArray(projectMembers)
-    ? projectMembers.find((m: any) => m?.userId === meId) || null
-    : null;
+  const myMembership =
+    meId && Array.isArray(projectMembers)
+      ? projectMembers.find((m: any) => m?.userId === meId) || null
+      : null;
   const isProjectMember = Boolean(myMembership);
   const myProjectRole = myMembership?.role ? String(myMembership.role) : "";
-  const isProjectManager = myProjectRole === "owner" || myProjectRole === "manager";
-  const canManageTasks = globalRole === "admin" || isProjectManager || (globalRole === "manager" && isProjectMember);
-  const noPermissionHint = "Solo admin o project owner/manager possono modificare o eliminare le task.";
+  const isProjectManager =
+    myProjectRole === "owner" || myProjectRole === "manager";
+  const canManageTasks =
+    globalRole === "admin" ||
+    isProjectManager ||
+    (globalRole === "manager" && isProjectMember);
+  const noPermissionHint =
+    "Solo admin o project owner/manager possono modificare o eliminare le task.";
 
   const [lists, setLists] = useState<ListDto[]>([]);
   const [tasks, setTasks] = useState<TaskDto[]>([]);
@@ -224,7 +312,9 @@ export function ProjectTaskLists(props: {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -274,7 +364,7 @@ export function ProjectTaskLists(props: {
 
     if (activeId === overId) return;
 
-    const isList = localLists.some(l => l.id === activeId);
+    const isList = localLists.some((l) => l.id === activeId);
 
     if (isList) {
       setLocalLists((items) => {
@@ -283,9 +373,18 @@ export function ProjectTaskLists(props: {
         const newItems = arrayMove(items, oldIndex, newIndex);
 
         // Persist to LocalStorage
-        const listOrder = newItems.reduce((acc, item, index) => ({ ...acc, [item.id]: index }), {});
-        const currentStore = JSON.parse(localStorage.getItem(`project_order_${projectId}`) || '{"listOrder":{},"taskOrder":{}}');
-        localStorage.setItem(`project_order_${projectId}`, JSON.stringify({ ...currentStore, listOrder }));
+        const listOrder = newItems.reduce(
+          (acc, item, index) => ({ ...acc, [item.id]: index }),
+          {},
+        );
+        const currentStore = JSON.parse(
+          localStorage.getItem(`project_order_${projectId}`) ||
+            '{"listOrder":{},"taskOrder":{}}',
+        );
+        localStorage.setItem(
+          `project_order_${projectId}`,
+          JSON.stringify({ ...currentStore, listOrder }),
+        );
 
         return newItems;
       });
@@ -296,9 +395,18 @@ export function ProjectTaskLists(props: {
         const newItems = arrayMove(items, oldIndex, newIndex);
 
         // Persist to LocalStorage
-        const taskOrder = newItems.reduce((acc, item, index) => ({ ...acc, [item.id]: index }), {});
-        const currentStore = JSON.parse(localStorage.getItem(`project_order_${projectId}`) || '{"listOrder":{},"taskOrder":{}}');
-        localStorage.setItem(`project_order_${projectId}`, JSON.stringify({ ...currentStore, taskOrder }));
+        const taskOrder = newItems.reduce(
+          (acc, item, index) => ({ ...acc, [item.id]: index }),
+          {},
+        );
+        const currentStore = JSON.parse(
+          localStorage.getItem(`project_order_${projectId}`) ||
+            '{"listOrder":{},"taskOrder":{}}',
+        );
+        localStorage.setItem(
+          `project_order_${projectId}`,
+          JSON.stringify({ ...currentStore, taskOrder }),
+        );
 
         return newItems;
       });
@@ -329,7 +437,9 @@ export function ProjectTaskLists(props: {
   const [savingTaskTitle, setSavingTaskTitle] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
-  const [defaultListIdForNewTask, setDefaultListIdForNewTask] = useState<string | undefined>(undefined);
+  const [defaultListIdForNewTask, setDefaultListIdForNewTask] = useState<
+    string | undefined
+  >(undefined);
   const [isExporting, setIsExporting] = useState(false);
   const [showImportWizard, setShowImportWizard] = useState(false);
 
@@ -338,28 +448,40 @@ export function ProjectTaskLists(props: {
     try {
       const [listsRes, tasksRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/lists`, { cache: "no-store" }),
-        fetch(`/api/tasks?projectId=${encodeURIComponent(projectId)}&page=1&pageSize=200&view=projectLists`, { cache: "no-store" }),
+        fetch(
+          `/api/tasks?projectId=${encodeURIComponent(projectId)}&page=1&pageSize=200&view=projectLists`,
+          { cache: "no-store" },
+        ),
       ]);
 
       const listsData = await listsRes.json().catch(() => ({}));
       const tasksData = await tasksRes.json().catch(() => ({}));
 
       if (listsRes.status === 501) {
-        setListsUnavailable(listsData?.error || "Liste non disponibili (migrations non applicate).");
+        setListsUnavailable(
+          listsData?.error ||
+            "Liste non disponibili (migrations non applicate).",
+        );
         setLists([]);
       } else if (!listsRes.ok) {
         throw new Error(listsData?.error || "Errore caricamento liste");
       } else {
-        const l = Array.isArray(listsData?.lists) ? (listsData.lists as ListDto[]) : [];
+        const l = Array.isArray(listsData?.lists)
+          ? (listsData.lists as ListDto[])
+          : [];
         setLists(l);
         setListsUnavailable(null);
         if (expanded.length === 0 && l.length > 0) setExpanded([l[0].id]);
       }
 
-      const t = Array.isArray(tasksData?.tasks) ? (tasksData.tasks as TaskDto[]) : [];
+      const t = Array.isArray(tasksData?.tasks)
+        ? (tasksData.tasks as TaskDto[])
+        : [];
       setTasks(t);
       setTasksPage(1);
-      setTasksTotal(Number.isFinite(tasksData?.total) ? Number(tasksData.total) : t.length);
+      setTasksTotal(
+        Number.isFinite(tasksData?.total) ? Number(tasksData.total) : t.length,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore caricamento");
     } finally {
@@ -375,14 +497,16 @@ export function ProjectTaskLists(props: {
     try {
       const res = await fetch(
         `/api/tasks?projectId=${encodeURIComponent(projectId)}&page=${nextPage}&pageSize=200&view=projectLists`,
-        { cache: "no-store" }
+        { cache: "no-store" },
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Errore caricamento task");
       const next = Array.isArray(data?.tasks) ? (data.tasks as TaskDto[]) : [];
       setTasks((prev) => [...prev, ...next]);
       setTasksPage(nextPage);
-      setTasksTotal(Number.isFinite(data?.total) ? Number(data.total) : tasksTotal);
+      setTasksTotal(
+        Number.isFinite(data?.total) ? Number(data.total) : tasksTotal,
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Errore caricamento task");
     } finally {
@@ -400,16 +524,23 @@ export function ProjectTaskLists(props: {
       if (query) base.set("q", query);
 
       // Fetch total first (pageSize is capped server-side to 200)
-      const firstRes = await fetch(`/api/tasks?${base.toString()}&page=1&pageSize=1`, { cache: "no-store" });
+      const firstRes = await fetch(
+        `/api/tasks?${base.toString()}&page=1&pageSize=1`,
+        { cache: "no-store" },
+      );
       const firstData = await firstRes.json().catch(() => ({}));
       if (!firstRes.ok) throw new Error(firstData?.error || "Export fallito");
-      const total = Number.isFinite(firstData?.total) ? Number(firstData.total) : 0;
+      const total = Number.isFinite(firstData?.total)
+        ? Number(firstData.total)
+        : 0;
       if (!total) {
         toast("Nessuna task da esportare");
         return;
       }
       if (total > MAX_EXPORT) {
-        toast.error(`Troppe task da esportare (${total}). Usa la ricerca per ridurre i risultati.`);
+        toast.error(
+          `Troppe task da esportare (${total}). Usa la ricerca per ridurre i risultati.`,
+        );
         return;
       }
 
@@ -420,7 +551,9 @@ export function ProjectTaskLists(props: {
         const params = new URLSearchParams(base.toString());
         params.set("page", String(page));
         params.set("pageSize", String(pageSize));
-        const res = await fetch(`/api/tasks?${params.toString()}`, { cache: "no-store" });
+        const res = await fetch(`/api/tasks?${params.toString()}`, {
+          cache: "no-store",
+        });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || "Export fallito");
         const chunk = Array.isArray(data?.tasks) ? data.tasks : [];
@@ -450,19 +583,26 @@ export function ProjectTaskLists(props: {
 
       const rows = all.map((t: any) => {
         const category = String(t?.taskList?.name || DEFAULT_LIST_NAME);
-        const tags = Array.isArray(t?.tags) ? t.tags.map((x: any) => String(x?.name || "").trim()).filter(Boolean) : [];
+        const tags = Array.isArray(t?.tags)
+          ? t.tags.map((x: any) => String(x?.name || "").trim()).filter(Boolean)
+          : [];
         const legacy = parseLegacyTags(t?.legacyTags);
         const displayTags = tags.length > 0 ? tags : legacy;
         const assignees = Array.isArray(t?.assignees)
           ? t.assignees
-            .map((a: any) => String(a?.user?.email || "").trim())
-            .filter(Boolean)
+              .map((a: any) => String(a?.user?.email || "").trim())
+              .filter(Boolean)
           : [];
 
-        const subtasksTotal = Number.isFinite(t?._count?.subtasks) ? Number(t._count.subtasks) : 0;
+        const subtasksTotal = Number.isFinite(t?._count?.subtasks)
+          ? Number(t._count.subtasks)
+          : 0;
         const subtasksDone = Array.isArray(t?.subtasks) ? t.subtasks.length : 0;
 
-        const amountEur = typeof t?.amountCents === "number" ? centsToEuros(t.amountCents) : null;
+        const amountEur =
+          typeof t?.amountCents === "number"
+            ? centsToEuros(t.amountCents)
+            : null;
 
         return [
           String(t?.project?.id || projectId),
@@ -478,7 +618,9 @@ export function ProjectTaskLists(props: {
           displayTags.join(" | "),
           assignees.join(" | "),
           Number.isFinite(t?._count?.comments) ? Number(t._count.comments) : 0,
-          Number.isFinite(t?._count?.attachments) ? Number(t._count.attachments) : 0,
+          Number.isFinite(t?._count?.attachments)
+            ? Number(t._count.attachments)
+            : 0,
           subtasksTotal,
           subtasksDone,
           isoDate(t?.createdAt),
@@ -487,7 +629,9 @@ export function ProjectTaskLists(props: {
       });
 
       const stamp = new Date().toISOString().slice(0, 10);
-      const projLabel = safeFileStem(String((all[0] as any)?.project?.name || projectId));
+      const projLabel = safeFileStem(
+        String((all[0] as any)?.project?.name || projectId),
+      );
 
       if (format === "csv") {
         const csv = buildDelimitedText({ header, rows });
@@ -516,16 +660,23 @@ export function ProjectTaskLists(props: {
       if (query) base.set("q", query);
 
       // Fetch total first
-      const firstRes = await fetch(`/api/tasks?${base.toString()}&page=1&pageSize=1`, { cache: "no-store" });
+      const firstRes = await fetch(
+        `/api/tasks?${base.toString()}&page=1&pageSize=1`,
+        { cache: "no-store" },
+      );
       const firstData = await firstRes.json().catch(() => ({}));
       if (!firstRes.ok) throw new Error(firstData?.error || "Export fallito");
-      const total = Number.isFinite(firstData?.total) ? Number(firstData.total) : 0;
+      const total = Number.isFinite(firstData?.total)
+        ? Number(firstData.total)
+        : 0;
       if (!total) {
         toast("Nessuna task da esportare");
         return;
       }
       if (total > MAX_EXPORT) {
-        toast.error(`Troppe task da esportare (${total}). Usa la ricerca per ridurre i risultati.`);
+        toast.error(
+          `Troppe task da esportare (${total}). Usa la ricerca per ridurre i risultati.`,
+        );
         return;
       }
 
@@ -537,7 +688,9 @@ export function ProjectTaskLists(props: {
         const params = new URLSearchParams(base.toString());
         params.set("page", String(page));
         params.set("pageSize", String(pageSize));
-        const res = await fetch(`/api/tasks?${params.toString()}`, { cache: "no-store" });
+        const res = await fetch(`/api/tasks?${params.toString()}`, {
+          cache: "no-store",
+        });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data?.error || "Export fallito");
         const chunk = Array.isArray(data?.tasks) ? data.tasks : [];
@@ -559,7 +712,10 @@ export function ProjectTaskLists(props: {
       // Rows con amountEur numerico
       const rows = all.map((t: any) => {
         const category = String(t?.taskList?.name || DEFAULT_LIST_NAME);
-        const amountEur = typeof t?.amountCents === "number" ? centsToEuros(t.amountCents) : null;
+        const amountEur =
+          typeof t?.amountCents === "number"
+            ? centsToEuros(t.amountCents)
+            : null;
 
         return [
           String(t?.project?.name || ""),
@@ -574,9 +730,15 @@ export function ProjectTaskLists(props: {
       });
 
       const stamp = new Date().toISOString().slice(0, 10);
-      const projLabel = safeFileStem(String((all[0] as any)?.project?.name || projectId));
+      const projLabel = safeFileStem(
+        String((all[0] as any)?.project?.name || projectId),
+      );
 
-      const buffer = await buildXlsxAccounting({ header, rows, sheetName: "Tasks" });
+      const buffer = await buildXlsxAccounting({
+        header,
+        rows,
+        sheetName: "Tasks",
+      });
       downloadXlsxFile(`tasks_accounting_${projLabel}_${stamp}.xlsx`, buffer);
       toast.success("Export XLSX pronto");
     } catch (e) {
@@ -652,9 +814,15 @@ export function ProjectTaskLists(props: {
       const tagNames = tags.map((tag) => tag.name.toUpperCase());
 
       // Check if task has any status tag
-      const hasIncassato = tagNames.some((name) => TAG_INCASSATO.includes(name));
-      const hasFatturato = tagNames.some((name) => TAG_FATTURATO.includes(name));
-      const hasDaFatturare = tagNames.some((name) => TAG_DA_FATTURARE.includes(name));
+      const hasIncassato = tagNames.some((name) =>
+        TAG_INCASSATO.includes(name),
+      );
+      const hasFatturato = tagNames.some((name) =>
+        TAG_FATTURATO.includes(name),
+      );
+      const hasDaFatturare = tagNames.some((name) =>
+        TAG_DA_FATTURARE.includes(name),
+      );
       const hasAnyStatusTag = hasIncassato || hasFatturato || hasDaFatturare;
 
       // Calculate totals with priority order: INCASSATO > FATTURATO > DA FATTURARE > PREVISIONALE
@@ -684,13 +852,16 @@ export function ProjectTaskLists(props: {
         body: JSON.stringify({ name }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Impossibile creare categoria");
+      if (!res.ok)
+        throw new Error(data?.error || "Impossibile creare categoria");
       toast.success("Categoria creata");
       setNewListName("");
       setShowCreateList(false);
       await fetchAll();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile creare categoria");
+      toast.error(
+        e instanceof Error ? e.message : "Impossibile creare categoria",
+      );
     } finally {
       setSavingList(false);
     }
@@ -702,34 +873,50 @@ export function ProjectTaskLists(props: {
     if (!name) return;
     setSavingList(true);
     try {
-      const res = await fetch(`/api/projects/${projectId}/lists/${renameListId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
+      const res = await fetch(
+        `/api/projects/${projectId}/lists/${renameListId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        },
+      );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Impossibile rinominare categoria");
+      if (!res.ok)
+        throw new Error(data?.error || "Impossibile rinominare categoria");
       toast.success("Categoria rinominata");
       setRenameListId(null);
       setRenameValue("");
       await fetchAll();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile rinominare categoria");
+      toast.error(
+        e instanceof Error ? e.message : "Impossibile rinominare categoria",
+      );
     } finally {
       setSavingList(false);
     }
   };
 
   const deleteList = async (listId: string, name: string) => {
-    if (!confirm(`Eliminare la categoria “${name}”? Le task verranno spostate in “${DEFAULT_LIST_NAME}”.`)) return;
+    if (
+      !confirm(
+        `Eliminare la categoria “${name}”? Le task verranno spostate in “${DEFAULT_LIST_NAME}”.`,
+      )
+    )
+      return;
     try {
-      const res = await fetch(`/api/projects/${projectId}/lists/${listId}`, { method: "DELETE" });
+      const res = await fetch(`/api/projects/${projectId}/lists/${listId}`, {
+        method: "DELETE",
+      });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Impossibile eliminare categoria");
+      if (!res.ok)
+        throw new Error(data?.error || "Impossibile eliminare categoria");
       toast.success("Categoria eliminata");
       await fetchAll();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile eliminare categoria");
+      toast.error(
+        e instanceof Error ? e.message : "Impossibile eliminare categoria",
+      );
     }
   };
 
@@ -757,18 +944,26 @@ export function ProjectTaskLists(props: {
     if (!title) return;
     setSavingTaskTitle(true);
     try {
-      const res = await fetch(`/api/tasks/${encodeURIComponent(editingTaskId)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
+      const res = await fetch(
+        `/api/tasks/${encodeURIComponent(editingTaskId)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title }),
+        },
+      );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Impossibile aggiornare titolo");
-      setTasks((prev) => prev.map((t) => (t.id === editingTaskId ? { ...t, title } : t)));
+      if (!res.ok)
+        throw new Error(data?.error || "Impossibile aggiornare titolo");
+      setTasks((prev) =>
+        prev.map((t) => (t.id === editingTaskId ? { ...t, title } : t)),
+      );
       toast.success("Titolo aggiornato");
       cancelEditTaskTitle();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile aggiornare titolo");
+      toast.error(
+        e instanceof Error ? e.message : "Impossibile aggiornare titolo",
+      );
     } finally {
       setSavingTaskTitle(false);
     }
@@ -782,7 +977,9 @@ export function ProjectTaskLists(props: {
     if (!confirm(`Eliminare la task “${t.title}”?`)) return;
     setDeletingTaskId(t.id);
     try {
-      const res = await fetch(`/api/tasks/${encodeURIComponent(t.id)}`, { method: "DELETE" });
+      const res = await fetch(`/api/tasks/${encodeURIComponent(t.id)}`, {
+        method: "DELETE",
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "Impossibile eliminare task");
 
@@ -792,15 +989,22 @@ export function ProjectTaskLists(props: {
         setLists((prev) =>
           prev.map((l) =>
             l.id === t.listId
-              ? { ...l, _count: l._count ? { tasks: Math.max(0, (l._count.tasks || 0) - 1) } : l._count }
-              : l
-          )
+              ? {
+                  ...l,
+                  _count: l._count
+                    ? { tasks: Math.max(0, (l._count.tasks || 0) - 1) }
+                    : l._count,
+                }
+              : l,
+          ),
         );
       }
       if (selectedTaskId === t.id) setSelectedTaskId(null);
       toast.success("Task eliminata");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile eliminare task");
+      toast.error(
+        e instanceof Error ? e.message : "Impossibile eliminare task",
+      );
     } finally {
       setDeletingTaskId(null);
     }
@@ -819,9 +1023,12 @@ export function ProjectTaskLists(props: {
       <Card className="bg-white">
         <CardContent className="p-6">
           <div className="font-semibold mb-1">Categorie non disponibili</div>
-          <div className="text-sm text-muted-foreground">{listsUnavailable}</div>
+          <div className="text-sm text-muted-foreground">
+            {listsUnavailable}
+          </div>
           <div className="text-sm text-muted-foreground mt-3">
-            Applica la migration Prisma e poi esegui il backfill (`scripts/backfill-task-lists.ts`).
+            Applica la migration Prisma e poi esegui il backfill
+            (`scripts/backfill-task-lists.ts`).
           </div>
         </CardContent>
       </Card>
@@ -833,7 +1040,12 @@ export function ProjectTaskLists(props: {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca task…" className="pl-9" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Cerca task…"
+            className="pl-9"
+          />
         </div>
         <div className="flex items-center gap-2">
           <DropdownMenu>
@@ -844,13 +1056,22 @@ export function ProjectTaskLists(props: {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => void exportTasks("csv")} disabled={isExporting}>
+              <DropdownMenuItem
+                onClick={() => void exportTasks("csv")}
+                disabled={isExporting}
+              >
                 Export CSV (task)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void exportTasks("xls")} disabled={isExporting}>
+              <DropdownMenuItem
+                onClick={() => void exportTasks("xls")}
+                disabled={isExporting}
+              >
                 Export XLS (task)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => void exportTasksForAccounting()} disabled={isExporting}>
+              <DropdownMenuItem
+                onClick={() => void exportTasksForAccounting()}
+                disabled={isExporting}
+              >
                 Export XLSX (accounting)
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -930,7 +1151,10 @@ export function ProjectTaskLists(props: {
         <Card className="bg-card/50 border-border/50 shadow-sm">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-1.5 rounded-full" style={{ backgroundColor: "hsl(24 100% 50%)" }} />
+              <div
+                className="h-10 w-1.5 rounded-full"
+                style={{ backgroundColor: "hsl(24 100% 50%)" }}
+              />
               <div className="flex-1">
                 <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
                   Previsionale
@@ -951,25 +1175,40 @@ export function ProjectTaskLists(props: {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={localLists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-          <Accordion type="multiple" value={expanded} onValueChange={(v) => setExpanded(v)}>
+        <SortableContext
+          items={localLists.map((l) => l.id)}
+          strategy={verticalListSortingStrategy}
+        >
+          <Accordion
+            type="multiple"
+            value={expanded}
+            onValueChange={(v) => setExpanded(v)}
+          >
             {localLists.map((l) => {
               const listTasks = tasksByListId.get(l.id) || [];
               const isOpen = expandedSet.has(l.id);
               return (
                 <SortableList key={l.id} id={l.id} disabled={!!q}>
-                  <AccordionItem value={l.id} className="border rounded-lg mb-3 bg-white">
+                  <AccordionItem
+                    value={l.id}
+                    className="border rounded-lg mb-3 bg-white"
+                  >
                     <AccordionTrigger className="px-4">
                       <div className="flex items-center justify-between w-full pr-4">
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="font-semibold truncate">{l.name}</div>
                           <div className="flex items-center gap-2">
                             <Badge variant="secondary">
-                              {listTasks.length}/{l._count?.tasks ?? listTasks.length}
+                              {listTasks.length}/
+                              {l._count?.tasks ?? listTasks.length}
                             </Badge>
                             {categoryTotals.get(l.id) ? (
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
-                                Totale: {formatEurCents(categoryTotals.get(l.id) || 0)}
+                              <Badge
+                                variant="outline"
+                                className="bg-blue-50 text-blue-700 border-blue-300"
+                              >
+                                Totale:{" "}
+                                {formatEurCents(categoryTotals.get(l.id) || 0)}
                               </Badge>
                             ) : null}
                           </div>
@@ -997,7 +1236,8 @@ export function ProjectTaskLists(props: {
                               setRenameListId(l.id);
                               setRenameValue(l.name);
                             }}
-                            title="Rinomina"
+                            title="Rinomina categoria"
+                            aria-label="Rinomina categoria"
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
@@ -1009,7 +1249,8 @@ export function ProjectTaskLists(props: {
                               e.stopPropagation();
                               deleteList(l.id, l.name);
                             }}
-                            title="Elimina"
+                            title="Elimina categoria"
+                            aria-label="Elimina categoria"
                             disabled={l.name === DEFAULT_LIST_NAME}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1019,21 +1260,34 @@ export function ProjectTaskLists(props: {
                     </AccordionTrigger>
                     <AccordionContent className="px-4">
                       {!isOpen ? null : listTasks.length === 0 ? (
-                        <div className="text-sm text-muted-foreground py-3">Nessuna task in questa categoria.</div>
+                        <div className="text-sm text-muted-foreground py-3">
+                          Nessuna task in questa categoria.
+                        </div>
                       ) : (
-                        <SortableContext items={listTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                        <SortableContext
+                          items={listTasks.map((t) => t.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
                           <div className="space-y-2 min-h-[10px]">
                             {listTasks.map((t) => {
                               const sb = statusBadge(t.status);
                               const tags = getDisplayTags(t);
                               const primaryTag = tags[0] || null;
-                              const extraTagCount = tags.length > 1 ? tags.length - 1 : 0;
-                              const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : null;
+                              const extraTagCount =
+                                tags.length > 1 ? tags.length - 1 : 0;
+                              const amountEur =
+                                typeof t?.amountCents === "number"
+                                  ? formatEurCents(t.amountCents)
+                                  : null;
                               const isEditing = editingTaskId === t.id;
                               const isDeleting = deletingTaskId === t.id;
                               const disableRowOpen = isEditing;
                               return (
-                                <SortableTask key={t.id} id={t.id} disabled={!!q}>
+                                <SortableTask
+                                  key={t.id}
+                                  id={t.id}
+                                  disabled={!!q}
+                                >
                                   <div
                                     role="button"
                                     tabIndex={0}
@@ -1053,11 +1307,21 @@ export function ProjectTaskLists(props: {
                                     <div className="flex items-start justify-between gap-3">
                                       <div className="min-w-0 flex-1">
                                         {isEditing ? (
-                                          <div className="flex items-start gap-2" onClick={(e) => e.stopPropagation()}>
+                                          <div
+                                            className="flex items-start gap-2"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
                                             <Input
                                               value={editingTaskTitle}
-                                              onChange={(e) => setEditingTaskTitle(e.target.value)}
-                                              disabled={!canManageTasks || savingTaskTitle}
+                                              onChange={(e) =>
+                                                setEditingTaskTitle(
+                                                  e.target.value,
+                                                )
+                                              }
+                                              disabled={
+                                                !canManageTasks ||
+                                                savingTaskTitle
+                                              }
                                               onKeyDown={(e) => {
                                                 if (e.key === "Escape") {
                                                   e.preventDefault();
@@ -1071,10 +1335,20 @@ export function ProjectTaskLists(props: {
                                             />
                                             <Button
                                               size="sm"
-                                              onClick={() => void saveEditedTaskTitle()}
-                                              disabled={!canManageTasks || savingTaskTitle || !editingTaskTitle.trim()}
+                                              onClick={() =>
+                                                void saveEditedTaskTitle()
+                                              }
+                                              disabled={
+                                                !canManageTasks ||
+                                                savingTaskTitle ||
+                                                !editingTaskTitle.trim()
+                                              }
                                             >
-                                              {savingTaskTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salva"}
+                                              {savingTaskTitle ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                              ) : (
+                                                "Salva"
+                                              )}
                                             </Button>
                                             <Button
                                               size="sm"
@@ -1087,14 +1361,21 @@ export function ProjectTaskLists(props: {
                                           </div>
                                         ) : (
                                           <>
-                                            <div className="font-medium truncate">{t.title}</div>
+                                            <div className="font-medium truncate">
+                                              {t.title}
+                                            </div>
                                             {t.description ? (
-                                              <div className="text-xs text-muted-foreground line-clamp-2 mt-1">{t.description}</div>
+                                              <div className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                                                {t.description}
+                                              </div>
                                             ) : null}
                                           </>
                                         )}
                                       </div>
-                                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                      <div
+                                        className="flex items-center gap-2"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
                                         {amountEur ? (
                                           <Badge
                                             variant="outline"
@@ -1110,24 +1391,47 @@ export function ProjectTaskLists(props: {
                                             className={`rounded-md px-4 py-1 text-[11px] font-semibold uppercase tracking-wide min-w-[140px] justify-center transition-opacity ${
                                               primaryTag.color
                                                 ? "text-white border border-black/10 hover:opacity-90"
-                                                : getTagBadgeClass(primaryTag.name)
+                                                : getTagBadgeClass(
+                                                    primaryTag.name,
+                                                  )
                                             }`}
-                                            style={primaryTag.color ? { backgroundColor: primaryTag.color } : undefined}
-                                            title={tags.map((x) => x.name).join(", ")}
+                                            style={
+                                              primaryTag.color
+                                                ? {
+                                                    backgroundColor:
+                                                      primaryTag.color,
+                                                  }
+                                                : undefined
+                                            }
+                                            title={tags
+                                              .map((x) => x.name)
+                                              .join(", ")}
                                           >
                                             {primaryTag.name}
                                           </Badge>
                                         ) : null}
                                         {extraTagCount > 0 ? (
-                                          <Badge variant="outline" title={tags.map((x) => x.name).join(", ")}>
+                                          <Badge
+                                            variant="outline"
+                                            title={tags
+                                              .map((x) => x.name)
+                                              .join(", ")}
+                                          >
                                             +{extraTagCount}
                                           </Badge>
                                         ) : null}
-                                        <Badge variant={sb.variant} className="capitalize">
+                                        <Badge
+                                          variant={sb.variant}
+                                          className="capitalize"
+                                        >
                                           {sb.label}
                                         </Badge>
                                         {t.dueDate ? (
-                                          <Badge variant="outline">{new Date(t.dueDate).toLocaleDateString()}</Badge>
+                                          <Badge variant="outline">
+                                            {new Date(
+                                              t.dueDate,
+                                            ).toLocaleDateString()}
+                                          </Badge>
                                         ) : null}
 
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1135,9 +1439,22 @@ export function ProjectTaskLists(props: {
                                             size="icon"
                                             variant="ghost"
                                             className="h-8 w-8"
-                                            onClick={() => startEditTaskTitle(t)}
-                                            disabled={!canManageTasks || isEditing}
-                                            title={canManageTasks ? "Modifica titolo" : noPermissionHint}
+                                            onClick={() =>
+                                              startEditTaskTitle(t)
+                                            }
+                                            disabled={
+                                              !canManageTasks || isEditing
+                                            }
+                                            title={
+                                              canManageTasks
+                                                ? "Modifica titolo"
+                                                : noPermissionHint
+                                            }
+                                            aria-label={
+                                              canManageTasks
+                                                ? "Modifica titolo"
+                                                : noPermissionHint
+                                            }
                                           >
                                             <Pencil className="h-4 w-4" />
                                           </Button>
@@ -1146,10 +1463,27 @@ export function ProjectTaskLists(props: {
                                             variant="ghost"
                                             className="h-8 w-8 text-destructive"
                                             onClick={() => void deleteTask(t)}
-                                            disabled={!canManageTasks || isDeleting || isEditing}
-                                            title={canManageTasks ? "Elimina task" : noPermissionHint}
+                                            disabled={
+                                              !canManageTasks ||
+                                              isDeleting ||
+                                              isEditing
+                                            }
+                                            title={
+                                              canManageTasks
+                                                ? "Elimina task"
+                                                : noPermissionHint
+                                            }
+                                            aria-label={
+                                              canManageTasks
+                                                ? "Elimina task"
+                                                : noPermissionHint
+                                            }
                                           >
-                                            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                            {isDeleting ? (
+                                              <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                              <Trash2 className="h-4 w-4" />
+                                            )}
                                           </Button>
                                         </div>
                                       </div>
@@ -1171,7 +1505,9 @@ export function ProjectTaskLists(props: {
         <DragOverlay>
           {activeId ? (
             <div className="p-4 bg-background border rounded-lg shadow-lg opacity-80">
-              {localLists.find(l => l.id === activeId)?.name || localTasks.find(t => t.id === activeId)?.title || "Item"}
+              {localLists.find((l) => l.id === activeId)?.name ||
+                localTasks.find((t) => t.id === activeId)?.title ||
+                "Item"}
             </div>
           ) : null}
         </DragOverlay>
@@ -1179,8 +1515,14 @@ export function ProjectTaskLists(props: {
 
       {tasks.length > 0 && tasks.length < tasksTotal ? (
         <div className="flex justify-center">
-          <Button variant="outline" onClick={loadMoreTasks} disabled={loadingMore}>
-            {loadingMore ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          <Button
+            variant="outline"
+            onClick={loadMoreTasks}
+            disabled={loadingMore}
+          >
+            {loadingMore ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : null}
             Carica altre task ({tasksTotal - tasks.length})
           </Button>
         </div>
@@ -1193,34 +1535,66 @@ export function ProjectTaskLists(props: {
           </DialogHeader>
           <div className="space-y-2">
             <Label>Nome</Label>
-            <Input value={newListName} onChange={(e) => setNewListName(e.target.value)} placeholder="Es. Comunicazione" />
+            <Input
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              placeholder="Es. Comunicazione"
+            />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowCreateList(false)} disabled={savingList}>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateList(false)}
+              disabled={savingList}
+            >
               Annulla
             </Button>
-            <Button onClick={createList} disabled={savingList || !newListName.trim()}>
-              {savingList ? <Loader2 className="h-4 w-4 animate-spin" /> : "Crea"}
+            <Button
+              onClick={createList}
+              disabled={savingList || !newListName.trim()}
+            >
+              {savingList ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Crea"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!renameListId} onOpenChange={(v) => !v && setRenameListId(null)}>
+      <Dialog
+        open={!!renameListId}
+        onOpenChange={(v) => !v && setRenameListId(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Rinomina categoria</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <Label>Nome</Label>
-            <Input value={renameValue} onChange={(e) => setRenameValue(e.target.value)} />
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+            />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRenameListId(null)} disabled={savingList}>
+            <Button
+              variant="outline"
+              onClick={() => setRenameListId(null)}
+              disabled={savingList}
+            >
               Annulla
             </Button>
-            <Button onClick={renameList} disabled={savingList || !renameValue.trim()}>
-              {savingList ? <Loader2 className="h-4 w-4 animate-spin" /> : "Salva"}
+            <Button
+              onClick={renameList}
+              disabled={savingList || !renameValue.trim()}
+            >
+              {savingList ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Salva"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1250,5 +1624,3 @@ export function ProjectTaskLists(props: {
     </div>
   );
 }
-
-
