@@ -48,7 +48,8 @@ import {
   Lock,
   FileText,
   Calendar as CalendarIcon,
-  Download
+  Download,
+  X
 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { buildDelimitedText, downloadCsvFile, isoDate } from "@/lib/export";
@@ -532,8 +533,19 @@ export default function AdminAbsencesArchivePage() {
                     value={q} 
                     onChange={(e) => setQ(e.target.value)} 
                     placeholder="Cerca per utente, email o causale..." 
-                    className="pl-9 bg-background/50 border-border/50 h-10 w-full"
+                    className="pl-9 pr-9 bg-background/50 border-border/50 h-10 w-full"
                   />
+                  {q && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => setQ("")}
+                      aria-label="Pulisci ricerca"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 self-end md:self-auto">
                   <Button variant="outline" onClick={handleExport} className="h-10 gap-2" disabled={isExporting || total <= 0}>
