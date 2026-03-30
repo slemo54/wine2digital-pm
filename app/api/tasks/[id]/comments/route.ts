@@ -19,8 +19,8 @@ export async function GET(
   }
 
   try {
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -79,8 +79,8 @@ export async function POST(
       return NextResponse.json({ error: "content required" }, { status: 400 });
     }
 
-    const userId = (session.user as any).id;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }

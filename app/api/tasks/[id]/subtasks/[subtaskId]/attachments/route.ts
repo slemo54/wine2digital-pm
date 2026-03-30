@@ -13,8 +13,8 @@ export async function GET(
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const access = await getTaskAccessFlags(prisma, params.id, userId);
@@ -47,8 +47,8 @@ export async function POST(
     const file = formData.get("file") as File;
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
 
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;

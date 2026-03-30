@@ -34,10 +34,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    const userRole = (session.user as any).role || 'member';
-    const userDepartment = (session.user as any).department || null;
-    const calendarEnabled = (session.user as any).calendarEnabled !== false;
+    const userId = session.user.id;
+    const userRole = session.user.role || 'member';
+    const userDepartment = session.user.department || null;
+    const calendarEnabled = session.user.calendarEnabled !== false;
 
     if (userRole !== 'admin' && !calendarEnabled) {
       return NextResponse.json({ error: 'Calendar access is disabled for your account' }, { status: 403 });
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
+    const userId = session.user.id;
     const body = await req.json();
     const { type, startDate, endDate, startTime, endTime, isFullDay, reason } = body;
 

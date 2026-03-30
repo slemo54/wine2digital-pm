@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id as string | undefined;
+    const userId = session.user.id as string | undefined;
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -181,8 +181,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || 'member';
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || 'member';
 
     const body = await req.json();
     const { title, description, projectId, priority, dueDate, assigneeIds, status, listId } = body;
@@ -281,7 +281,7 @@ export async function POST(req: NextRequest) {
       const actorId = String(userId || "");
       const added = normalizedAssigneeIds.filter((id) => id && id !== actorId);
       if (added.length > 0) {
-        const actorLabel = String((session.user as any)?.name || (session.user as any)?.email || "Un collega");
+        const actorLabel = String(session.user?.name || session.user?.email || "Un collega");
         const project = await prisma.project.findUnique({ where: { id: projectId }, select: { name: true } }).catch(() => null);
         const items = buildTaskAssignedNotifications({
           assigneeIds: added,
