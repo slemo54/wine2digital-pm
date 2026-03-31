@@ -1,0 +1,3 @@
+## 2026-03-13 - [Unified Dashboard Summary]
+**Learning:** Consolidating five separate API calls (projects, tasks, subtasks, notifications, activity) into a single `/api/dashboard/summary` endpoint significantly reduces network overhead and database connection contention. Using `Promise.all` within the API route allows for parallel execution of Prisma queries, leading to much faster response times.
+**Action:** Identify "waterfall" data fetching patterns in complex views and consolidate them into unified summary endpoints. Always ensure React hooks for this data are called unconditionally to satisfy hook rules.
