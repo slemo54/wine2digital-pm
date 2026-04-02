@@ -1,0 +1,19 @@
+
+> app@ dev /app
+> next dev
+
+  ▲ Next.js 14.2.28
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 1844ms
+ ○ Compiling /project/[id] ...
+ ✓ Compiled /project/[id] in 19.4s (2515 modules)
+ ✓ Compiled in 1196ms (1260 modules)
+ GET /project/123 200 in 21825ms
+ ○ Compiling /api/notifications ...
+ ✓ Compiled /api/notifications in 9s (1512 modules)
+[next-auth][warn][NEXTAUTH_URL]
+https://next-auth.js.org/warnings#nextauth_url
+[next-auth][warn][NO_SECRET]
+https://next-auth.js.org/warnings#no_secret
