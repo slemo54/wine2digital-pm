@@ -5,8 +5,6 @@ import { canManageProjectMembers } from "@/lib/project-permissions";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_LIST_NAME = "Untitled list";
-
 function isMissingTableError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
   return msg.includes("TaskList") && msg.toLowerCase().includes("does not exist");
@@ -30,7 +28,6 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string; 
     const body = await req.json();
     const name = String(body?.name || "").trim();
     if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
-    if (name === DEFAULT_LIST_NAME) return NextResponse.json({ error: "Reserved list name" }, { status: 400 });
 
     const list = await prisma.taskList.findFirst({
       where: { id: params.listId, projectId: params.id },
@@ -80,20 +77,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       select: { id: true, name: true },
     });
     if (!target) return NextResponse.json({ error: "List not found" }, { status: 404 });
-    if (target.name === DEFAULT_LIST_NAME) {
-      return NextResponse.json({ error: "Cannot delete default list" }, { status: 400 });
-    }
 
-    const defaultList = await prisma.taskList.upsert({
-      where: { projectId_name: { projectId: params.id, name: DEFAULT_LIST_NAME } },
-      create: { projectId: params.id, name: DEFAULT_LIST_NAME },
-      update: {},
-      select: { id: true },
-    });
-
+    // Explicitly nullify task lists to be safe, even though onDelete: SetNull is usually on the DB level.
     await prisma.task.updateMany({
       where: { projectId: params.id, listId: params.listId },
-      data: { listId: defaultList.id },
+      data: { listId: null },
     });
 
     await prisma.taskList.delete({ where: { id: params.listId } });
@@ -110,5 +98,3 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
-
