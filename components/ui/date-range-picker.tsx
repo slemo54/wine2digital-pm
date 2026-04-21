@@ -17,12 +17,14 @@ interface DateRangePickerProps {
   value: DateRange;
   onChange: (value: DateRange) => void;
   className?: string;
+  portalled?: boolean;
 }
 
 export function DateRangePicker({
   value,
   onChange,
   className,
+  portalled = true,
 }: DateRangePickerProps) {
   const [numberOfMonths, setNumberOfMonths] = React.useState(1);
 
@@ -69,7 +71,11 @@ export function DateRangePicker({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0 max-h-[calc(100dvh-8rem)] overflow-y-auto" align="start">
+        <PopoverContent
+          className="w-auto p-0 max-h-[calc(100dvh-8rem)] overflow-y-auto"
+          align="start"
+          portalled={portalled}
+        >
           <Calendar
             initialFocus
             mode="range"
