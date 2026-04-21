@@ -4,10 +4,18 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
+import {
+  Clock,
+  CheckCircle2,
+  XCircle,
+  Trash2,
+  CalendarIcon,
+  MessageSquare
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarIcon, Clock, CheckCircle2, XCircle, Trash2 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { toast } from "react-hot-toast";
 import {
   Dialog,
   DialogContent,
@@ -16,36 +24,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { toast } from "react-hot-toast";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  image?: string;
-};
-
-type OvertimeRequest = {
+interface OvertimeRequest {
   id: string;
   userId: string;
-  user: User;
   title: string;
   startDate: string;
   endDate: string;
   message: string;
-  status: "pending" | "approved" | "rejected";
+  status: string;
   adminNote?: string;
   createdAt: string;
-};
+  user: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    image: string | null;
+  };
+}
 
 export default function AdminOvertimePage() {
   const queryClient = useQueryClient();
   const [selectedRequest, setSelectedRequest] = useState<OvertimeRequest | null>(null);
-  const [actionType, setActionType] = useState<"approve" | "reject" | null>(null);
   const [adminNote, setAdminNote] = useState("");
+  const [actionType, setActionType] = useState<"approve" | "reject" | null>(null);
   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
 
   const { data: requests = [], isLoading } = useQuery<OvertimeRequest[]>({
@@ -125,7 +130,8 @@ export default function AdminOvertimePage() {
     }
   };
 
-  const getInitials = (name: string) => {
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return "U";
     return name
       .split(" ")
       .map((n) => n[0])
@@ -151,109 +157,120 @@ export default function AdminOvertimePage() {
       {isLoading ? (
         <div className="text-center py-10 text-muted-foreground">Caricamento richieste...</div>
       ) : requests.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-10 text-center text-muted-foreground flex flex-col items-center gap-2">
-            <Clock className="h-8 w-8 text-muted-foreground/50" />
-            <p>Nessuna richiesta di straordinari da gestire.</p>
-          </CardContent>
-        </Card>
+        <div className="border border-dashed rounded-lg py-12 flex flex-col items-center justify-center text-muted-foreground gap-2">
+          <Clock className="h-8 w-8 text-muted-foreground/50" />
+          <p>Nessuna richiesta di straordinari da gestire.</p>
+        </div>
       ) : (
-        <div className="grid gap-4">
+        <Accordion type="single" collapsible className="w-full space-y-4">
           {requests.map((request) => (
-            <Card key={request.id} className="overflow-hidden">
-              <CardHeader className="bg-muted/30 pb-3 border-b">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={request.user.image || undefined} alt={request.user.name} />
-                      <AvatarFallback>{getInitials(request.user.name)}</AvatarFallback>
+            <AccordionItem
+              key={request.id}
+              value={request.id}
+              className="border rounded-lg bg-card shadow-sm px-1"
+            >
+              <AccordionTrigger className="px-4 py-4 hover:no-underline hover:bg-muted/30 transition-colors rounded-lg data-[state=open]:rounded-b-none">
+                <div className="flex items-center justify-between w-full pr-4 text-left">
+                  <div className="flex items-center gap-4 flex-1">
+                    <Avatar className="h-10 w-10 border hidden sm:flex">
+                      <AvatarImage src={request.user?.image || undefined} alt={request.user?.name || ""} />
+                      <AvatarFallback>{getInitials(request.user?.name)}</AvatarFallback>
                     </Avatar>
-                    <div>
-                      <CardTitle className="text-base">{request.user.name}</CardTitle>
-                      <CardDescription className="flex flex-col gap-1 mt-1">
-                        <span className="font-medium text-foreground">{request.title}</span>
-                        <span className="flex items-center gap-1">
-                          <CalendarIcon className="h-3.5 w-3.5" />
-                          {format(new Date(request.startDate), "dd MMM yyyy", { locale: it })}
-                          {format(new Date(request.startDate), "dd/MM/yyyy") !== format(new Date(request.endDate), "dd/MM/yyyy") &&
-                            ` - ${format(new Date(request.endDate), "dd MMM yyyy", { locale: it })}`
-                          }
-                          <span className="mx-2 text-muted-foreground/50">•</span>
-                          Inviata: {format(new Date(request.createdAt), "dd/MM/yyyy HH:mm")}
+                    <div className="space-y-1">
+                      <div className="font-medium flex items-center gap-2">
+                        {request.user?.name || request.user?.email || "Utente"}
+                        <span className="text-muted-foreground font-normal hidden sm:inline-block">
+                          ha richiesto straordinari
                         </span>
-                      </CardDescription>
+                      </div>
+                      <div className="text-sm font-semibold text-primary">{request.title}</div>
+                      <div className="text-xs text-muted-foreground flex items-center gap-1">
+                        <CalendarIcon className="h-3 w-3" />
+                        {format(new Date(request.startDate), "dd MMM yyyy", { locale: it })}
+                        {format(new Date(request.startDate), "dd/MM/yyyy") !== format(new Date(request.endDate), "dd/MM/yyyy") &&
+                          ` - ${format(new Date(request.endDate), "dd MMM yyyy", { locale: it })}`
+                        }
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex items-center gap-4">
+                    <div className="hidden md:block text-xs text-muted-foreground text-right">
+                      Inviata il<br/>
+                      {format(new Date(request.createdAt), "dd/MM/yyyy HH:mm")}
+                    </div>
                     {getStatusBadge(request.status)}
+                  </div>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4 pt-2 border-t">
+                <div className="space-y-4 pt-2">
+                  <div className="bg-muted/30 rounded-md p-4">
+                    <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      Messaggio della richiesta
+                    </h4>
+                    <div className="whitespace-pre-wrap text-sm text-foreground/90 leading-relaxed">
+                      {request.message}
+                    </div>
+                  </div>
+
+                  {request.adminNote && request.status !== "pending" && (
+                    <div className="border-l-2 border-primary pl-4 py-2 bg-primary/5 rounded-r-md">
+                      <Label className="text-xs font-semibold text-primary mb-1 block">La tua nota di risposta:</Label>
+                      <p className="text-sm text-muted-foreground">{request.adminNote}</p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t gap-4">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 text-muted-foreground hover:text-destructive"
+                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 w-full sm:w-auto"
                       onClick={() => {
                         if (confirm("Sei sicuro di voler eliminare questa richiesta?")) {
                           deleteMutation.mutate(request.id);
                         }
                       }}
                     >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Elimina
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Elimina Richiesta
                     </Button>
+
+                    <div className="flex gap-2 w-full sm:w-auto">
+                      {request.status === "pending" ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive flex-1 sm:flex-auto"
+                            onClick={() => handleActionClick(request, "reject")}
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Rifiuta
+                          </Button>
+                          <Button
+                            className="bg-emerald-500 hover:bg-emerald-600 text-white flex-1 sm:flex-auto"
+                            onClick={() => handleActionClick(request, "approve")}
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Approva
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          className="w-full sm:w-auto"
+                          onClick={() => handleActionClick(request, request.status === "approved" ? "reject" : "approve")}
+                        >
+                          Modifica Esito
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-xs text-muted-foreground mb-1 block">Dettagli / Messaggio:</Label>
-                    <div className="bg-muted/50 p-4 rounded-md whitespace-pre-wrap text-sm border">
-                      {request.message}
-                    </div>
-                  </div>
-
-                  {request.adminNote && request.status !== "pending" && (
-                    <div className="border-l-2 border-primary pl-4 py-2">
-                      <Label className="text-xs font-semibold text-primary mb-1 block">La tua nota:</Label>
-                      <p className="text-sm text-muted-foreground">{request.adminNote}</p>
-                    </div>
-                  )}
-
-                  {request.status === "pending" && (
-                    <div className="flex justify-end gap-2 pt-2">
-                      <Button
-                        variant="outline"
-                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => handleActionClick(request, "reject")}
-                      >
-                        <XCircle className="h-4 w-4 mr-2" />
-                        Rifiuta
-                      </Button>
-                      <Button
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white"
-                        onClick={() => handleActionClick(request, "approve")}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Approva
-                      </Button>
-                    </div>
-                  )}
-
-                  {request.status !== "pending" && (
-                    <div className="flex justify-end">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleActionClick(request, request.status === "approved" ? "reject" : "approve")}
-                      >
-                        Modifica Esito
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+              </AccordionContent>
+            </AccordionItem>
           ))}
-        </div>
+        </Accordion>
       )}
 
       {/* Action Dialog */}
@@ -264,7 +281,7 @@ export default function AdminOvertimePage() {
               {actionType === "approve" ? "Approva Richiesta" : "Rifiuta Richiesta"}
             </DialogTitle>
             <DialogDescription>
-              Stai per {actionType === "approve" ? "approvare" : "rifiutare"} la richiesta di straordinari di <strong>{selectedRequest?.user?.name}</strong> per &quot;{selectedRequest?.title}&quot;.
+              Stai per {actionType === "approve" ? "approvare" : "rifiutare"} la richiesta di straordinari di <strong>{selectedRequest?.user?.name || "Utente"}</strong> per &quot;{selectedRequest?.title}&quot;.
             </DialogDescription>
           </DialogHeader>
 
