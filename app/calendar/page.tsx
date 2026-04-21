@@ -177,7 +177,10 @@ export default function CalendarPage() {
           type: newAbsence.type,
           startDate: newAbsence.startDate,
           endDate: newAbsence.endDate,
-          notes: newAbsence.reason,
+          isFullDay: newAbsence.isFullDay,
+          startTime: newAbsence.startTime,
+          endTime: newAbsence.endTime,
+          reason: newAbsence.reason,
         });
         handleDialogChange(false);
       }
