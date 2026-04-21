@@ -149,16 +149,23 @@ export function AbsenceTable({
                                             to {format(end, "MMM d, yyyy")}
                                         </span>
                                         {absence.reason && (
-                                            <span className="text-[11px] text-muted-foreground italic mt-1 line-clamp-2 max-w-[200px]">
+                                            <span className="text-[11px] text-muted-foreground italic mt-1 bg-secondary/30 p-1.5 rounded-md border-l-2 border-primary/20 max-w-[250px]">
                                                 &quot;{absence.reason}&quot;
                                             </span>
                                         )}
                                     </div>
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                        <Clock className="w-3 h-3" />
-                                        {days} day{days !== 1 ? "s" : ""}
+                                    <div className="flex flex-col gap-1 text-sm text-muted-foreground">
+                                        <div className="flex items-center gap-1">
+                                            <Clock className="w-3 h-3" />
+                                            {days} day{days !== 1 ? "s" : ""}
+                                        </div>
+                                        {(!absence.isFullDay && absence.startTime && absence.endTime) && (
+                                            <span className="text-[11px] font-medium bg-secondary text-secondary-foreground px-1.5 py-0.5 rounded-sm w-max">
+                                                {absence.startTime} - {absence.endTime}
+                                            </span>
+                                        )}
                                     </div>
                                 </TableCell>
                                 <TableCell>

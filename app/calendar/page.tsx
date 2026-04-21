@@ -750,14 +750,19 @@ export default function CalendarPage() {
                         </div>
 
                         <div className="space-y-3 mb-5 pl-1">
-                          <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-muted-foreground">
                             <CalendarIcon className="h-4 w-4 text-warning/60" />
                             <span>{formatDate(absence.startDate)}</span>
                             <ChevronRight className="h-3 w-3 opacity-40" />
                             <span>{formatDate(absence.endDate)}</span>
+                            {(!absence.isFullDay && absence.startTime && absence.endTime) && (
+                              <Badge variant="secondary" className="text-[10px] ml-auto">
+                                {absence.startTime} - {absence.endTime}
+                              </Badge>
+                            )}
                           </div>
                           {absence.reason && (
-                            <p className="text-xs text-muted-foreground italic bg-secondary/30 p-2.5 rounded-lg border-l-2 border-warning/20">
+                            <p className="text-xs text-muted-foreground italic bg-secondary/30 p-2.5 rounded-lg border-l-2 border-warning/20 mt-2">
                               &quot;{absence.reason}&quot;
                             </p>
                           )}
@@ -845,11 +850,16 @@ export default function CalendarPage() {
                           </div>
 
                           <div className="pl-1">
-                            <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-muted-foreground">
                               <CalendarIcon className="h-4 w-4 text-success/60" />
                               <span>{formatDate(absence.startDate)}</span>
                               <ChevronRight className="h-3 w-3 opacity-40" />
                               <span>{formatDate(absence.endDate)}</span>
+                              {(!absence.isFullDay && absence.startTime && absence.endTime) && (
+                                <Badge variant="secondary" className="text-[10px] ml-auto">
+                                  {absence.startTime} - {absence.endTime}
+                                </Badge>
+                              )}
                             </div>
                             {absence.reason && (
                               <p className="text-xs text-muted-foreground italic bg-secondary/30 p-2.5 rounded-lg border-l-2 border-success/20 mt-3">
@@ -909,11 +919,16 @@ export default function CalendarPage() {
                           </div>
 
                           <div className="pl-1">
-                            <div className="flex items-center gap-2 text-[13px] font-medium text-muted-foreground">
+                            <div className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-muted-foreground">
                               <CalendarIcon className="h-4 w-4 text-destructive/60" />
                               <span>{formatDate(absence.startDate)}</span>
                               <ChevronRight className="h-3 w-3 opacity-40" />
                               <span>{formatDate(absence.endDate)}</span>
+                              {(!absence.isFullDay && absence.startTime && absence.endTime) && (
+                                <Badge variant="secondary" className="text-[10px] ml-auto">
+                                  {absence.startTime} - {absence.endTime}
+                                </Badge>
+                              )}
                             </div>
                             {absence.reason && (
                               <p className="text-xs text-muted-foreground italic bg-secondary/30 p-2.5 rounded-lg border-l-2 border-destructive/20 mt-3">
