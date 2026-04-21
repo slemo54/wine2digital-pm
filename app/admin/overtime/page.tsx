@@ -264,7 +264,7 @@ export default function AdminOvertimePage() {
               {actionType === "approve" ? "Approva Richiesta" : "Rifiuta Richiesta"}
             </DialogTitle>
             <DialogDescription>
-              Stai per {actionType === "approve" ? "approvare" : "rifiutare"} la richiesta di straordinari di <strong>{selectedRequest?.user?.name}</strong> per "{selectedRequest?.title}".
+              Stai per {actionType === "approve" ? "approvare" : "rifiutare"} la richiesta di straordinari di <strong>{selectedRequest?.user?.name}</strong> per &quot;{selectedRequest?.title}&quot;.
             </DialogDescription>
           </DialogHeader>
 

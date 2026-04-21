@@ -147,6 +147,7 @@ export default function OvertimePage() {
                     value={dateRange as DateRange}
                     onChange={(value) => setDateRange(value)}
                     className="w-full"
+                    portalled={false}
                   />
                 </div>
                 <div className="space-y-2">
