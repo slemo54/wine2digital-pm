@@ -39,7 +39,10 @@ interface CreateAbsenceData {
   type: string;
   startDate: string;
   endDate: string;
-  notes?: string;
+  isFullDay: boolean;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
 }
 
 interface ApproveAbsenceData {
