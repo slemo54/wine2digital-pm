@@ -38,6 +38,7 @@ const NAV: NavItem[] = [
   { href: "/projects", label: "Progetti", icon: FolderKanban, isActive: (p) => p.startsWith("/projects") || p.startsWith("/project/") },
   { href: "/tasks", label: "Task", icon: CheckSquare, isActive: (p) => p.startsWith("/tasks") },
   { href: "/calendar", label: "Calendario", icon: CalendarDays, isActive: (p) => p.startsWith("/calendar") },
+  { href: "/overtime", label: "Straordinari", icon: Clock, isActive: (p) => p.startsWith("/overtime") },
   ...(isClockifyEnabled()
     ? [{ href: "/clockify", label: "Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify") }]
     : []),

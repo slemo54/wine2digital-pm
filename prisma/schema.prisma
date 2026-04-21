@@ -28,6 +28,7 @@ model User {
   projectMembers   ProjectMember[]
   assignedTasks    TaskAssignee[]
   assignedSubtasks Subtask[]
+  overtimeRequests OvertimeRequest[]  @relation("UserOvertime")
   taskComments     TaskComment[]
   subtaskComments  SubtaskComment[]
   absences         Absence[]
@@ -623,4 +624,17 @@ model CustomFieldValue {
   @@unique([customFieldId, subtaskId])
   @@index([taskId])
   @@index([subtaskId])
+}
+
+// Overtime requests
+model OvertimeRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation("UserOvertime", fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime
+  message     String   @db.Text
+  status      String   @default("pending") // pending, approved, rejected
+  adminNote   String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
