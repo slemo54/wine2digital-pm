@@ -11,9 +11,6 @@ export async function GET() {
       return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 });
     }
 
-    // Only fetch requests for the current user unless they are admin/manager
-    // We will handle admin view in a separate API or with a query parameter.
-    // For now, let's keep it simple: GET /api/overtime returns the user's own requests.
     const requests = await prisma.overtimeRequest.findMany({
       where: {
         userId: (session.user as any).id,
@@ -39,16 +36,18 @@ export async function POST(request: Request) {
     }
 
     const json = await request.json();
-    const { date, message } = json;
+    const { title, startDate, endDate, message } = json;
 
-    if (!date || !message) {
-      return NextResponse.json({ error: 'Data e messaggio sono obbligatori' }, { status: 400 });
+    if (!title || !startDate || !endDate || !message) {
+      return NextResponse.json({ error: 'Titolo, date e messaggio sono obbligatori' }, { status: 400 });
     }
 
     const newRequest = await prisma.overtimeRequest.create({
       data: {
         userId: (session.user as any).id,
-        date: new Date(date),
+        title: title,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
         message: message,
       },
     });
