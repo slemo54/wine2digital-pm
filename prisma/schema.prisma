@@ -631,7 +631,9 @@ model OvertimeRequest {
   id          String   @id @default(cuid())
   userId      String
   user        User     @relation("UserOvertime", fields: [userId], references: [id], onDelete: Cascade)
-  date        DateTime
+  title       String
+  startDate   DateTime
+  endDate     DateTime
   message     String   @db.Text
   status      String   @default("pending") // pending, approved, rejected
   adminNote   String?  @db.Text

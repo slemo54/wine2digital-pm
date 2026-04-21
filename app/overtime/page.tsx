@@ -18,16 +18,18 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import { toast } from "react-hot-toast";
+import { DateRange } from "react-day-picker";
 
 type OvertimeRequest = {
   id: string;
   userId: string;
-  date: string;
+  title: string;
+  startDate: string;
+  endDate: string;
   message: string;
   status: "pending" | "approved" | "rejected";
   adminNote?: string;
@@ -38,7 +40,11 @@ export default function OvertimePage() {
   const { data: session } = useSession();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [title, setTitle] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: new Date(),
+    to: new Date()
+  });
   const [message, setMessage] = useState("");
 
   const { data: requests = [], isLoading } = useQuery<OvertimeRequest[]>({
@@ -51,7 +57,7 @@ export default function OvertimePage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (newRequest: { date: string; message: string }) => {
+    mutationFn: async (newRequest: { title: string; startDate: string; endDate: string; message: string }) => {
       const res = await fetch("/api/overtime", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -64,8 +70,9 @@ export default function OvertimePage() {
       queryClient.invalidateQueries({ queryKey: ["overtime"] });
       toast.success("Richiesta inviata con successo");
       setIsDialogOpen(false);
+      setTitle("");
       setMessage("");
-      setSelectedDate(new Date());
+      setDateRange({ from: new Date(), to: new Date() });
     },
     onError: () => {
       toast.error("Errore nell'invio della richiesta");
@@ -74,12 +81,14 @@ export default function OvertimePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedDate || !message.trim()) {
+    if (!title.trim() || !dateRange?.from || !dateRange?.to || !message.trim()) {
       toast.error("Compila tutti i campi obbligatori");
       return;
     }
     createMutation.mutate({
-      date: selectedDate.toISOString(),
+      title: title.trim(),
+      startDate: dateRange.from.toISOString(),
+      endDate: dateRange.to.toISOString(),
       message: message.trim(),
     });
   };
@@ -115,44 +124,30 @@ export default function OvertimePage() {
               Nuova Richiesta
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent className="sm:max-w-[550px]">
             <form onSubmit={handleSubmit}>
               <DialogHeader>
                 <DialogTitle>Richiesta Straordinari</DialogTitle>
                 <DialogDescription>
-                  Invia una nuova comunicazione all&apos;amministrazione. Spiega nel dettaglio il lavoro svolto e le ore effettuate.
+                  Invia una nuova comunicazione all&apos;amministrazione. Specifica il periodo e spiega nel dettaglio il lavoro svolto.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Data di riferimento</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !selectedDate && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {selectedDate ? (
-                          format(selectedDate, "PPP", { locale: it })
-                        ) : (
-                          <span>Seleziona una data</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={setSelectedDate}
-                        initialFocus
-                        locale={it}
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <label className="text-sm font-medium">Titolo della richiesta</label>
+                  <Input
+                    placeholder="Es: Straordinari Vinitaly 2026"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Periodo di riferimento</label>
+                  <DateRangePicker
+                    value={dateRange as DateRange}
+                    onChange={(value) => setDateRange(value)}
+                    className="w-full"
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Messaggio / Dettagli</label>
@@ -192,13 +187,21 @@ export default function OvertimePage() {
             <Card key={request.id}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <CalendarIcon className="h-5 w-5 text-muted-foreground" />
-                    {format(new Date(request.date), "dd MMMM yyyy", { locale: it })}
-                  </CardTitle>
+                  <div className="space-y-1">
+                    <CardTitle className="text-lg">
+                      {request.title}
+                    </CardTitle>
+                    <div className="flex items-center text-sm text-muted-foreground gap-2">
+                      <CalendarIcon className="h-4 w-4" />
+                      {format(new Date(request.startDate), "dd MMM yyyy", { locale: it })}
+                      {format(new Date(request.startDate), "dd/MM/yyyy") !== format(new Date(request.endDate), "dd/MM/yyyy") &&
+                        ` - ${format(new Date(request.endDate), "dd MMM yyyy", { locale: it })}`
+                      }
+                    </div>
+                  </div>
                   {getStatusBadge(request.status)}
                 </div>
-                <CardDescription>
+                <CardDescription className="mt-2">
                   Inviata il {format(new Date(request.createdAt), "dd/MM/yyyy HH:mm")}
                 </CardDescription>
               </CardHeader>

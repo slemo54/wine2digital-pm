@@ -31,21 +31,22 @@ type User = {
 type OvertimeRequest = {
   id: string;
   userId: string;
-  date: string;
+  user: User;
+  title: string;
+  startDate: string;
+  endDate: string;
   message: string;
   status: "pending" | "approved" | "rejected";
   adminNote?: string;
   createdAt: string;
-  user: User;
 };
 
 export default function AdminOvertimePage() {
   const queryClient = useQueryClient();
   const [selectedRequest, setSelectedRequest] = useState<OvertimeRequest | null>(null);
+  const [actionType, setActionType] = useState<"approve" | "reject" | null>(null);
   const [adminNote, setAdminNote] = useState("");
-  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [updateAction, setUpdateAction] = useState<"approved" | "rejected" | null>(null);
+  const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
 
   const { data: requests = [], isLoading } = useQuery<OvertimeRequest[]>({
     queryKey: ["admin-overtime"],
@@ -56,12 +57,12 @@ export default function AdminOvertimePage() {
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, status, note }: { id: string; status: string; note: string }) => {
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status, adminNote }: { id: string; status: string; adminNote?: string }) => {
       const res = await fetch(`/api/overtime/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, adminNote: note }),
+        body: JSON.stringify({ status, adminNote }),
       });
       if (!res.ok) throw new Error("Errore nell'aggiornamento della richiesta");
       return res.json();
@@ -69,10 +70,10 @@ export default function AdminOvertimePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-overtime"] });
       toast.success("Richiesta aggiornata con successo");
-      setIsUpdateDialogOpen(false);
+      setIsActionDialogOpen(false);
       setSelectedRequest(null);
       setAdminNote("");
-      setUpdateAction(null);
+      setActionType(null);
     },
     onError: () => {
       toast.error("Errore nell'aggiornamento della richiesta");
@@ -90,27 +91,26 @@ export default function AdminOvertimePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-overtime"] });
       toast.success("Richiesta eliminata");
-      setIsDeleteDialogOpen(false);
-      setSelectedRequest(null);
     },
     onError: () => {
       toast.error("Errore nell'eliminazione della richiesta");
     },
   });
 
-  const openUpdateDialog = (request: OvertimeRequest, action: "approved" | "rejected") => {
+  const handleActionClick = (request: OvertimeRequest, action: "approve" | "reject") => {
     setSelectedRequest(request);
-    setUpdateAction(action);
+    setActionType(action);
     setAdminNote(request.adminNote || "");
-    setIsUpdateDialogOpen(true);
+    setIsActionDialogOpen(true);
   };
 
-  const handleUpdate = () => {
-    if (!selectedRequest || !updateAction) return;
-    updateMutation.mutate({
+  const submitAction = () => {
+    if (!selectedRequest || !actionType) return;
+
+    updateStatusMutation.mutate({
       id: selectedRequest.id,
-      status: updateAction,
-      note: adminNote,
+      status: actionType === "approve" ? "approved" : "rejected",
+      adminNote: adminNote.trim() || undefined,
     });
   };
 
@@ -125,8 +125,7 @@ export default function AdminOvertimePage() {
     }
   };
 
-  const getInitials = (name?: string) => {
-    if (!name) return "U";
+  const getInitials = (name: string) => {
     return name
       .split(" ")
       .map((n) => n[0])
@@ -136,15 +135,17 @@ export default function AdminOvertimePage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
-          <Clock className="h-8 w-8 text-primary" />
-          Amministrazione Straordinari
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Gestisci le richieste di lavoro straordinario inviate dai dipendenti.
-        </p>
+    <div className="p-6 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+            <Clock className="h-8 w-8 text-primary" />
+            Gestione Straordinari
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Visualizza e approva le richieste di lavoro straordinario del team.
+          </p>
+        </div>
       </div>
 
       {isLoading ? (
@@ -153,86 +154,101 @@ export default function AdminOvertimePage() {
         <Card className="border-dashed">
           <CardContent className="py-10 text-center text-muted-foreground flex flex-col items-center gap-2">
             <Clock className="h-8 w-8 text-muted-foreground/50" />
-            <p>Nessuna richiesta di straordinari trovata nel sistema.</p>
+            <p>Nessuna richiesta di straordinari da gestire.</p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4">
           {requests.map((request) => (
-            <Card key={request.id}>
-              <CardHeader className="pb-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <Card key={request.id} className="overflow-hidden">
+              <CardHeader className="bg-muted/30 pb-3 border-b">
+                <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10 border">
-                      <AvatarImage src={request.user?.image || undefined} />
-                      <AvatarFallback>{getInitials(request.user?.name)}</AvatarFallback>
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={request.user.image || undefined} alt={request.user.name} />
+                      <AvatarFallback>{getInitials(request.user.name)}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <CardTitle className="text-lg">{request.user?.name || "Utente Sconosciuto"}</CardTitle>
-                      <CardDescription className="flex items-center gap-1">
-                        <CalendarIcon className="h-3 w-3" />
-                        Rif. {format(new Date(request.date), "dd MMMM yyyy", { locale: it })}
+                      <CardTitle className="text-base">{request.user.name}</CardTitle>
+                      <CardDescription className="flex flex-col gap-1 mt-1">
+                        <span className="font-medium text-foreground">{request.title}</span>
+                        <span className="flex items-center gap-1">
+                          <CalendarIcon className="h-3.5 w-3.5" />
+                          {format(new Date(request.startDate), "dd MMM yyyy", { locale: it })}
+                          {format(new Date(request.startDate), "dd/MM/yyyy") !== format(new Date(request.endDate), "dd/MM/yyyy") &&
+                            ` - ${format(new Date(request.endDate), "dd MMM yyyy", { locale: it })}`
+                          }
+                          <span className="mx-2 text-muted-foreground/50">•</span>
+                          Inviata: {format(new Date(request.createdAt), "dd/MM/yyyy HH:mm")}
+                        </span>
                       </CardDescription>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 self-start sm:self-center">
+                  <div className="flex flex-col items-end gap-2">
                     {getStatusBadge(request.status)}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-muted/50 p-4 rounded-md whitespace-pre-wrap text-sm">
-                  {request.message}
-                </div>
-
-                {request.adminNote && (
-                  <div className="border-l-2 border-primary pl-4 py-2">
-                    <p className="text-xs font-semibold text-primary mb-1">Tua Nota:</p>
-                    <p className="text-sm text-muted-foreground">{request.adminNote}</p>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-end gap-2 pt-2 border-t">
-                  {request.status === "pending" && (
-                    <>
-                      <Button
-                        variant="outline"
-                        className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                        onClick={() => openUpdateDialog(request, "approved")}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-1" />
-                        Approva
-                      </Button>
-                      <Button
-                        variant="outline"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        onClick={() => openUpdateDialog(request, "rejected")}
-                      >
-                        <XCircle className="h-4 w-4 mr-1" />
-                        Rifiuta
-                      </Button>
-                    </>
-                  )}
-                  {request.status !== "pending" && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => openUpdateDialog(request, request.status === "approved" ? "rejected" : "approved")}
+                      className="h-8 text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        if (confirm("Sei sicuro di voler eliminare questa richiesta?")) {
+                          deleteMutation.mutate(request.id);
+                        }
+                      }}
                     >
-                      Modifica Stato
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Elimina
                     </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1 block">Dettagli / Messaggio:</Label>
+                    <div className="bg-muted/50 p-4 rounded-md whitespace-pre-wrap text-sm border">
+                      {request.message}
+                    </div>
+                  </div>
+
+                  {request.adminNote && request.status !== "pending" && (
+                    <div className="border-l-2 border-primary pl-4 py-2">
+                      <Label className="text-xs font-semibold text-primary mb-1 block">La tua nota:</Label>
+                      <p className="text-sm text-muted-foreground">{request.adminNote}</p>
+                    </div>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => {
-                      setSelectedRequest(request);
-                      setIsDeleteDialogOpen(true);
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+
+                  {request.status === "pending" && (
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => handleActionClick(request, "reject")}
+                      >
+                        <XCircle className="h-4 w-4 mr-2" />
+                        Rifiuta
+                      </Button>
+                      <Button
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white"
+                        onClick={() => handleActionClick(request, "approve")}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        Approva
+                      </Button>
+                    </div>
+                  )}
+
+                  {request.status !== "pending" && (
+                    <div className="flex justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleActionClick(request, request.status === "approved" ? "reject" : "approve")}
+                      >
+                        Modifica Esito
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -240,61 +256,42 @@ export default function AdminOvertimePage() {
         </div>
       )}
 
-      {/* Update Dialog */}
-      <Dialog open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>
+      {/* Action Dialog */}
+      <Dialog open={isActionDialogOpen} onOpenChange={setIsActionDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {updateAction === "approved" ? "Approva Richiesta" : "Rifiuta Richiesta"}
+              {actionType === "approve" ? "Approva Richiesta" : "Rifiuta Richiesta"}
             </DialogTitle>
             <DialogDescription>
-              Stai per {updateAction === "approved" ? "approvare" : "rifiutare"} la richiesta di straordinari di {selectedRequest?.user?.name}.
+              Stai per {actionType === "approve" ? "approvare" : "rifiutare"} la richiesta di straordinari di <strong>{selectedRequest?.user?.name}</strong> per "{selectedRequest?.title}".
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
+
+          <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Nota per il dipendente (opzionale)</Label>
+              <Label htmlFor="adminNote">Nota per l&apos;utente (opzionale)</Label>
               <Textarea
-                placeholder="Inserisci un commento o una motivazione..."
+                id="adminNote"
+                placeholder={actionType === "approve" ? "Es: Ok procedi pure." : "Es: Non approvato perché le ore superano il budget."}
                 value={adminNote}
                 onChange={(e) => setAdminNote(e.target.value)}
+                className="min-h-[100px]"
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsUpdateDialogOpen(false)}>
-              Annulla
-            </Button>
-            <Button
-              variant={updateAction === "approved" ? "default" : "destructive"}
-              onClick={handleUpdate}
-              disabled={updateMutation.isPending}
-            >
-              {updateMutation.isPending ? "Salvataggio..." : "Conferma"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      {/* Delete Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Elimina Richiesta</DialogTitle>
-            <DialogDescription>
-              Sei sicuro di voler eliminare definitivamente questa richiesta di straordinari? Questa azione non può essere annullata.
-            </DialogDescription>
-          </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsActionDialogOpen(false)}>
               Annulla
             </Button>
             <Button
-              variant="destructive"
-              onClick={() => selectedRequest && deleteMutation.mutate(selectedRequest.id)}
-              disabled={deleteMutation.isPending}
+              variant={actionType === "approve" ? "default" : "destructive"}
+              className={actionType === "approve" ? "bg-emerald-500 hover:bg-emerald-600 text-white" : ""}
+              onClick={submitAction}
+              disabled={updateStatusMutation.isPending}
             >
-              {deleteMutation.isPending ? "Eliminazione..." : "Elimina"}
+              {updateStatusMutation.isPending ? "Salvataggio..." : "Conferma"}
             </Button>
           </DialogFooter>
         </DialogContent>
