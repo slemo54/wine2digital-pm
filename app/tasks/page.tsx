@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -139,8 +140,9 @@ export default function TasksPage() {
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen min-h-[100dvh] flex flex-col p-6 bg-secondary space-y-4">
+        <Skeleton className="h-10 w-[200px]" />
+        <Skeleton className="h-[400px] w-full" />
       </div>
     );
   }
@@ -306,9 +308,10 @@ export default function TasksPage() {
             <ScrollArea className="h-[70vh] h-[70dvh]">
               <div className="divide-y divide-border/40">
                 {loadingList ? (
-                  <div className="p-12 flex flex-col items-center justify-center gap-3 text-muted-foreground">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <p>Caricamento task in corso...</p>
+                  <div className="p-4 space-y-3">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full rounded" />
+                    ))}
                   </div>
                 ) : tasks.length === 0 ? (
                   <div className="p-12 flex flex-col items-center justify-center gap-3 text-muted-foreground text-center">
@@ -332,8 +335,10 @@ export default function TasksPage() {
                         </div>
 
                         {loadingSubtasks ? (
-                          <div className="mt-3 text-sm text-muted-foreground flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Caricamento subtask…
+                          <div className="mt-3 space-y-2">
+                            {Array.from({ length: 3 }).map((_, i) => (
+                              <Skeleton key={i} className="h-8 w-full rounded" />
+                            ))}
                           </div>
                         ) : assignedSubtasks.length === 0 ? (
                           <div className="mt-2 text-sm text-muted-foreground">Nessuna subtask assegnata.</div>

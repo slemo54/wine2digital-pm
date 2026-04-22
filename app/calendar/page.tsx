@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,19 @@ type AbsenceCounts = {
 };
 
 export default function CalendarPage() {
+  const [absenceTypes, setAbsenceTypes] = useState<any[]>([{ id: 'ferie', label: 'Ferie', enabled: true }, { id: 'malattia', label: 'Malattia', enabled: true }, { id: 'permesso', label: 'Permesso', enabled: true }]);
+
+  useEffect(() => {
+    fetch('/api/admin/settings')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && data.absenceTypes && Array.isArray(data.absenceTypes) && data.absenceTypes.length > 0) {
+          setAbsenceTypes(data.absenceTypes);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
   const { data: session, status } = useSession();
   const router = useRouter();
 
@@ -220,6 +233,9 @@ export default function CalendarPage() {
   };
 
   const getTypeLabel = (type: string) => {
+    const t = absenceTypes.find(at => at.id === type);
+    if (t) return t.label;
+    // fallback
     const labels: Record<string, string> = {
       vacation: "Vacation",
       sick_leave: "Sick Leave",
@@ -363,9 +379,9 @@ export default function CalendarPage() {
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="vacation">Vacation</SelectItem>
-                          <SelectItem value="sick_leave">Sick Leave</SelectItem>
-                          <SelectItem value="personal">Personal</SelectItem>
+                          {absenceTypes.filter(t => t.enabled).map(t => (
+                            <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>

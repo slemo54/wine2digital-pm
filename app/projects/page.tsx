@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -605,8 +606,9 @@ export default function ProjectsPage() {
   // Handle session loading state
   if (status === "loading") {
     return (
-      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen min-h-[100dvh] flex flex-col p-6 bg-secondary space-y-4">
+        <Skeleton className="h-10 w-[200px]" />
+        <Skeleton className="h-[400px] w-full" />
       </div>
     );
   }
@@ -768,9 +770,10 @@ export default function ProjectsPage() {
                   </div>
                 )}
                 {isLoading ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-                    <p>Loading projects...</p>
+                  <div className="p-4 space-y-3">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full rounded" />
+                    ))}
                   </div>
                 ) : projects.length === 0 && !queryError ? (
                   <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">

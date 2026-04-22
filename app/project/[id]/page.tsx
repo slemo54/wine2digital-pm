@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -102,8 +103,23 @@ export default function ProjectPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="min-h-screen min-h-[100dvh] bg-secondary p-6">
+        <div className="max-w-[1400px] mx-auto space-y-6">
+          <Skeleton className="h-8 w-[200px] mb-4" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="md:col-span-2 space-y-4">
+              <Skeleton className="h-32 w-full" />
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full rounded" />
+                ))}
+              </div>
+            </div>
+            <div className="md:col-span-1 space-y-4">
+              <Skeleton className="h-[400px] w-full" />
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

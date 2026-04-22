@@ -6,6 +6,7 @@ import { useSession } from "next-auth/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2, Bell, Check } from "lucide-react";
 import { toast } from "react-hot-toast";
 import Link from "next/link";
@@ -92,8 +93,15 @@ export default function NotificationsPage() {
 
   if (status === "loading" || isLoading) {
     return (
-      <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen min-h-[100dvh] bg-secondary p-6">
+        <div className="max-w-[800px] mx-auto space-y-4">
+          <Skeleton className="h-10 w-[200px]" />
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-20 w-full rounded" />
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
