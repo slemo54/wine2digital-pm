@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-options';
 import { prisma } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const session = await getServerSession(authOptions);
@@ -13,7 +15,7 @@ export async function GET() {
 
     const role = (session.user as any).role;
 
-    if (role !== 'admin' && role !== 'manager') {
+    if (role !== 'admin') {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
@@ -36,41 +38,7 @@ export async function GET() {
           createdAt: 'desc',
         },
       });
-    } else {
-      // Manager sees only requests from users in their department
-      const currentUser = await prisma.user.findUnique({
-        where: { id: (session.user as any).id },
-        select: { department: true },
-      });
-
-      const managerDepartment = currentUser?.department;
-
-      if (!managerDepartment) {
-        // Manager has no department assigned, return empty
-        return NextResponse.json([]);
-      }
-
-      requests = await prisma.overtimeRequest.findMany({
-        where: {
-          user: {
-            department: managerDepartment,
-          },
-        },
-        include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              image: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
-      });
-    }
+        }
 
     return NextResponse.json(requests);
   } catch (error) {
