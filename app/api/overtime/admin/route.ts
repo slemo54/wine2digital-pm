@@ -7,25 +7,70 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || !session.user || (session.user as any).role !== 'admin') {
+    if (!session || !session.user) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 });
+    }
+
+    const role = (session.user as any).role;
+
+    if (role !== 'admin' && role !== 'manager') {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
     }
 
-    const requests = await prisma.overtimeRequest.findMany({
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
+    let requests;
+
+    if (role === 'admin') {
+      // Admin sees all requests
+      requests = await prisma.overtimeRequest.findMany({
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
           },
         },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    } else {
+      // Manager sees only requests from users in their department
+      const currentUser = await prisma.user.findUnique({
+        where: { id: (session.user as any).id },
+        select: { department: true },
+      });
+
+      const managerDepartment = currentUser?.department;
+
+      if (!managerDepartment) {
+        // Manager has no department assigned, return empty
+        return NextResponse.json([]);
+      }
+
+      requests = await prisma.overtimeRequest.findMany({
+        where: {
+          user: {
+            department: managerDepartment,
+          },
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    }
 
     return NextResponse.json(requests);
   } catch (error) {
