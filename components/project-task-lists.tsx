@@ -58,7 +58,7 @@ type TaskDto = {
   amountCents?: number | null;
 };
 
-const DEFAULT_LIST_NAME = "Untitled list";
+const DEFAULT_LIST_NAME = "Generale";
 
 function statusBadge(status: string): { label: string; variant: "secondary" | "outline" | "default" } {
   switch (status) {

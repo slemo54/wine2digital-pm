@@ -212,6 +212,12 @@ export default function AdminAuditPage() {
               </div>
             ) : null}
 
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+              <div className="md:col-span-3">
+                <Input value={entityType} onChange={(e) => setEntityType(e.target.value)} placeholder="EntityType" />
+              </div>
+            ) : null}
+
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                 <div className="md:col-span-3">

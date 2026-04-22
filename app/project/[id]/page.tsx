@@ -116,6 +116,47 @@ export default function ProjectPage() {
     <div className="min-h-screen min-h-[100dvh] bg-gradient-to-br from-slate-50 via-white to-slate-100 dark:from-background dark:via-background dark:to-background">
       {/* Project Info */}
       <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        {/* Breadcrumb e Header Progetto */}
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
+          <div>
+            <div className="flex items-center text-sm text-muted-foreground mb-1 gap-2">
+              <Link href="/projects" className="hover:text-primary transition-colors flex items-center gap-1">
+                <Briefcase className="h-4 w-4" />
+                Progetti
+              </Link>
+              <span>/</span>
+              <span className="font-medium text-foreground">{project.name}</span>
+            </div>
+            <h1 className="text-3xl font-bold text-foreground">{project.name}</h1>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {project.status === 'active' || project.status === 'running' ? (
+              <Badge className="bg-green-100 text-green-800 hover:bg-green-100 hover:text-green-800 border-green-200 px-3 py-1 text-sm font-medium">In corso</Badge>
+            ) : project.status === 'completed' || project.status === 'done' ? (
+              <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 hover:text-blue-800 border-blue-200 px-3 py-1 text-sm font-medium">Completato</Badge>
+            ) : project.status === 'paused' ? (
+              <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 hover:text-yellow-800 border-yellow-200 px-3 py-1 text-sm font-medium">In pausa</Badge>
+            ) : project.status === 'archived' ? (
+              <Badge className="bg-gray-100 text-gray-600 hover:bg-gray-100 hover:text-gray-600 border-gray-200 px-3 py-1 text-sm font-medium">Archiviato</Badge>
+            ) : (
+              <Badge variant="outline" className="px-3 py-1 text-sm font-medium capitalize">{project.status}</Badge>
+            )}
+
+            {(project.startDate || project.endDate) && (
+              <div className="flex items-center text-sm text-muted-foreground bg-muted px-3 py-1.5 rounded-md border">
+                <Calendar className="mr-2 h-4 w-4" />
+                <span>
+                  {project.startDate && new Date(project.startDate).toLocaleDateString('it-IT')}
+                  {project.startDate && project.endDate && " - "}
+                  {project.endDate && new Date(project.endDate).toLocaleDateString('it-IT')}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
         <Card className="mb-6">
           <CardContent className="p-6">
             <div className="grid md:grid-cols-3 gap-6">

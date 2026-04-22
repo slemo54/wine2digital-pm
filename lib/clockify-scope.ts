@@ -7,15 +7,15 @@ export type ClockifyVisibility =
 
 import { normalizeDepartment } from "./departments";
 
-export function getClockifyVisibility(input: {
+export async function getClockifyVisibility(input: {
   globalRole: GlobalRole;
   userId: string;
   department: string | null;
-}): ClockifyVisibility {
+}): Promise<ClockifyVisibility> {
   if (input.globalRole === "admin") return { kind: "all" };
   if (input.globalRole === "member") return { kind: "self", userId: input.userId };
 
-  const department = normalizeDepartment(input.department);
+  const department = await normalizeDepartment(input.department);
   if (!department) return { kind: "self", userId: input.userId };
   return { kind: "department", department };
 }
