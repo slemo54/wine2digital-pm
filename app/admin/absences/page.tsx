@@ -53,6 +53,7 @@ import {
 import { toast } from "react-hot-toast";
 import { buildDelimitedText, downloadCsvFile, isoDate } from "@/lib/export";
 import { getAbsenceTypeLabel } from "@/lib/absence-labels";
+import { AbsencesYearlySummary } from "@/components/absences-yearly-summary";
 import { useAdminAbsences, useDeleteAbsence } from "@/hooks/use-admin";
 
 type AbsenceStatus = "pending" | "approved" | "rejected";
@@ -165,6 +166,7 @@ export default function AdminAbsencesArchivePage() {
   const [confirm, setConfirm] = useState<ConfirmState>({ open: false });
   const [confirmCount, setConfirmCount] = useState<number | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
 
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -296,6 +298,7 @@ export default function AdminAbsencesArchivePage() {
   };
 
   const openConfirm = async (next: Omit<Extract<ConfirmState, { open: true }>, "open">) => {
+    setConfirmText("");
     setConfirm({ open: true, ...next });
     setConfirmCount(null);
 
@@ -817,21 +820,38 @@ export default function AdminAbsencesArchivePage() {
               <>
                 <AlertDialogHeader>
                   <AlertDialogTitle>{confirm.title}</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {confirm.description}
-                    {confirm.mode !== "row" ? (
-                      <div className="mt-2 text-sm">
-                        {confirmLoading ? (
-                          <span className="inline-flex items-center gap-2 text-muted-foreground">
-                            <Loader2 className="h-4 w-4 animate-spin" /> Calcolo elementi…
-                          </span>
-                        ) : (
-                          <span>
-                            Elementi da eliminare: <b>{confirmCount ?? "-"}</b>
-                          </span>
-                        )}
-                      </div>
-                    ) : null}
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-4">
+                      <p>
+                        {confirm.description}
+                      </p>
+                      {confirm.mode !== "row" ? (
+                        <div className="text-sm">
+                          {confirmLoading ? (
+                            <span className="inline-flex items-center gap-2 text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" /> Calcolo elementi…
+                            </span>
+                          ) : (
+                            <span>
+                              Elementi da eliminare: <b>{confirmCount ?? "-"}</b>
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {confirm.mode !== "row" ? (
+                        <div className="space-y-2 pt-2">
+                          <p className="text-sm font-medium text-destructive">
+                            Questa azione è irreversibile. Digita CONFERMA per procedere.
+                          </p>
+                          <Input
+                            value={confirmText}
+                            onChange={(e) => setConfirmText(e.target.value)}
+                            placeholder="Digita CONFERMA"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -842,15 +862,21 @@ export default function AdminAbsencesArchivePage() {
                       doDelete();
                     }}
                     className="bg-destructive hover:bg-destructive/90"
-                    disabled={confirm.mode !== "row" && (confirmLoading || (confirmCount ?? 0) === 0)}
+                    disabled={
+                      (confirm.mode !== "row" && confirmText !== "CONFERMA") ||
+                      (confirm.mode !== "row" && (confirmLoading || (confirmCount ?? 0) === 0))
+                    }
                   >
-                    Conferma eliminazione
+                    Elimina
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </>
             ) : null}
           </AlertDialogContent>
         </AlertDialog>
+
+
+        <AbsencesYearlySummary />
 
         {/* Edit Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) closeEditDialog(); }}>
