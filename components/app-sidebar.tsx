@@ -63,8 +63,9 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const { data: session, status } = useSession();
   const globalRole = (session?.user as any)?.role as string | undefined;
   const isAdmin = globalRole === "admin";
+  const isManager = globalRole === "manager";
   const calendarEnabled = (session?.user as any)?.calendarEnabled !== false;
-  
+
   // React Query per unread count - sostituisce polling manuale
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ['notifications', 'unread-count'],
@@ -99,7 +100,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
           <ThemeToggle />
         </div>
 
-        <nav className="p-3 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-3 py-3">
           {filteredNav.map((item) => {
             const active = item.isActive ? item.isActive(pathname) : pathname === item.href;
             const Icon = item.icon;
@@ -151,6 +152,18 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 Archivio richieste
               </Link>
               <Link
+                href="/admin/overtime"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                  pathname.startsWith("/admin/overtime")
+                    ? "bg-accent text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                )}
+              >
+                <Timer className="h-4 w-4" />
+                Gestione Straordinari
+              </Link>
+              <Link
                 href="/admin/settings"
                 className={cn(
                   "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
@@ -161,6 +174,24 @@ export function AppSidebar({ className }: AppSidebarProps) {
               >
                 <Settings className="h-4 w-4" />
                 Settings
+              </Link>
+            </div>
+          ) : null}
+
+          {isManager ? (
+            <div className="pt-3">
+              <div className="px-3 pb-1 text-[11px] uppercase tracking-wide text-muted-foreground">Gestione</div>
+              <Link
+                href="/admin/overtime"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                  pathname.startsWith("/admin/overtime")
+                    ? "bg-accent text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                )}
+              >
+                <Timer className="h-4 w-4" />
+                Gestione Straordinari
               </Link>
             </div>
           ) : null}
@@ -198,6 +229,3 @@ export function AppSidebar({ className }: AppSidebarProps) {
     </aside>
   );
 }
-
-
-
