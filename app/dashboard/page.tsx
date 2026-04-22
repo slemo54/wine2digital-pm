@@ -14,7 +14,7 @@ import { CreateProjectDialog } from "@/components/create-project-dialog";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
 import { markAllRead, markNotificationRead } from "@/lib/notifications-client";
-import { useDashboardData } from "@/hooks/use-dashboard";
+import { useDashboardData, useUserProfile } from "@/hooks/use-dashboard";
 
 interface Project {
   id: string;
@@ -71,6 +71,7 @@ type ActivityEvent = {
 
 export default function DashboardPage() {
   const { data: session, status } = useSession() || {};
+  const { data: userProfile, isLoading: isLoadingProfile } = useUserProfile();
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -149,14 +150,29 @@ export default function DashboardPage() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 18) return "Good afternoon";
-    return "Good evening";
+    if (hour < 12) return "Buongiorno";
+    if (hour < 18) return "Buon pomeriggio";
+    return "Buonasera";
   };
 
   const getFirstName = () => {
-    const name = session?.user?.name || "";
-    return name.split(" ")[0] || "User";
+    // 1. Profilo API se disponibile
+    if (userProfile?.users) {
+      const me = userProfile.users.find((u: any) => u.email === session?.user?.email);
+      if (me) {
+        if (me.displayName) return me.displayName;
+        if (me.firstName) return me.firstName;
+      }
+    }
+
+    // 2. Email fallback (prima della @)
+    const email = session?.user?.email;
+    if (email) {
+      return email.split('@')[0];
+    }
+
+    // 3. Fallback finale
+    return "Utente";
   };
 
   const now = new Date();

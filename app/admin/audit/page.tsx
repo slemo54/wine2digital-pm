@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Shield, Clock } from "lucide-react";
+import { Loader2, Shield, Clock, Filter } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 type AuditActor = {
@@ -45,6 +45,7 @@ export default function AdminAuditPage() {
 
   const [entityType, setEntityType] = useState("User");
   const [entityId, setEntityId] = useState(sp?.get("entityId") || "");
+  const [initialEntityId, setInitialEntityId] = useState(sp?.get("entityId") || "");
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<AuditLog[]>([]);
 
@@ -52,12 +53,12 @@ export default function AdminAuditPage() {
     if (status === "unauthenticated") router.push("/auth/login");
   }, [status, router]);
 
-  const load = async () => {
+  const load = async (forcedEntityId?: string) => {
     setLoading(true);
     try {
       const q = new URLSearchParams();
       if (entityType.trim()) q.set("entityType", entityType.trim());
-      if (entityId.trim()) q.set("entityId", entityId.trim());
+      if (forcedEntityId !== undefined ? forcedEntityId.trim() : entityId.trim()) q.set("entityId", forcedEntityId !== undefined ? forcedEntityId.trim() : entityId.trim());
       q.set("take", "200");
       const res = await fetch(`/api/admin/audit?${q.toString()}`, { cache: "no-store" });
       const data = await res.json();
@@ -75,7 +76,7 @@ export default function AdminAuditPage() {
     if (!isAdmin) return;
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, isAdmin]);
+  }, [status, isAdmin, initialEntityId]);
 
   const header = useMemo(() => {
     return (
@@ -112,6 +113,28 @@ export default function AdminAuditPage() {
         <Card>
           <CardHeader className="pb-4">{header}</CardHeader>
           <CardContent className="space-y-4">
+
+            {initialEntityId ? (
+              <div className="flex items-center justify-between bg-orange-100 text-orange-800 border border-orange-300 rounded-md p-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  <span className="text-sm font-medium">Filtrato per utente: {initialEntityId}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="bg-white/50 hover:bg-white text-orange-800 border-orange-300"
+                  onClick={() => {
+                    setEntityId("");
+                    setInitialEntityId("");
+                    load("");
+                  }}
+                >
+                  Mostra tutti
+                </Button>
+              </div>
+            ) : null}
+
             <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
               <div className="md:col-span-3">
                 <Input value={entityType} onChange={(e) => setEntityType(e.target.value)} placeholder="EntityType" />
@@ -120,7 +143,7 @@ export default function AdminAuditPage() {
                 <Input value={entityId} onChange={(e) => setEntityId(e.target.value)} placeholder="EntityId (opzionale)" />
               </div>
               <div className="md:col-span-2 flex justify-end">
-                <Button onClick={load} variant="outline">
+                <Button onClick={() => load()} variant="outline">
                   Filtra
                 </Button>
               </div>
