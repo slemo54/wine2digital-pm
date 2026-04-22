@@ -43,7 +43,7 @@ export async function GET(_req: NextRequest) {
       },
     });
 
-    const events = rows.map((r) => {
+    const events = rows.map((r: any) => {
       const formatted = formatTaskActivityEvent({
         id: r.id,
         type: r.type,

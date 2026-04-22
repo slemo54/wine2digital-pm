@@ -48,10 +48,52 @@ export async function GET(req: NextRequest) {
         disabledAt: true,
         createdAt: true,
         updatedAt: true,
+        sessions: {
+          orderBy: {
+            expires: 'desc'
+          },
+          take: 1,
+          select: {
+            expires: true
+          }
+        },
       },
     });
 
-    return NextResponse.json({ users });
+    type UserWithSessions = {
+      id: string;
+      email: string;
+      name: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      department: string | null;
+      role: string;
+      isActive: boolean;
+      calendarEnabled: boolean;
+      disabledAt: Date | null;
+      createdAt: Date;
+      updatedAt: Date;
+      sessions?: { expires: Date }[];
+    };
+    const usersWithLastLogin = users.map((user: UserWithSessions) => {
+      const lastSession = user.sessions && user.sessions.length > 0 ? user.sessions[0] : null;
+      let lastSignInAt: string | null = null;
+
+      if (lastSession && lastSession.expires) {
+        const loginDate = new Date(lastSession.expires);
+        loginDate.setDate(loginDate.getDate() - 30);
+        lastSignInAt = loginDate.toISOString();
+      }
+
+      // eslint-disable-next-line
+      const { sessions, ...userWithoutSessions } = user;
+      return {
+        ...userWithoutSessions,
+        lastSignInAt
+      };
+    });
+
+    return NextResponse.json({ users: usersWithLastLogin });
   } catch (error) {
     console.error("Admin list users error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

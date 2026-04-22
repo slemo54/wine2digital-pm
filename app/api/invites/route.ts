@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const token = randomBytes(32).toString('hex');
 
     // Calculate expiration
-    let expiresAt = null;
+    let expiresAt: Date | null = null;
     if (expiresIn) {
       expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + expiresIn);
