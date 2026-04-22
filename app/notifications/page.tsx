@@ -28,15 +28,28 @@ function NotificationCard({ notification }: { notification: Notification }) {
   const markOneMutation = useMarkOneRead(notification.id);
 
   return (
-    <Card className={`transition-colors ${notification.isRead ? "opacity-80" : "border-primary/50 bg-primary/5"}`}>
+    <Card
+      className={`transition-colors cursor-pointer hover:bg-accent/50 ${notification.isRead ? "opacity-80" : "border-primary/50 bg-primary/5"}`}
+      onClick={async () => {
+        if (notification.link) {
+          try {
+            if (!notification.isRead) await markOneMutation.mutateAsync();
+          } finally {
+            router.push(notification.link!);
+          }
+        } else if (!notification.isRead) {
+          await markOneMutation.mutateAsync();
+        }
+      }}
+    >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-foreground">{notification.title}</h3>
               {!notification.isRead && (
-                <Badge variant="default" className="h-5 px-1.5 text-[10px]">
-                  New
+                <Badge variant="default" className="bg-orange-600 hover:bg-orange-700 border-none h-5 px-1.5 text-[10px]">
+                  Nuova
                 </Badge>
               )}
             </div>
@@ -45,21 +58,6 @@ function NotificationCard({ notification }: { notification: Notification }) {
               {format(new Date(notification.createdAt), "PPp", { locale: it })}
             </p>
           </div>
-          {notification.link && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                try {
-                  await markOneMutation.mutateAsync();
-                } finally {
-                  router.push(notification.link!);
-                }
-              }}
-            >
-              Apri
-            </Button>
-          )}
         </div>
       </CardContent>
     </Card>

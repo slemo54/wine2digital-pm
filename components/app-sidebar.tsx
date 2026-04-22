@@ -118,7 +118,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 <Icon className="h-4 w-4" />
                 <span className="flex-1">{item.label}</span>
                 {item.hasBadge && unreadCount > 0 && (
-                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                  <span className="bg-orange-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-5 text-center">{unreadCount}</span>
                 )}
               </Link>
             );

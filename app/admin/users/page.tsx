@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { toast } from "react-hot-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Loader2, Shield } from "lucide-react";
 import { DEPARTMENTS } from "@/lib/departments";
 import { useAdminUsers, useUpdateAdminUser } from "@/hooks/use-admin";
@@ -66,6 +68,7 @@ export default function AdminUsersPage() {
 
   const { data, isLoading, refetch } = useAdminUsers(filters);
   const updateMutation = useUpdateAdminUser();
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{ id: string; role: string; name: string } | null>(null);
 
   const users = useMemo(() => {
     if (!data?.users) return [];
@@ -85,6 +88,30 @@ export default function AdminUsersPage() {
       updatedAt: u.updatedAt,
     })) as AdminUser[];
   }, [data]);
+
+  const confirmRoleChange = () => {
+    if (!roleChangeTarget) return;
+
+    // Mostriamo un caricamento base
+    toast.promise(
+      new Promise((resolve, reject) => {
+        updateMutation.mutate(
+          { id: roleChangeTarget.id, data: { role: roleChangeTarget.role } },
+          {
+            onSuccess: resolve,
+            onError: reject,
+          }
+        );
+      }),
+      {
+        loading: 'Aggiornamento ruolo...',
+        success: 'Ruolo aggiornato con successo',
+        error: 'Errore durante l\'aggiornamento del ruolo'
+      }
+    ).finally(() => {
+      setRoleChangeTarget(null);
+    });
+  };
 
   const updateUser = async (id: string, patch: { role?: string; isActive?: boolean; department?: string | null; calendarEnabled?: boolean }) => {
     // Map our patch to match the API expectations
@@ -197,7 +224,7 @@ export default function AdminUsersPage() {
 
                       <div className="md:col-span-2">
                         <div className="text-xs text-muted-foreground md:hidden mb-1">Ruolo</div>
-                        <Select value={u.role} onValueChange={(v) => updateUser(u.id, { role: v })}>
+                        <Select value={u.role} onValueChange={(v) => setRoleChangeTarget({ id: u.id, role: v, name: displayName(u) })}>
                           <SelectTrigger className="h-9 w-full">
                             <SelectValue />
                           </SelectTrigger>
@@ -277,6 +304,23 @@ export default function AdminUsersPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog open={!!roleChangeTarget} onOpenChange={(open) => !open && setRoleChangeTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Conferma cambio ruolo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Sei sicuro di voler cambiare il ruolo di <strong>{roleChangeTarget?.name}</strong> in <strong>{roleChangeTarget?.role}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRoleChange} className="bg-orange-600 hover:bg-orange-700 text-white">
+              Conferma
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
