@@ -22,7 +22,7 @@ export async function GET() {
     });
     if (!meDb || meDb.isActive === false) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const visibility = getClockifyVisibility({
+    const visibility = await getClockifyVisibility({
       globalRole: normalizeRole(meDb.role),
       userId: meDb.id,
       department: meDb.department,

@@ -6,7 +6,7 @@ import { buildTaskAssignedNotifications, normalizeUserIdList } from "@/lib/task-
 
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_LIST_NAME = "Untitled list";
+const DEFAULT_LIST_NAME = "Generale";
 
 function isMissingTableError(err: unknown, table: string): boolean {
   const msg = err instanceof Error ? err.message : String(err);

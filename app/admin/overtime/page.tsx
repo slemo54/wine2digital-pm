@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, differenceInHours } from "date-fns";
 import { it } from "date-fns/locale";
 import {
   Clock,
@@ -13,6 +13,10 @@ import {
   MessageSquare
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { toast } from "react-hot-toast";
@@ -51,7 +55,16 @@ export default function AdminOvertimePage() {
   const [selectedRequest, setSelectedRequest] = useState<OvertimeRequest | null>(null);
   const [adminNote, setAdminNote] = useState("");
   const [actionType, setActionType] = useState<"approve" | "reject" | null>(null);
+
+  // Filters state
+  const [filterUser, setFilterUser] = useState<string>("all");
+  const [filterDepartment, setFilterDepartment] = useState<string>("all");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<string>("pending");
   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
+
 
   const { data: requests = [], isLoading } = useQuery<OvertimeRequest[]>({
     queryKey: ["admin-overtime"],
@@ -61,6 +74,89 @@ export default function AdminOvertimePage() {
       return res.json();
     },
   });
+
+  const uniqueUsers = useMemo(() => {
+    const users = new Map();
+    requests.forEach(r => {
+      if (r.user) {
+        users.set(r.user.id, r.user.name || r.user.email);
+      }
+    });
+    return Array.from(users.entries()).map(([id, name]) => ({ id, name }));
+  }, [requests]);
+
+  const uniqueDepartments = useMemo(() => {
+    const deps = new Set<string>();
+    requests.forEach(r => {
+      if ((r.user as any)?.department) deps.add((r.user as any).department);
+    });
+    return Array.from(deps);
+  }, [requests]);
+
+  const filteredRequests = useMemo(() => {
+    return requests.filter(r => {
+      // Tab filter
+      if (activeTab === "pending" && r.status !== "pending") return false;
+      if (activeTab === "history" && r.status === "pending") return false;
+
+      // Status filter (only applies in history tab if not 'all', but 'all' means approved + rejected)
+      if (activeTab === "history" && filterStatus !== "all" && r.status !== filterStatus) return false;
+
+      // User filter
+      if (filterUser !== "all" && r.userId !== filterUser) return false;
+
+      // Department filter
+      if (filterDepartment !== "all" && (r.user as any)?.department !== filterDepartment) return false;
+
+      // Date range filter
+      if (dateFrom && new Date(r.startDate) < new Date(dateFrom)) return false;
+      if (dateTo && new Date(r.endDate) > new Date(new Date(dateTo).setHours(23, 59, 59, 999))) return false;
+
+      return true;
+    });
+  }, [requests, activeTab, filterStatus, filterUser, filterDepartment, dateFrom, dateTo]);
+
+  const stats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    let reqHoursMonth = 0;
+    let appHoursMonth = 0;
+    let pendingCount = 0;
+
+    // Uso filteredRequests se i filtri si applicano anche alle card, oppure le requests totali filtrate solo per i filtri espliciti.
+    // La richiesta: "calcolate dai dati filtrati con useMemo"
+    filteredRequests.forEach(r => {
+      const isCurrentMonth = new Date(r.startDate).getMonth() === currentMonth && new Date(r.startDate).getFullYear() === currentYear;
+
+      const hours = differenceInHours(new Date(r.endDate), new Date(r.startDate)) || 0;
+
+      if (isCurrentMonth) {
+        reqHoursMonth += hours;
+        if (r.status === "approved") {
+          appHoursMonth += hours;
+        }
+      }
+
+      if (r.status === "pending") {
+        pendingCount++;
+      }
+    });
+
+    return { reqHoursMonth, appHoursMonth, pendingCount };
+  }, [filteredRequests]);
+
+  const resetFilters = () => {
+    setFilterUser("all");
+    setFilterDepartment("all");
+    setFilterStatus("all");
+    setDateFrom("");
+    setDateTo("");
+  };
+
+
+
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, adminNote }: { id: string; status: string; adminNote?: string }) => {
@@ -154,6 +250,68 @@ export default function AdminOvertimePage() {
         </div>
       </div>
 
+
+      {/* Filters and Stats */}
+      {!isLoading && requests.length > 0 && (
+        <div className="space-y-6 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Utente</label>
+              <Select value={filterUser} onValueChange={setFilterUser}>
+                <SelectTrigger><SelectValue placeholder="Tutti gli utenti" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti gli utenti</SelectItem>
+                  {uniqueUsers.map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Dipartimento</label>
+              <Select value={filterDepartment} onValueChange={setFilterDepartment}>
+                <SelectTrigger><SelectValue placeholder="Tutti i dipartimenti" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti i dipartimenti</SelectItem>
+                  {uniqueDepartments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Dal</label>
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Al</label>
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            </div>
+
+            <div className="space-y-1.5 flex flex-col justify-end">
+              <Button variant="outline" onClick={resetFilters} className="w-full">
+                Azzera filtri
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="bg-white border rounded-lg p-4 shadow-sm">
+              <div className="text-sm text-muted-foreground font-medium mb-1">Ore richieste questo mese</div>
+              <div className="text-2xl font-bold">{stats.reqHoursMonth}</div>
+            </Card>
+            <Card className="bg-white border rounded-lg p-4 shadow-sm">
+              <div className="text-sm text-muted-foreground font-medium mb-1">Ore approvate questo mese</div>
+              <div className="text-2xl font-bold text-emerald-600">{stats.appHoursMonth}</div>
+            </Card>
+            <Card className="bg-white border rounded-lg p-4 shadow-sm">
+              <div className="text-sm text-muted-foreground font-medium mb-1">Richieste in attesa</div>
+              <div className="text-2xl font-bold text-orange-500">{stats.pendingCount}</div>
+            </Card>
+          </div>
+        </div>
+      )}
+
+
       {isLoading ? (
         <div className="text-center py-10 text-muted-foreground">Caricamento richieste...</div>
       ) : requests.length === 0 ? (
@@ -162,8 +320,30 @@ export default function AdminOvertimePage() {
           <p>Nessuna richiesta di straordinari da gestire.</p>
         </div>
       ) : (
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="mb-4">
+            <TabsTrigger value="pending">In attesa</TabsTrigger>
+            <TabsTrigger value="history">Storico</TabsTrigger>
+          </TabsList>
+
+          {activeTab === "history" && (
+            <div className="mb-4 w-64">
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger><SelectValue placeholder="Filtra per stato" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti (Approvati/Rifiutati)</SelectItem>
+                  <SelectItem value="approved">Approvato</SelectItem>
+                  <SelectItem value="rejected">Rifiutato</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {filteredRequests.length === 0 ? (
+             <div className="text-center py-8 text-muted-foreground border rounded-lg bg-white">Nessun risultato corrispondente ai filtri.</div>
+          ) : (
         <Accordion type="single" collapsible className="w-full space-y-4">
-          {requests.map((request) => (
+          {filteredRequests.map((request) => (
             <AccordionItem
               key={request.id}
               value={request.id}
@@ -271,6 +451,8 @@ export default function AdminOvertimePage() {
             </AccordionItem>
           ))}
         </Accordion>
+          )}
+        </Tabs>
       )}
 
       {/* Action Dialog */}

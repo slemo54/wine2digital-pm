@@ -13,7 +13,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   CheckSquare,
-  CalendarDays,
+  CalendarOff,
   FileText,
   User,
   Shield,
@@ -37,7 +37,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, isActive: (p) => p === "/dashboard" },
   { href: "/projects", label: "Progetti", icon: FolderKanban, isActive: (p) => p.startsWith("/projects") || p.startsWith("/project/") },
   { href: "/tasks", label: "Task", icon: CheckSquare, isActive: (p) => p.startsWith("/tasks") },
-  { href: "/calendar", label: "Calendario", icon: CalendarDays, isActive: (p) => p.startsWith("/calendar") },
+  { href: "/calendar", label: "Assenze & Ferie", icon: CalendarOff, isActive: (p) => p.startsWith("/calendar") },
   { href: "/overtime", label: "Straordinari", icon: Clock, isActive: (p) => p.startsWith("/overtime") },
   ...(isClockifyEnabled()
     ? [{ href: "/clockify", label: "Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify") }]

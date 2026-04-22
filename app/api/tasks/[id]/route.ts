@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { buildTaskAssignedNotifications, getAddedAssigneeIds, normalizeUserIdList } from "@/lib/task-assignment-notifications";
 import { MEMBER_TASK_EDITABLE_KEYS, validateMemberTaskUpdateKeys } from "@/lib/task-update-policy";
 
-const DEFAULT_LIST_NAME = "Untitled list";
+const DEFAULT_LIST_NAME = "Generale";
 
 function isMissingTableError(err: unknown, table: string): boolean {
   const msg = err instanceof Error ? err.message : String(err);

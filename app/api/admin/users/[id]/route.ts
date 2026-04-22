@@ -32,7 +32,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
           : undefined;
 
     if (nextDepartment !== undefined && nextDepartment !== null) {
-      if (!normalizeDepartment(nextDepartment)) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
+      if (!(await normalizeDepartment(nextDepartment))) return NextResponse.json({ error: "Invalid department" }, { status: 400 });
     }
 
     const target = await prisma.user.findUnique({

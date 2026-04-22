@@ -11,7 +11,6 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "react-hot-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Loader2, Shield } from "lucide-react";
-import { DEPARTMENTS } from "@/lib/departments";
 import { useAdminUsers, useUpdateAdminUser } from "@/hooks/use-admin";
 
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned__";
@@ -37,6 +36,11 @@ function displayName(u: AdminUser): string {
 }
 
 export default function AdminUsersPage() {
+  const [departments, setDepartments] = useState<string[]>([]);
+  useEffect(() => {
+    fetch("/api/departments").then(res => res.json()).then(data => setDepartments(data.departments || []));
+  }, []);
+
   const { data: session, status } = useSession() || {};
   const router = useRouter();
 
@@ -240,7 +244,7 @@ export default function AdminUsersPage() {
                         <div className="text-xs text-muted-foreground md:hidden mb-1">Reparto</div>
                         {(() => {
                           const current = (u.department || "").trim();
-                          const isKnown = (DEPARTMENTS as readonly string[]).includes(current);
+                          const isKnown = departments.includes(current);
                           const value = isKnown ? current : UNASSIGNED_DEPARTMENT_VALUE;
                           return (
                             <div>
@@ -255,7 +259,7 @@ export default function AdminUsersPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value={UNASSIGNED_DEPARTMENT_VALUE}>Non assegnato</SelectItem>
-                                  {DEPARTMENTS.map((d) => (
+                                  {departments.map((d) => (
                                     <SelectItem key={d} value={d}>
                                       {d}
                                     </SelectItem>
