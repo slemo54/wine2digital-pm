@@ -5,7 +5,7 @@ import { canManageProjectMembers } from "@/lib/project-permissions";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_LIST_NAME = "Untitled list";
+const DEFAULT_LIST_NAME = "Generale";
 
 function isMissingTableError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);

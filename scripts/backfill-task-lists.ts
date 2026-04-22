@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-const DEFAULT_LIST_NAME = "Untitled list";
+const DEFAULT_LIST_NAME = "Generale";
 
 function normalizeListName(input: unknown): string {
   if (typeof input !== "string") return DEFAULT_LIST_NAME;

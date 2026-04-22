@@ -66,6 +66,7 @@ model WorkSettings {
   standardEndTime   String   @default("18:00")
   breakDurationMin  Int      @default(60)
   lateToleranceMin  Int      @default(15)
+  departments       String[] @default(["Backoffice", "IT", "Grafica", "Social"])
   updatedAt         DateTime @updatedAt
 }
 

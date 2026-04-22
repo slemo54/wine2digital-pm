@@ -6,9 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "react-hot-toast";
-import { Loader2 } from "lucide-react";
+import { Loader2, X, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { useSession } from "next-auth/react";
+
+
+function translateCommitMessage(msg: string): string {
+    const isFeat = msg.startsWith('feat:');
+    const isFix = msg.startsWith('fix:');
+
+    if (!isFeat && !isFix) return msg;
+
+    const prefix = isFeat ? "Nuova funzionalità:" : "Correzione:";
+    const rest = msg.replace(/^(feat|fix):\s*/, '');
+    const capitalized = rest.charAt(0).toUpperCase() + rest.slice(1);
+
+    return `${prefix} ${capitalized}`;
+}
 
 export default function AdminSettingsPage() {
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "admin";
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [settings, setSettings] = useState({
@@ -16,9 +34,77 @@ export default function AdminSettingsPage() {
         standardEndTime: "18:00",
         breakDurationMin: 60,
         lateToleranceMin: 15,
+        departments: ["Backoffice", "IT", "Grafica", "Social"],
     });
     const [commits, setCommits] = useState<any[]>([]);
     const [loadingCommits, setLoadingCommits] = useState(false);
+
+    const [newDept, setNewDept] = useState("");
+    const [editingDept, setEditingDept] = useState<string | null>(null);
+    const [editingValue, setEditingValue] = useState("");
+
+    const addDepartment = () => {
+        const trimmed = newDept.trim();
+        if (!trimmed) return;
+        if (settings.departments.some(d => d.toLowerCase() === trimmed.toLowerCase())) {
+            toast.error("Reparto già esistente");
+            return;
+        }
+        setSettings(prev => ({
+            ...prev,
+            departments: [...prev.departments, trimmed]
+        }));
+        setNewDept("");
+    };
+
+    const removeDepartment = async (dept: string) => {
+        // TODO: check if department is used. The API to check it should be queried or we do a simple check.
+        // I will implement a quick api check
+        try {
+            const res = await fetch(`/api/departments/check-usage?department=${encodeURIComponent(dept)}`);
+            const data = await res.json();
+
+            if (data.isUsed) {
+                toast.error(`Questo reparto ha ${data.count} utenti assegnati. Riassegnali prima di eliminare.`);
+                return;
+            }
+
+            if (confirm(`Eliminare il reparto ${dept}?`)) {
+                setSettings(prev => ({
+                    ...prev,
+                    departments: prev.departments.filter(d => d !== dept)
+                }));
+            }
+        } catch (e) {
+            toast.error("Errore durante la verifica del reparto");
+        }
+    };
+
+    const startEditing = (dept: string) => {
+        setEditingDept(dept);
+        setEditingValue(dept);
+    };
+
+    const saveEdit = (oldDept: string) => {
+        const trimmed = editingValue.trim();
+        if (!trimmed) {
+            setEditingDept(null);
+            return;
+        }
+
+        if (trimmed.toLowerCase() !== oldDept.toLowerCase() &&
+            settings.departments.some(d => d.toLowerCase() === trimmed.toLowerCase())) {
+            toast.error("Reparto già esistente");
+            return;
+        }
+
+        setSettings(prev => ({
+            ...prev,
+            departments: prev.departments.map(d => d === oldDept ? trimmed : d)
+        }));
+        setEditingDept(null);
+    };
+
 
     useEffect(() => {
         fetch("/api/admin/settings")
@@ -33,6 +119,7 @@ export default function AdminSettingsPage() {
                         standardEndTime: data.standardEndTime,
                         breakDurationMin: data.breakDurationMin,
                         lateToleranceMin: data.lateToleranceMin,
+                        departments: data.departments || ["Backoffice", "IT", "Grafica", "Social"],
                     });
                 }
             })
@@ -47,7 +134,7 @@ export default function AdminSettingsPage() {
                 if (res.ok) return res.json();
                 throw new Error("Failed to load commits");
             })
-            .then((data) => setCommits(data.commits || []))
+            .then((data) => setCommits((data.commits || []).filter((c: any) => c.messageTitle?.startsWith("feat:") || c.messageTitle?.startsWith("fix:"))))
             .catch((err) => {
                 console.error("Failed to load changelog:", err);
                 setCommits([]);
@@ -131,7 +218,65 @@ export default function AdminSettingsPage() {
                 </CardContent>
             </Card>
 
+
             <Card>
+                <CardHeader>
+                    <CardTitle>Gestione Reparti</CardTitle>
+                    <CardDescription>Gestisci i reparti aziendali disponibili per l&apos;assegnazione agli utenti.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-4">
+                        <div className="flex flex-wrap gap-2">
+                            {settings.departments.map((dept) => (
+                                <div key={dept} className="flex items-center">
+                                    {editingDept === dept ? (
+                                        <div className="flex items-center gap-1">
+                                            <Input
+                                                value={editingValue}
+                                                onChange={(e) => setEditingValue(e.target.value)}
+                                                className="h-8 w-32"
+                                                autoFocus
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') saveEdit(dept);
+                                                    if (e.key === 'Escape') setEditingDept(null);
+                                                }}
+                                                onBlur={() => saveEdit(dept)}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <Badge variant="secondary" className="text-sm py-1 px-3 flex items-center gap-2 cursor-pointer" onClick={() => startEditing(dept)}>
+                                            {dept}
+                                            <X
+                                                className="h-3 w-3 hover:text-destructive cursor-pointer"
+                                                onClick={(e) => { e.stopPropagation(); removeDepartment(dept); }}
+                                            />
+                                        </Badge>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex gap-2 max-w-sm pt-2 border-t">
+                            <Input
+                                placeholder="Nuovo reparto..."
+                                value={newDept}
+                                onChange={(e) => setNewDept(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && addDepartment()}
+                            />
+                            <Button type="button" onClick={addDepartment} variant="secondary">
+                                <Plus className="h-4 w-4 mr-1" /> Aggiungi
+                            </Button>
+                        </div>
+                        <div className="flex justify-end pt-4">
+                            <Button onClick={handleSubmit} disabled={saving}>
+                                {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Salva Reparti
+                            </Button>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {isAdmin && <Card>
                 <CardHeader>
                     <CardTitle>Changelog</CardTitle>
                     <CardDescription>
@@ -157,7 +302,7 @@ export default function AdminSettingsPage() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-foreground truncate">
-                                            {commit.messageTitle}
+                                            {translateCommitMessage(commit.messageTitle)}
                                         </p>
                                         <p className="text-xs text-muted-foreground mt-1">
                                             {new Date(commit.date).toLocaleString("it-IT", {
@@ -184,7 +329,7 @@ export default function AdminSettingsPage() {
                         </div>
                     )}
                 </CardContent>
-            </Card>
+            </Card>}
         </div>
     );
 }

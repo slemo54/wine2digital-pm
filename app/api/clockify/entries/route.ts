@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     const parsed = parseClockifyWorkDateFilter({ date, from, to });
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-    const visibility = getClockifyVisibility({
+    const visibility = await getClockifyVisibility({
       globalRole: normalizeRole(meDb.role),
       userId: meDb.id,
       department: meDb.department,
