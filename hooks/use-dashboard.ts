@@ -1,6 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 
 /**
+ * Hook per ottenere il sommario completo della dashboard in una singola chiamata.
+ *
+ * PERFORMANCE: Riduce 5 round-trip di rete a 1 solo.
+ */
+export function useDashboardSummary() {
+  return useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: async () => {
+      const res = await fetch('/api/dashboard/summary');
+      if (!res.ok) throw new Error('Failed to fetch dashboard summary');
+      return res.json();
+    },
+    staleTime: 1000 * 60 * 2, // 2 minuti
+  });
+}
+
+/**
  * Hook per ottenere i progetti dell'utente
  */
 
@@ -40,7 +57,7 @@ export function useDashboardProjects() {
 }
 
 /**
- * Hook per ottenere i task assegnati all'utente
+ * Hook per ottenere i task assegnati all'utente (Legacy - use useDashboardSummary instead)
  */
 export function useDashboardMyTasks() {
   return useQuery({
@@ -55,7 +72,7 @@ export function useDashboardMyTasks() {
 }
 
 /**
- * Hook per ottenere i subtask dell'utente
+ * Hook per ottenere i subtask dell'utente (Legacy - use useDashboardSummary instead)
  */
 export function useDashboardMySubtasks() {
   return useQuery({
@@ -70,7 +87,7 @@ export function useDashboardMySubtasks() {
 }
 
 /**
- * Hook per ottenere le notifiche
+ * Hook per ottenere le notifiche (Legacy - use useDashboardSummary instead)
  */
 export function useDashboardNotifications() {
   return useQuery({
@@ -86,7 +103,7 @@ export function useDashboardNotifications() {
 }
 
 /**
- * Hook per ottenere l'activity log
+ * Hook per ottenere l'activity log (Legacy - use useDashboardSummary instead)
  */
 export function useDashboardActivity() {
   return useQuery({
@@ -101,55 +118,36 @@ export function useDashboardActivity() {
 }
 
 /**
- * Hook aggregato che ottiene tutti i dati della dashboard in parallelo
- * Questo è il modo corretto per caricare dati multipli con React Query
+ * Hook aggregato che ottiene tutti i dati della dashboard.
+ * Aggiornato per utilizzare il nuovo endpoint unificato /api/dashboard/summary.
  *
- * PERFORMANCE: Le query vengono eseguite in parallelo automaticamente
+ * PERFORMANCE: Riduce drasticamente le richieste di rete al caricamento iniziale.
  */
 export function useDashboardData() {
-  const projectsQuery = useDashboardProjects();
-  const tasksQuery = useDashboardMyTasks();
-  const subtasksQuery = useDashboardMySubtasks();
-  const notificationsQuery = useDashboardNotifications();
-  const activityQuery = useDashboardActivity();
+  const summaryQuery = useDashboardSummary();
 
   return {
-    // Data
-    projects: projectsQuery.data,
-    tasks: tasksQuery.data,
-    subtasks: subtasksQuery.data,
-    notifications: notificationsQuery.data,
-    activity: activityQuery.data,
+    // Data (mappata dalla struttura del sommario)
+    projects: summaryQuery.data?.projects,
+    tasks: summaryQuery.data?.tasks,
+    subtasks: summaryQuery.data?.subtasks,
+    notifications: summaryQuery.data?.notifications,
+    activity: summaryQuery.data?.activity,
 
     // Loading states
-    isLoading:
-      projectsQuery.isLoading ||
-      tasksQuery.isLoading ||
-      subtasksQuery.isLoading ||
-      notificationsQuery.isLoading ||
-      activityQuery.isLoading,
+    isLoading: summaryQuery.isLoading,
+    isLoadingProjects: summaryQuery.isLoading,
+    isLoadingTasks: summaryQuery.isLoading,
+    isLoadingSubtasks: summaryQuery.isLoading,
+    isLoadingNotifications: summaryQuery.isLoading,
+    isLoadingActivity: summaryQuery.isLoading,
 
-    isLoadingProjects: projectsQuery.isLoading,
-    isLoadingTasks: tasksQuery.isLoading,
-    isLoadingSubtasks: subtasksQuery.isLoading,
-    isLoadingNotifications: notificationsQuery.isLoading,
-    isLoadingActivity: activityQuery.isLoading,
+    // Error state
+    error: summaryQuery.error,
 
-    // Error states
-    error:
-      projectsQuery.error ||
-      tasksQuery.error ||
-      subtasksQuery.error ||
-      notificationsQuery.error ||
-      activityQuery.error,
-
-    // Refetch functions
+    // Refetch function
     refetch: () => {
-      projectsQuery.refetch();
-      tasksQuery.refetch();
-      subtasksQuery.refetch();
-      notificationsQuery.refetch();
-      activityQuery.refetch();
+      summaryQuery.refetch();
     },
   };
 }
