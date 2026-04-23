@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,7 @@ type AbsenceCounts = {
 export default function CalendarPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const userRole = ((session?.user as any)?.role || "member").toLowerCase();
   const userDepartment = (session?.user as any)?.department || null;
@@ -57,6 +58,13 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<"calendar" | "list">("calendar");
   const [editingAbsence, setEditingAbsence] = useState<Absence | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
+
+  useEffect(() => {
+    const statusFromUrl = searchParams?.get("status");
+    if (statusFromUrl === "pending" || statusFromUrl === "approved" || statusFromUrl === "rejected") {
+      setStatusFilter(statusFromUrl);
+    }
+  }, [searchParams]);
   const [typeFilter, setTypeFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
 

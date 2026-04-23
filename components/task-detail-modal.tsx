@@ -42,6 +42,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { toast } from "react-hot-toast";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { formatTaskActivityEvent } from "@/lib/task-activity-format";
 import dynamic from "next/dynamic";
 import type { MentionUser } from "@/components/ui/rich-text-editor";
@@ -205,7 +206,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const queryClient = useQueryClient();
   
   // React Query hooks for data fetching and mutations
-  const { data: taskFullData, isLoading, isPending } = useTaskFull(taskId, { enabled: open && !!taskId });
+  const { data: taskFullData, isLoading, isPending, isError } = useTaskFull(taskId, { enabled: open && !!taskId });
   const updateTaskMutation = useUpdateTask(taskId);
   const toggleSubtaskMutation = useToggleSubtask(taskId);
   
@@ -377,6 +378,21 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       cancelled = true;
     };
   }, [open, initialSubtaskId, subtasks, taskId]);
+
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!open || !isError) return;
+    toast.error("Task non trovata o accesso negato");
+    onClose();
+    const fallbackProjectId = task?.projectId || projectId;
+    if (fallbackProjectId && fallbackProjectId !== "_global") {
+      router.push(`/project/${fallbackProjectId}`);
+    } else {
+      router.push("/dashboard");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isError]);
 
   useEffect(() => {
     if (!subtaskDetailOpen || !selectedSubtask) return;

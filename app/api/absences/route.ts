@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
               type: "absence_request_pending",
               title: "Nuova richiesta di permesso",
               message: `${requesterName} ha richiesto ${getAbsenceTypeLabel(absence.type)} dal ${startDateLabel} al ${endDateLabel}`,
-              link: "/admin/absences?status=pending",
+              link: "/calendar?status=pending",
             })),
           });
         } catch (notificationError) {
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
               absenceType: getAbsenceTypeLabel(absence.type),
               startDateLabel,
               endDateLabel,
-              link: "/admin/absences?status=pending",
+              link: "/calendar?status=pending",
             });
 
             return sendEmail({
