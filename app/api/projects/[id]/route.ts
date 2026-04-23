@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 async function getMe(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
-  const user = session.user as any;
+  const user = session.user;
   const id = String(user.id || '');
   const role = String(user.role || '');
   if (!id) return null;

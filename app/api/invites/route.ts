@@ -15,8 +15,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    const globalRole = String((session.user as any)?.role || "");
+    const userId = session.user.id;
+    const globalRole = String(session.user?.role || "");
     const body = await req.json();
     const { projectId, role, expiresIn, maxUses } = body;
 

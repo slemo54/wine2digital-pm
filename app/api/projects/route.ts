@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any)?.id;
+    const userId = session.user?.id;
     const { searchParams } = new URL(req.url);
 
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any)?.id;
+    const userId = session.user?.id;
     const body = await req.json();
     const { name, description, startDate, endDate } = body;
 
@@ -216,8 +216,8 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any)?.id as string | undefined;
-    const globalRole = String((session.user as any)?.role || "");
+    const userId = session.user?.id as string | undefined;
+    const globalRole = String(session.user?.role || "");
     const body = await req.json();
     const { ids, action } = body as { ids?: string[]; action?: 'archive' | 'delete' };
 

@@ -22,8 +22,8 @@ export async function GET(
   }
 
   try {
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -105,8 +105,8 @@ export async function PUT(
   }
 
   try {
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -408,7 +408,7 @@ export async function PUT(
         actorUserId: userId,
       });
       if (added.length > 0) {
-        const actorLabel = String((session.user as any)?.name || (session.user as any)?.email || "Un collega");
+        const actorLabel = String(session.user?.name || session.user?.email || "Un collega");
         const items = buildTaskAssignedNotifications({
           assigneeIds: added,
           actorLabel,
@@ -441,8 +441,8 @@ export async function DELETE(
   }
 
   try {
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
