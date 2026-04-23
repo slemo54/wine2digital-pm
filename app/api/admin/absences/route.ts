@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session-user";
 import { buildAdminAbsencesWhere, parseOptionalDate, parseOptionalInt } from "@/lib/admin-absences-filters";
+import { buildAbsenceVisibilityWhere } from "@/lib/absence-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,9 @@ export async function GET(req: NextRequest) {
   try {
     const me = await getSessionUser();
     if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    if (me.globalRole !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const isAdmin = me.globalRole === "admin";
+    const isManager = me.globalRole === "manager";
+    if (!isAdmin && !isManager) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { searchParams } = new URL(req.url);
 
@@ -38,7 +41,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid createdAt range" }, { status: 400 });
     }
 
-    const { where, countsWhere } = buildAdminAbsencesWhere({
+    const { where: filtersWhere, countsWhere: filtersCountsWhere } = buildAdminAbsencesWhere({
       q,
       statusParam,
       typeParam,
@@ -47,6 +50,15 @@ export async function GET(req: NextRequest) {
       createdFrom,
       createdTo,
     });
+
+    const visibilityWhere = buildAbsenceVisibilityWhere({
+      role: me.globalRole,
+      userId: me.id,
+      department: me.department,
+    });
+
+    const where = { AND: [filtersWhere, visibilityWhere] };
+    const countsWhere = { AND: [filtersCountsWhere, visibilityWhere] };
 
     const [absences, total, counts] = await Promise.all([
       prisma.absence.findMany({

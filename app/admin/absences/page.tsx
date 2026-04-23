@@ -143,6 +143,7 @@ export default function AdminAbsencesArchivePage() {
 
   const role = (session?.user as any)?.role as string | undefined;
   const isAdmin = role === "admin";
+  const isManager = role === "manager";
 
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | AbsenceStatus>("all");
@@ -440,7 +441,7 @@ export default function AdminAbsencesArchivePage() {
     );
   }
 
-  if (!isAdmin) {
+  if (!isAdmin && !isManager) {
     return (
       <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-secondary">
         <Card>
@@ -463,7 +464,7 @@ export default function AdminAbsencesArchivePage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Archivio Richieste</h1>
             <p className="text-muted-foreground mt-1">
-              Gestisci, analizza e pulisci lo storico delle approvazioni aziendali.
+              {isAdmin ? "Gestisci, analizza e pulisci lo storico delle approvazioni aziendali." : "Visualizza e gestisci le richieste del tuo reparto."}
             </p>
           </div>
 
@@ -539,9 +540,11 @@ export default function AdminAbsencesArchivePage() {
                   />
                 </div>
                 <div className="flex items-center gap-2 self-end md:self-auto">
-                  <Button variant="outline" onClick={handleExport} className="h-10 gap-2" disabled={isExporting || total <= 0}>
-                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export CSV
-                  </Button>
+                  {isAdmin && (
+                    <Button variant="outline" onClick={handleExport} className="h-10 gap-2" disabled={isExporting || total <= 0}>
+                      {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Export CSV
+                    </Button>
+                  )}
                   <Button variant="ghost" size="icon" onClick={() => refetch()} className="h-10 w-10 border border-border/50">
                     <RefreshCw className="w-4 h-4" />
                   </Button>
@@ -611,62 +614,63 @@ export default function AdminAbsencesArchivePage() {
               </div>
             </div>
 
-            {/* Actions & Bulk */}
-            <div className="flex items-center justify-between px-1">
-              <div className="text-sm text-muted-foreground">
-                {selectedIds.length > 0 ? (
-                  <span className="text-primary font-medium">{selectedIds.length} righe selezionate</span>
-                ) : (
-                  <span>Totale: {total} risultati</span>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-2">
-                {anySelected && (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() =>
-                      openConfirm({
-                        mode: "selected",
-                        title: "Elimina selezionate",
-                        description: "Rimuovere le richieste selezionate?",
-                        payload: { ids: selectedIds },
-                      })
-                    }
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Elimina ({selectedIds.length})
-                  </Button>
-                )}
+            {isAdmin && (
+              <div className="flex items-center justify-between px-1">
+                <div className="text-sm text-muted-foreground">
+                  {selectedIds.length > 0 ? (
+                    <span className="text-primary font-medium">{selectedIds.length} righe selezionate</span>
+                  ) : (
+                    <span>Totale: {total} risultati</span>
+                  )}
+                </div>
                 
-                <div className="flex items-center gap-2 bg-card/50 border rounded-lg p-1">
-                  <Input
-                    type="date"
-                    value={deleteBefore}
-                    onChange={(e) => setDeleteBefore(e.target.value)}
-                    className="h-8 w-[130px] border-none bg-transparent"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
-                    disabled={!deleteBefore}
-                    onClick={() =>
-                      openConfirm({
-                        mode: "before",
-                        title: "Pulizia Archivio",
-                        description: `Eliminare tutte le richieste antecedenti al ${deleteBefore}?`,
-                        payload: { before: new Date(deleteBefore).toISOString() },
-                      })
-                    }
-                  >
-                    <Trash2 className="h-3.5 w-3.5 mr-2" />
-                    DryRun + Elimina
-                  </Button>
+                <div className="flex items-center gap-2">
+                  {anySelected && (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() =>
+                        openConfirm({
+                          mode: "selected",
+                          title: "Elimina selezionate",
+                          description: "Rimuovere le richieste selezionate?",
+                          payload: { ids: selectedIds },
+                        })
+                      }
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Elimina ({selectedIds.length})
+                    </Button>
+                  )}
+                  
+                  <div className="flex items-center gap-2 bg-card/50 border rounded-lg p-1">
+                    <Input
+                      type="date"
+                      value={deleteBefore}
+                      onChange={(e) => setDeleteBefore(e.target.value)}
+                      className="h-8 w-[130px] border-none bg-transparent"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-orange-500 hover:text-orange-600 hover:bg-orange-500/10"
+                      disabled={!deleteBefore}
+                      onClick={() =>
+                        openConfirm({
+                          mode: "before",
+                          title: "Pulizia Archivio",
+                          description: `Eliminare tutte le richieste antecedenti al ${deleteBefore}?`,
+                          payload: { before: new Date(deleteBefore).toISOString() },
+                        })
+                      }
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      DryRun + Elimina
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {isLoading ? (
               <div className="py-20 flex flex-col items-center justify-center gap-4 text-muted-foreground">
@@ -679,9 +683,11 @@ export default function AdminAbsencesArchivePage() {
                   <table className="w-full caption-bottom text-sm">
                     <thead className="[&_tr]:border-b bg-muted/30">
                       <tr className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted">
-                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[50px]">
-                          <Checkbox checked={allChecked} onCheckedChange={(v) => toggleAllOnPage(Boolean(v))} />
-                        </th>
+                        {isAdmin && (
+                          <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[50px]">
+                            <Checkbox checked={allChecked} onCheckedChange={(v) => toggleAllOnPage(Boolean(v))} />
+                          </th>
+                        )}
                         <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">UTENTE</th>
                         <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">TIPO</th>
                         <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">PERIODO / CAUSALE</th>
@@ -701,9 +707,11 @@ export default function AdminAbsencesArchivePage() {
                             key={r.id}
                             className="border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"
                           >
-                            <td className="p-4 align-middle">
-                              <Checkbox checked={selectedIds.includes(r.id)} onCheckedChange={(v) => toggleOne(r.id, Boolean(v))} />
-                            </td>
+                            {isAdmin && (
+                              <td className="p-4 align-middle">
+                                <Checkbox checked={selectedIds.includes(r.id)} onCheckedChange={(v) => toggleOne(r.id, Boolean(v))} />
+                              </td>
+                            )}
                             <td className="p-4 align-middle">
                               <div className="flex items-center gap-3">
                                 <Avatar className="h-9 w-9 border">
@@ -753,21 +761,23 @@ export default function AdminAbsencesArchivePage() {
                                 >
                                   <Edit2 className="w-4 h-4" />
                                 </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                                  onClick={() =>
-                                    openConfirm({
-                                      mode: "row",
-                                      title: "Elimina richiesta",
-                                      description: `Eliminare definitivamente la richiesta di ${displayName(r.user)}?`,
-                                      payload: { rowId: r.id },
-                                    })
-                                  }
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                {isAdmin && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() =>
+                                      openConfirm({
+                                        mode: "row",
+                                        title: "Elimina richiesta",
+                                        description: `Eliminare definitivamente la richiesta di ${displayName(r.user)}?`,
+                                        payload: { rowId: r.id },
+                                      })
+                                    }
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -775,7 +785,7 @@ export default function AdminAbsencesArchivePage() {
                       })}
                       {rows.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                          <td colSpan={isAdmin ? 6 : 5} className="p-8 text-center text-muted-foreground">
                             Nessuna richiesta trovata con i filtri correnti.
                           </td>
                         </tr>
@@ -876,7 +886,7 @@ export default function AdminAbsencesArchivePage() {
         </AlertDialog>
 
 
-        <AbsencesYearlySummary />
+        {isAdmin && <AbsencesYearlySummary />}
 
         {/* Edit Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={(open) => { if (!open) closeEditDialog(); }}>

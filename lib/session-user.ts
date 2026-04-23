@@ -5,6 +5,7 @@ export type SessionUser = {
   id: string;
   email: string;
   globalRole: string;
+  department?: string | null;
 };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -17,6 +18,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     id,
     email: String(user.email || ""),
     globalRole: String(user.role || ""),
+    department: user.department || null,
   };
 }
 
