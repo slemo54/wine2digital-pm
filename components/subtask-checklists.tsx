@@ -7,22 +7,43 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
+import { z } from "zod";
 
 const checklistsCache = new Map<string, Checklist[]>();
 
-type ChecklistItem = {
-  id: string;
-  content: string;
-  completed: boolean;
-  position: number;
-};
+const checklistItemSchema = z.object({
+  id: z.coerce.string(),
+  content: z.coerce.string(),
+  completed: z.coerce.boolean(),
+  position: z.coerce.number().default(0),
+});
 
-type Checklist = {
-  id: string;
-  title: string;
-  position: number;
-  items: ChecklistItem[];
-};
+type ChecklistItem = z.infer<typeof checklistItemSchema>;
+
+const checklistSchema = z.object({
+  id: z.coerce.string(),
+  title: z.coerce.string(),
+  position: z.coerce.number().default(0),
+  items: z.array(checklistItemSchema).default([]),
+});
+
+type Checklist = z.infer<typeof checklistSchema>;
+
+const checklistsResponseSchema = z.object({
+  checklists: z.array(checklistSchema),
+});
+
+const singleChecklistResponseSchema = z.object({
+  checklist: checklistSchema,
+});
+
+const singleItemResponseSchema = z.object({
+  item: checklistItemSchema,
+});
+
+const errorResponseSchema = z.object({
+  error: z.string().optional(),
+});
 
 type Props = {
   taskId: string;
@@ -32,24 +53,9 @@ type Props = {
 };
 
 function normalizeChecklists(input: unknown): Checklist[] {
-  if (!input || typeof input !== "object") return [];
-  const raw = (input as any).checklists;
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((c: any) => ({
-      id: String(c?.id || ""),
-      title: String(c?.title || ""),
-      position: typeof c?.position === "number" ? c.position : 0,
-      items: Array.isArray(c?.items)
-        ? c.items.map((i: any) => ({
-          id: String(i?.id || ""),
-          content: String(i?.content || ""),
-          completed: Boolean(i?.completed),
-          position: typeof i?.position === "number" ? i.position : 0,
-        }))
-        : [],
-    }))
-    .filter((c) => c.id);
+  const result = checklistsResponseSchema.safeParse(input);
+  if (!result.success) return [];
+  return result.data.checklists;
 }
 
 export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) {
@@ -68,9 +74,10 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     if (!opts?.silent) setLoading(true);
     try {
       const res = await fetch(baseUrl, { cache: "no-store" });
-      const data = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const msg = String((data as any)?.error || "Failed to load checklists");
+        const errorData = errorResponseSchema.safeParse(data);
+        const msg = errorData.success && errorData.data.error ? errorData.data.error : "Failed to load checklists";
         throw new Error(msg);
       }
       const next = normalizeChecklists(data);
@@ -108,12 +115,16 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Create failed"));
-      const checklist = (data as any)?.checklist;
-      if (checklist?.id) {
+      const data: unknown = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorData = errorResponseSchema.safeParse(data);
+        throw new Error(errorData.success && errorData.data.error ? errorData.data.error : "Create failed");
+      }
+      const parsed = singleChecklistResponseSchema.safeParse(data);
+      if (parsed.success) {
+        const checklist = parsed.data.checklist;
         setChecklists((prev) => {
-          const next = [...prev, normalizeChecklists({ checklists: [checklist] })[0]].filter(Boolean) as Checklist[];
+          const next = [...prev, checklist];
           checklistsCache.set(baseUrl, next);
           return next;
         });
@@ -139,8 +150,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Update failed"));
+      const data: unknown = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorData = errorResponseSchema.safeParse(data);
+        throw new Error(errorData.success && errorData.data.error ? errorData.data.error : "Update failed");
+      }
       setChecklists((prev) => {
         const next = prev.map((c) => (c.id === checklistId ? { ...c, title } : c));
         checklistsCache.set(baseUrl, next);
@@ -158,8 +172,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     setLoading(true);
     try {
       const res = await fetch(`${baseUrl}/${encodeURIComponent(checklistId)}`, { method: "DELETE" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Delete failed"));
+      const data: unknown = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorData = errorResponseSchema.safeParse(data);
+        throw new Error(errorData.success && errorData.data.error ? errorData.data.error : "Delete failed");
+      }
       setChecklists((prev) => {
         const next = prev.filter((c) => c.id !== checklistId);
         checklistsCache.set(baseUrl, next);
@@ -183,14 +200,18 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Create failed"));
-      const item = (data as any)?.item;
-      if (item?.id) {
+      const data: unknown = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorData = errorResponseSchema.safeParse(data);
+        throw new Error(errorData.success && errorData.data.error ? errorData.data.error : "Create failed");
+      }
+      const parsed = singleItemResponseSchema.safeParse(data);
+      if (parsed.success) {
+        const item = parsed.data.item;
         setChecklists((prev) => {
           const next = prev.map((c) =>
             c.id === checklistId
-              ? { ...c, items: [...c.items, { id: item.id, content, completed: false, position: item.position ?? 0 }] }
+              ? { ...c, items: [...c.items, item] }
               : c
           );
           checklistsCache.set(baseUrl, next);
@@ -225,8 +246,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
           body: JSON.stringify({ completed }),
         }
       );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Update failed"));
+      const data: unknown = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorData = errorResponseSchema.safeParse(data);
+        throw new Error(errorData.success && errorData.data.error ? errorData.data.error : "Update failed");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
       await refresh();
@@ -240,8 +264,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
         `${baseUrl}/${encodeURIComponent(checklistId)}/items/${encodeURIComponent(itemId)}`,
         { method: "DELETE" }
       );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Delete failed"));
+      const data: unknown = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorData = errorResponseSchema.safeParse(data);
+        throw new Error(errorData.success && errorData.data.error ? errorData.data.error : "Delete failed");
+      }
       setChecklists((prev) => {
         const next = prev.map((c) => (c.id === checklistId ? { ...c, items: c.items.filter((i) => i.id !== itemId) } : c));
         checklistsCache.set(baseUrl, next);
