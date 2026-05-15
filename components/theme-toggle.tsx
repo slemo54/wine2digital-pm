@@ -1,10 +1,15 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useTheme } from 'next-themes';
-import { Moon, Sun } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
+import { Moon, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { getClientLocale, t } from "@/lib/i18n";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /**
  * Toggle per il tema light/dark riutilizzabile nell'header.
@@ -19,21 +24,27 @@ export function ThemeToggle() {
 
   if (!mounted) return null;
 
-  const isDark = resolvedTheme === 'dark';
+  const isDark = resolvedTheme === "dark";
   const locale = getClientLocale();
+  const tooltipText = t(
+    locale,
+    isDark ? "theme.switchToLight" : "theme.switchToDark",
+  );
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="rounded-full"
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      aria-label={t(locale, isDark ? "theme.switchToLight" : "theme.switchToDark")}
-    >
-      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="rounded-full"
+          onClick={() => setTheme(isDark ? "light" : "dark")}
+          aria-label={tooltipText}
+        >
+          {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{tooltipText}</TooltipContent>
+    </Tooltip>
   );
 }
-
-
-
