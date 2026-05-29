@@ -59,10 +59,11 @@ interface RejectAbsenceData {
  */
 export function useCalendarAbsences(filters: CalendarAbsencesFilters) {
   const searchParams = new URLSearchParams();
-  if (filters.statusFilter) searchParams.set('status', filters.statusFilter);
-  if (filters.typeFilter) searchParams.set('type', filters.typeFilter);
+  if (filters.statusFilter && filters.statusFilter !== 'all') searchParams.set('status', filters.statusFilter);
+  if (filters.typeFilter && filters.typeFilter !== 'all') searchParams.set('type', filters.typeFilter);
   if (filters.searchQuery) searchParams.set('search', filters.searchQuery);
 
+  searchParams.set('includeCounts', 'true');
   const queryString = searchParams.toString();
   const endpoint = `/api/absences${queryString ? `?${queryString}` : ''}`;
 
@@ -137,26 +138,52 @@ export function useApproveAbsence() {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['calendar-absences'] });
 
-      // Snapshot previous values
-      const previousAbsences = queryClient.getQueryData<Absence[]>(['calendar-absences']);
+      // Snapshot previous values for all calendar-absences queries
+      const queries = queryClient.getQueriesData<CalendarAbsencesResponse>({ queryKey: ['calendar-absences'] });
+      const previousState = queries.map(([queryKey, data]) => ({ queryKey, data }));
 
-      // Optimistically update the absence status
-      queryClient.setQueryData<Absence[]>(['calendar-absences'], (old) => {
-        if (!old) return old;
-        return old.map((absence) =>
-          absence.id === id ? { ...absence, status: 'approved' } : absence
-        );
+      // Optimistically update the absence status across all cached queries
+      queries.forEach(([queryKey, old]) => {
+        if (!old) return;
+
+        let statusChanged = false;
+        let oldStatus = null;
+
+        const newAbsences = old.absences.map((absence) => {
+          if (absence.id === id) {
+            statusChanged = absence.status !== 'approved';
+            oldStatus = absence.status;
+            return { ...absence, status: 'approved' };
+          }
+          return absence;
+        });
+
+        let newCounts = old.counts;
+        if (statusChanged && old.counts && oldStatus) {
+            newCounts = {
+                ...old.counts,
+                [oldStatus]: Math.max(0, old.counts[oldStatus] - 1),
+                ['approved']: old.counts['approved'] + 1,
+            };
+        }
+
+        queryClient.setQueryData<CalendarAbsencesResponse>(queryKey, {
+          absences: newAbsences,
+          ...(newCounts ? { counts: newCounts } : {}),
+        });
       });
 
-      return { previousAbsences };
+      return { previousState };
     },
 
     onError: (err, variables, context) => {
       // Rollback on error
-      if (context?.previousAbsences) {
-        queryClient.setQueryData(['calendar-absences'], context.previousAbsences);
+      if (context?.previousState) {
+        context.previousState.forEach(({ queryKey, data }) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to approve absence');
+      toast.error(err instanceof Error ? err.message : 'Failed to process absence');
     },
 
     onSuccess: () => {
@@ -196,26 +223,52 @@ export function useRejectAbsence() {
       // Cancel outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['calendar-absences'] });
 
-      // Snapshot previous values
-      const previousAbsences = queryClient.getQueryData<Absence[]>(['calendar-absences']);
+      // Snapshot previous values for all calendar-absences queries
+      const queries = queryClient.getQueriesData<CalendarAbsencesResponse>({ queryKey: ['calendar-absences'] });
+      const previousState = queries.map(([queryKey, data]) => ({ queryKey, data }));
 
-      // Optimistically update the absence status
-      queryClient.setQueryData<Absence[]>(['calendar-absences'], (old) => {
-        if (!old) return old;
-        return old.map((absence) =>
-          absence.id === id ? { ...absence, status: 'rejected' } : absence
-        );
+      // Optimistically update the absence status across all cached queries
+      queries.forEach(([queryKey, old]) => {
+        if (!old) return;
+
+        let statusChanged = false;
+        let oldStatus = null;
+
+        const newAbsences = old.absences.map((absence) => {
+          if (absence.id === id) {
+            statusChanged = absence.status !== 'rejected';
+            oldStatus = absence.status;
+            return { ...absence, status: 'rejected' };
+          }
+          return absence;
+        });
+
+        let newCounts = old.counts;
+        if (statusChanged && old.counts && oldStatus) {
+            newCounts = {
+                ...old.counts,
+                [oldStatus]: Math.max(0, old.counts[oldStatus] - 1),
+                ['rejected']: old.counts['rejected'] + 1,
+            };
+        }
+
+        queryClient.setQueryData<CalendarAbsencesResponse>(queryKey, {
+          absences: newAbsences,
+          ...(newCounts ? { counts: newCounts } : {}),
+        });
       });
 
-      return { previousAbsences };
+      return { previousState };
     },
 
     onError: (err, variables, context) => {
       // Rollback on error
-      if (context?.previousAbsences) {
-        queryClient.setQueryData(['calendar-absences'], context.previousAbsences);
+      if (context?.previousState) {
+        context.previousState.forEach(({ queryKey, data }) => {
+          queryClient.setQueryData(queryKey, data);
+        });
       }
-      toast.error(err instanceof Error ? err.message : 'Failed to reject absence');
+      toast.error(err instanceof Error ? err.message : 'Failed to process absence');
     },
 
     onSuccess: () => {
