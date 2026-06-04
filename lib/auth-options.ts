@@ -102,10 +102,8 @@ export const authOptions: NextAuthOptions = {
         where: { id: user.id },
         data: { role, firstName, lastName },
       });
-      console.log(`[AUTH] User created and updated: ${user.email} with role ${role}`);
     },
     async linkAccount({ user, account }) {
-      console.log(`[AUTH] Account linked: ${user.email} provider=${account.provider} id=${account.providerAccountId}`);
     }
   },
   callbacks: {
@@ -135,8 +133,6 @@ export const authOptions: NextAuthOptions = {
         gToken.accessTokenExpires = account.expires_at
           ? account.expires_at * 1000
           : Date.now() + 60 * 60 * 1000;
-          
-        console.log(`[AUTH] JWT updated for ${user.email} (role=${gToken.role})`);
       }
 
       // Keep role/isActive synced with DB (avoid stale sessions after admin changes)
@@ -185,8 +181,6 @@ export const authOptions: NextAuthOptions = {
     async signIn({ user, account, profile }) {
       // For OAuth providers, ensure user has required fields
       if (account?.provider === 'google' && user.email) {
-        console.log(`[AUTH] SignIn attempt: ${user.email} (sub=${(profile as any)?.sub})`);
-        
         // Check workspace domain restriction
         const workspaceDomain = process.env.GOOGLE_WORKSPACE_DOMAIN?.trim();
         const normalizedDomain = workspaceDomain?.toLowerCase();
@@ -229,7 +223,6 @@ export const authOptions: NextAuthOptions = {
                where: { id: existingUser.id },
                data: { role: nextRole },
              });
-             console.log(`[AUTH] User role promoted on signin: ${user.email} -> ${nextRole}`);
            }
         }
       }
