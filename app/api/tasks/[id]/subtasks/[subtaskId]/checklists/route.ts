@@ -19,8 +19,8 @@ export async function GET(
     const session = await getServerSession(authOptions);
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const access = await getTaskAccessFlags(prisma, params.id, userId);
@@ -62,8 +62,8 @@ export async function POST(
     const session = await getServerSession(authOptions);
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const userId = (session.user as any).id as string | undefined;
-    const role = ((session.user as any).role as string | undefined) || "member";
+    const userId = session.user.id as string | undefined;
+    const role = (session.user.role as string | undefined) || "member";
     if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const access = await getTaskAccessFlags(prisma, params.id, userId);

@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 async function getSessionUser() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
-  const user = session.user as any;
+  const user = session.user;
   return {
     id: String(user.id),
     email: String(user.email || ""),

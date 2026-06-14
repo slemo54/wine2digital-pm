@@ -115,9 +115,9 @@ export const authOptions: NextAuthOptions = {
       // First-time login: store user info in token
       if (user) {
         gToken.id = user.id;
-        gToken.role = ((user as any).role || 'member').toLowerCase();
-        gToken.department = (user as any).department || null;
-        gToken.calendarEnabled = (user as any).calendarEnabled ?? true;
+        gToken.role = (user.role || 'member').toLowerCase();
+        gToken.department = user.department || null;
+        gToken.calendarEnabled = user.calendarEnabled ?? true;
       }
 
       // OAuth login: ensure role and tokens are set for new users
@@ -174,11 +174,11 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session?.user) {
         const gToken = token as GoogleToken;
-        (session.user as any).id = gToken.id;
-        (session.user as any).role = gToken.role;
-        (session.user as any).department = gToken.department;
-        (session.user as any).calendarEnabled = gToken.calendarEnabled;
-        (session.user as any).accessToken = gToken.accessToken;
+        session.user.id = gToken.id;
+        session.user.role = gToken.role;
+        session.user.department = gToken.department;
+        session.user.calendarEnabled = gToken.calendarEnabled;
+        session.user.accessToken = gToken.accessToken;
       }
       return session;
     },

@@ -16,10 +16,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    const actorRole = (session.user as any).role || 'member';
-    const actorDepartment = (session.user as any).department || null;
-    const calendarEnabled = (session.user as any).calendarEnabled !== false;
+    const userId = session.user.id;
+    const actorRole = session.user.role || 'member';
+    const actorDepartment = session.user.department || null;
+    const calendarEnabled = session.user.calendarEnabled !== false;
 
     if (actorRole !== 'admin' && !calendarEnabled) {
       return NextResponse.json({ error: 'Calendar access is disabled for your account' }, { status: 403 });
@@ -155,9 +155,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = (session.user as any).id;
-    const userRole = (session.user as any).role || 'member';
-    const calendarEnabled = (session.user as any).calendarEnabled !== false;
+    const userId = session.user.id;
+    const userRole = session.user.role || 'member';
+    const calendarEnabled = session.user.calendarEnabled !== false;
 
     if (userRole !== 'admin' && !calendarEnabled) {
       return NextResponse.json({ error: 'Calendar access is disabled for your account' }, { status: 403 });

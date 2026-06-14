@@ -21,8 +21,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = String((session.user as any).id || '');
-    const globalRole = String((session.user as any).role || '');
+    const userId = String(session.user.id || '');
+    const globalRole = String(session.user.role || '');
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -87,8 +87,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const userId = String((session.user as any).id || '');
-    const globalRole = String((session.user as any).role || '');
+    const userId = String(session.user.id || '');
+    const globalRole = String(session.user.role || '');
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
