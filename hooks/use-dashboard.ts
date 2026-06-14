@@ -101,55 +101,43 @@ export function useDashboardActivity() {
 }
 
 /**
- * Hook aggregato che ottiene tutti i dati della dashboard in parallelo
- * Questo è il modo corretto per caricare dati multipli con React Query
+ * Hook aggregato che ottiene tutti i dati della dashboard in una singola chiamata unificata.
  *
- * PERFORMANCE: Le query vengono eseguite in parallelo automaticamente
+ * PERFORMANCE: Riduce le chiamate di rete da 5 a 1, minimizzando l'overhead HTTP
+ * e permettendo al server di eseguire le query al database in parallelo.
  */
 export function useDashboardData() {
-  const projectsQuery = useDashboardProjects();
-  const tasksQuery = useDashboardMyTasks();
-  const subtasksQuery = useDashboardMySubtasks();
-  const notificationsQuery = useDashboardNotifications();
-  const activityQuery = useDashboardActivity();
+  const query = useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: async () => {
+      const res = await fetch('/api/dashboard/summary');
+      if (!res.ok) throw new Error('Failed to fetch dashboard summary');
+      return res.json();
+    },
+    staleTime: 1000 * 30, // 30 secondi
+    refetchInterval: 1000 * 60, // Refetch ogni minuto per notifiche/attività
+  });
 
   return {
-    // Data
-    projects: projectsQuery.data,
-    tasks: tasksQuery.data,
-    subtasks: subtasksQuery.data,
-    notifications: notificationsQuery.data,
-    activity: activityQuery.data,
+    // Data - Correctly mapping nested structures expected by dashboard page
+    projects: query.data?.projects,
+    tasks: query.data?.tasks,
+    subtasks: query.data?.subtasks,
+    notifications: query.data?.notifications,
+    activity: query.data?.activity,
 
     // Loading states
-    isLoading:
-      projectsQuery.isLoading ||
-      tasksQuery.isLoading ||
-      subtasksQuery.isLoading ||
-      notificationsQuery.isLoading ||
-      activityQuery.isLoading,
+    isLoading: query.isLoading,
+    isLoadingProjects: query.isLoading,
+    isLoadingTasks: query.isLoading,
+    isLoadingSubtasks: query.isLoading,
+    isLoadingNotifications: query.isLoading,
+    isLoadingActivity: query.isLoading,
 
-    isLoadingProjects: projectsQuery.isLoading,
-    isLoadingTasks: tasksQuery.isLoading,
-    isLoadingSubtasks: subtasksQuery.isLoading,
-    isLoadingNotifications: notificationsQuery.isLoading,
-    isLoadingActivity: activityQuery.isLoading,
+    // Error state
+    error: query.error,
 
-    // Error states
-    error:
-      projectsQuery.error ||
-      tasksQuery.error ||
-      subtasksQuery.error ||
-      notificationsQuery.error ||
-      activityQuery.error,
-
-    // Refetch functions
-    refetch: () => {
-      projectsQuery.refetch();
-      tasksQuery.refetch();
-      subtasksQuery.refetch();
-      notificationsQuery.refetch();
-      activityQuery.refetch();
-    },
+    // Refetch function
+    refetch: query.refetch,
   };
 }
