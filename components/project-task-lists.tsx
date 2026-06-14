@@ -1,6 +1,7 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List, FileText, CheckSquare, CheckCircle, TrendingUp } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
@@ -874,74 +875,60 @@ export function ProjectTaskLists(props: {
       />
 
       {/* Sezione Totali per Stato - Fixed Styling */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        {/* DA FATTURARE */}
-        <Card className="bg-card/50 border-border/50 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-1.5 rounded-full bg-[#f97316]" />
-              <div className="flex-1">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
-                  Da Fatturare
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {[
+          {
+            label: "Da Fatturare",
+            amount: statusTotals.daFatturare,
+            color: "bg-orange-500",
+            tint: "bg-orange-500/10",
+            text: "text-orange-600",
+            icon: FileText,
+          },
+          {
+            label: "Fatturato",
+            amount: statusTotals.fatturato,
+            color: "bg-sky-500",
+            tint: "bg-sky-500/10",
+            text: "text-sky-600",
+            icon: CheckSquare,
+          },
+          {
+            label: "Incassato",
+            amount: statusTotals.incassato,
+            color: "bg-emerald-500",
+            tint: "bg-emerald-500/10",
+            text: "text-emerald-600",
+            icon: CheckCircle,
+          },
+          {
+            label: "Previsionale",
+            amount: statusTotals.previsionale,
+            color: "bg-indigo-500",
+            tint: "bg-indigo-500/10",
+            text: "text-indigo-600",
+            icon: TrendingUp,
+          },
+        ].map((stat) => (
+          <Card key={stat.label} className="relative overflow-hidden bg-card/50 border-border/50 shadow-sm group hover:shadow-md transition-shadow">
+            <div className={cn("absolute left-0 top-0 bottom-0 w-1", stat.color)} />
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 mb-1 truncate">
+                    {stat.label}
+                  </div>
+                  <div className="text-xl font-bold text-foreground truncate">
+                    {formatEurCents(stat.amount)}
+                  </div>
                 </div>
-                <div className="text-2xl font-bold text-foreground">
-                  {formatEurCents(statusTotals.daFatturare)}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* FATTURATO */}
-        <Card className="bg-card/50 border-border/50 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-1.5 rounded-full bg-[#0ea5e9]" />
-              <div className="flex-1">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
-                  Fatturato
-                </div>
-                <div className="text-2xl font-bold text-foreground">
-                  {formatEurCents(statusTotals.fatturato)}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* INCASSATO */}
-        <Card className="bg-card/50 border-border/50 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-1.5 rounded-full bg-[#10b981]" />
-              <div className="flex-1">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
-                  Incassato
-                </div>
-                <div className="text-2xl font-bold text-foreground">
-                  {formatEurCents(statusTotals.incassato)}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* PREVISIONALE */}
-        <Card className="bg-card/50 border-border/50 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-1.5 rounded-full" style={{ backgroundColor: "hsl(24 100% 50%)" }} />
-              <div className="flex-1">
-                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
-                  Previsionale
-                </div>
-                <div className="text-2xl font-bold text-foreground">
-                  {formatEurCents(statusTotals.previsionale)}
+                <div className={cn("flex items-center justify-center h-10 w-10 rounded-xl shrink-0 transition-transform group-hover:scale-110", stat.tint)}>
+                  <stat.icon className={cn("h-5 w-5", stat.text)} aria-hidden="true" />
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <DndContext
