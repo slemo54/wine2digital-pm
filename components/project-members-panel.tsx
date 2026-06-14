@@ -2,11 +2,24 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, UserPlus, Link2, Copy, Trash2, Shield } from "lucide-react";
@@ -37,12 +50,24 @@ type UserLite = {
   role?: string | null;
 };
 
-function displayName(u: { firstName?: string | null; lastName?: string | null; name?: string | null; email: string }) {
-  const full = (u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim()).trim();
+function displayName(u: {
+  firstName?: string | null;
+  lastName?: string | null;
+  name?: string | null;
+  email: string;
+}) {
+  const full = (
+    u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim()
+  ).trim();
   return full || u.email;
 }
 
-function initials(u: { firstName?: string | null; lastName?: string | null; name?: string | null; email: string }) {
+function initials(u: {
+  firstName?: string | null;
+  lastName?: string | null;
+  name?: string | null;
+  email: string;
+}) {
   const base = displayName(u);
   const parts = base.split(" ").filter(Boolean);
   return ((parts[0]?.[0] || "U") + (parts[1]?.[0] || "")).toUpperCase();
@@ -55,7 +80,8 @@ export function ProjectMembersPanel(props: {
   sessionGlobalRole?: string | null;
   onChanged: () => void;
 }) {
-  const { projectId, members, sessionUserId, sessionGlobalRole, onChanged } = props;
+  const { projectId, members, sessionUserId, sessionGlobalRole, onChanged } =
+    props;
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"members" | "add" | "invite">("members");
 
@@ -65,14 +91,20 @@ export function ProjectMembersPanel(props: {
   }, [members, sessionUserId]);
 
   const canManage = useMemo(
-    () => canManageProjectMembers({ globalRole: sessionGlobalRole || "", projectRole: myProjectRole }),
-    [sessionGlobalRole, myProjectRole]
+    () =>
+      canManageProjectMembers({
+        globalRole: sessionGlobalRole || "",
+        projectRole: myProjectRole,
+      }),
+    [sessionGlobalRole, myProjectRole],
   );
 
   // Add internal user state
   const [userQuery, setUserQuery] = useState("");
   const [selectedUserId, setSelectedUserId] = useState("");
-  const [selectedRole, setSelectedRole] = useState<"member" | "manager">("member");
+  const [selectedRole, setSelectedRole] = useState<"member" | "manager">(
+    "member",
+  );
   const [savingAdd, setSavingAdd] = useState(false);
 
   // Invite link state
@@ -86,10 +118,15 @@ export function ProjectMembersPanel(props: {
   const [savingMemberId, setSavingMemberId] = useState<string | null>(null);
   const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
 
-  const existingIds = useMemo(() => new Set(members.map((m) => m.userId)), [members]);
+  const existingIds = useMemo(
+    () => new Set(members.map((m) => m.userId)),
+    [members],
+  );
 
   // Use React Query hook for fetching users
-  const { data: usersData, isLoading: loadingUsers } = useUsersList(open && canManage);
+  const { data: usersData, isLoading: loadingUsers } = useUsersList(
+    open && canManage,
+  );
   const users = usersData?.users || [];
 
   const filteredUsers = useMemo(() => {
@@ -118,14 +155,17 @@ export function ProjectMembersPanel(props: {
         body: JSON.stringify({ userId: selectedUserId, role: selectedRole }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Impossibile aggiungere membro");
+      if (!res.ok)
+        throw new Error(data?.error || "Impossibile aggiungere membro");
       toast.success("Membro aggiunto");
       setSelectedUserId("");
       setUserQuery("");
       onChanged();
       setTab("members");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile aggiungere membro");
+      toast.error(
+        e instanceof Error ? e.message : "Impossibile aggiungere membro",
+      );
     } finally {
       setSavingAdd(false);
     }
@@ -172,7 +212,10 @@ export function ProjectMembersPanel(props: {
     }
   };
 
-  const updateMemberRole = async (userId: string, role: "member" | "manager" | "owner") => {
+  const updateMemberRole = async (
+    userId: string,
+    role: "member" | "manager" | "owner",
+  ) => {
     setSavingMemberId(userId);
     try {
       const res = await fetch(`/api/projects/${projectId}/members`, {
@@ -181,11 +224,14 @@ export function ProjectMembersPanel(props: {
         body: JSON.stringify({ userId, role }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Impossibile aggiornare ruolo");
+      if (!res.ok)
+        throw new Error(data?.error || "Impossibile aggiornare ruolo");
       toast.success("Ruolo aggiornato");
       onChanged();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile aggiornare ruolo");
+      toast.error(
+        e instanceof Error ? e.message : "Impossibile aggiornare ruolo",
+      );
     } finally {
       setSavingMemberId(null);
     }
@@ -200,11 +246,14 @@ export function ProjectMembersPanel(props: {
         body: JSON.stringify({ userId }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Impossibile rimuovere membro");
+      if (!res.ok)
+        throw new Error(data?.error || "Impossibile rimuovere membro");
       toast.success("Membro rimosso");
       onChanged();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Impossibile rimuovere membro");
+      toast.error(
+        e instanceof Error ? e.message : "Impossibile rimuovere membro",
+      );
     } finally {
       setRemovingMemberId(null);
     }
@@ -228,10 +277,16 @@ export function ProjectMembersPanel(props: {
         <DialogContent className="sm:max-w-[760px]">
           <DialogHeader>
             <DialogTitle>Team del progetto</DialogTitle>
-            <DialogDescription>Gestisci membri, ruoli e inviti.</DialogDescription>
+            <DialogDescription>
+              Gestisci membri, ruoli e inviti.
+            </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={tab} onValueChange={(v) => setTab(v as any)} className="w-full">
+          <Tabs
+            value={tab}
+            onValueChange={(v) => setTab(v as any)}
+            className="w-full"
+          >
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="members">Membri</TabsTrigger>
               <TabsTrigger value="add" disabled={!canManage}>
@@ -245,15 +300,24 @@ export function ProjectMembersPanel(props: {
             <TabsContent value="members" className="mt-4">
               <div className="space-y-3">
                 {members.map((m) => (
-                  <div key={m.id} className="flex items-center justify-between gap-3 border rounded-lg p-3">
+                  <div
+                    key={m.id}
+                    className="flex items-center justify-between gap-3 border rounded-lg p-3"
+                  >
                     <div className="flex items-center gap-3 min-w-0">
                       <Avatar className="h-9 w-9">
                         <AvatarImage src={m.user.image || undefined} />
-                        <AvatarFallback className="text-xs">{initials({ ...m.user, email: m.user.email })}</AvatarFallback>
+                        <AvatarFallback className="text-xs">
+                          {initials({ ...m.user, email: m.user.email })}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <div className="font-medium truncate">{displayName({ ...m.user, email: m.user.email })}</div>
-                        <div className="text-xs text-muted-foreground truncate">{m.user.email}</div>
+                        <div className="font-medium truncate">
+                          {displayName({ ...m.user, email: m.user.email })}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {m.user.email}
+                        </div>
                       </div>
                     </div>
 
@@ -266,8 +330,13 @@ export function ProjectMembersPanel(props: {
                         <div className="flex flex-wrap items-center justify-end gap-2">
                           <Select
                             value={m.role}
-                            onValueChange={(v) => updateMemberRole(m.userId, v as any)}
-                            disabled={savingMemberId === m.userId || removingMemberId === m.userId}
+                            onValueChange={(v) =>
+                              updateMemberRole(m.userId, v as any)
+                            }
+                            disabled={
+                              savingMemberId === m.userId ||
+                              removingMemberId === m.userId
+                            }
                           >
                             <SelectTrigger className="w-full sm:w-[140px]">
                               <SelectValue />
@@ -286,8 +355,20 @@ export function ProjectMembersPanel(props: {
                             variant="ghost"
                             size="icon"
                             onClick={() => removeMember(m.userId)}
-                            disabled={m.role === "owner" || removingMemberId === m.userId}
-                            title={m.role === "owner" ? "Owner non rimovibile" : "Rimuovi membro"}
+                            disabled={
+                              m.role === "owner" ||
+                              removingMemberId === m.userId
+                            }
+                            title={
+                              m.role === "owner"
+                                ? "Owner non rimovibile"
+                                : "Rimuovi membro"
+                            }
+                            aria-label={
+                              m.role === "owner"
+                                ? "Owner non rimovibile"
+                                : "Rimuovi membro"
+                            }
                           >
                             {removingMemberId === m.userId ? (
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -307,32 +388,50 @@ export function ProjectMembersPanel(props: {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Cerca utente</Label>
-                  <Input value={userQuery} onChange={(e) => setUserQuery(e.target.value)} placeholder="Nome o email…" />
+                  <Input
+                    value={userQuery}
+                    onChange={(e) => setUserQuery(e.target.value)}
+                    placeholder="Nome o email…"
+                  />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Utente</Label>
-                    <Select value={selectedUserId} onValueChange={setSelectedUserId} disabled={loadingUsers || savingAdd}>
+                    <Select
+                      value={selectedUserId}
+                      onValueChange={setSelectedUserId}
+                      disabled={loadingUsers || savingAdd}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder={loadingUsers ? "Caricamento..." : "Seleziona"} />
+                        <SelectValue
+                          placeholder={
+                            loadingUsers ? "Caricamento..." : "Seleziona"
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
                         {filteredUsers.slice(0, 50).map((u) => (
                           <SelectItem key={u.id} value={u.id}>
-                            {displayName({ ...u, name: null, email: u.email })} ({u.email})
+                            {displayName({ ...u, name: null, email: u.email })}{" "}
+                            ({u.email})
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     {loadingUsers ? (
                       <div className="text-xs text-muted-foreground flex items-center gap-2">
-                        <Loader2 className="h-3 w-3 animate-spin" /> Caricamento utenti…
+                        <Loader2 className="h-3 w-3 animate-spin" /> Caricamento
+                        utenti…
                       </div>
                     ) : null}
                   </div>
                   <div className="space-y-2">
                     <Label>Ruolo</Label>
-                    <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as any)} disabled={savingAdd}>
+                    <Select
+                      value={selectedRole}
+                      onValueChange={(v) => setSelectedRole(v as any)}
+                      disabled={savingAdd}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -345,13 +444,21 @@ export function ProjectMembersPanel(props: {
                 </div>
               </div>
               <DialogFooter className="mt-6">
-                <Button variant="outline" onClick={() => setOpen(false)} disabled={savingAdd}>
+                <Button
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                  disabled={savingAdd}
+                >
                   Chiudi
                 </Button>
-                <Button onClick={addUser} disabled={!selectedUserId || savingAdd}>
+                <Button
+                  onClick={addUser}
+                  disabled={!selectedUserId || savingAdd}
+                >
                   {savingAdd ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Aggiunta…
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                      Aggiunta…
                     </>
                   ) : (
                     <>
@@ -367,7 +474,11 @@ export function ProjectMembersPanel(props: {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Ruolo invito</Label>
-                    <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as any)} disabled={creatingInvite}>
+                    <Select
+                      value={inviteRole}
+                      onValueChange={(v) => setInviteRole(v as any)}
+                      disabled={creatingInvite}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -379,7 +490,11 @@ export function ProjectMembersPanel(props: {
                   </div>
                   <div className="space-y-2">
                     <Label>Scadenza</Label>
-                    <Select value={expiresIn} onValueChange={setExpiresIn} disabled={creatingInvite}>
+                    <Select
+                      value={expiresIn}
+                      onValueChange={setExpiresIn}
+                      disabled={creatingInvite}
+                    >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -393,7 +508,11 @@ export function ProjectMembersPanel(props: {
                   </div>
                   <div className="space-y-2">
                     <Label>Max utilizzi (opzionale)</Label>
-                    <Input value={maxUses} onChange={(e) => setMaxUses(e.target.value)} placeholder="Es. 1" />
+                    <Input
+                      value={maxUses}
+                      onChange={(e) => setMaxUses(e.target.value)}
+                      placeholder="Es. 1"
+                    />
                   </div>
                 </div>
 
@@ -401,7 +520,8 @@ export function ProjectMembersPanel(props: {
                   <Button onClick={createInvite} disabled={creatingInvite}>
                     {creatingInvite ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Creazione…
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                        Creazione…
                       </>
                     ) : (
                       <>
@@ -416,7 +536,13 @@ export function ProjectMembersPanel(props: {
                     <div className="text-sm font-medium mb-2">Link invito</div>
                     <div className="flex items-center gap-2">
                       <Input readOnly value={inviteLink} />
-                      <Button variant="outline" size="icon" onClick={copyInvite} aria-label="Copia link invito" title="Copia">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={copyInvite}
+                        aria-label="Copia link invito"
+                        title="Copia"
+                      >
                         <Copy className="h-4 w-4" />
                       </Button>
                     </div>

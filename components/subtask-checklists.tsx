@@ -42,26 +42,36 @@ function normalizeChecklists(input: unknown): Checklist[] {
       position: typeof c?.position === "number" ? c.position : 0,
       items: Array.isArray(c?.items)
         ? c.items.map((i: any) => ({
-          id: String(i?.id || ""),
-          content: String(i?.content || ""),
-          completed: Boolean(i?.completed),
-          position: typeof i?.position === "number" ? i.position : 0,
-        }))
+            id: String(i?.id || ""),
+            content: String(i?.content || ""),
+            completed: Boolean(i?.completed),
+            position: typeof i?.position === "number" ? i.position : 0,
+          }))
         : [],
     }))
     .filter((c) => c.id);
 }
 
-export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) {
+export function SubtaskChecklists({
+  taskId,
+  subtaskId,
+  open,
+  disabled,
+}: Props) {
   const [loading, setLoading] = useState(false);
   const [checklists, setChecklists] = useState<Checklist[]>([]);
   const [newChecklistTitle, setNewChecklistTitle] = useState("");
-  const [editingTitles, setEditingTitles] = useState<Record<string, string>>({});
-  const [draftItemByChecklist, setDraftItemByChecklist] = useState<Record<string, string>>({});
+  const [editingTitles, setEditingTitles] = useState<Record<string, string>>(
+    {},
+  );
+  const [draftItemByChecklist, setDraftItemByChecklist] = useState<
+    Record<string, string>
+  >({});
 
   const baseUrl = useMemo(
-    () => `/api/tasks/${encodeURIComponent(taskId)}/subtasks/${encodeURIComponent(subtaskId)}/checklists`,
-    [taskId, subtaskId]
+    () =>
+      `/api/tasks/${encodeURIComponent(taskId)}/subtasks/${encodeURIComponent(subtaskId)}/checklists`,
+    [taskId, subtaskId],
   );
 
   const refresh = async (opts?: { silent?: boolean }) => {
@@ -79,8 +89,13 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to load checklists";
       if (!opts?.silent) {
-        if (msg.toLowerCase().includes("table missing") || msg.includes("Run Prisma migrations")) {
-          toast.error("Checklists non disponibili: applica prima le migrations Prisma.");
+        if (
+          msg.toLowerCase().includes("table missing") ||
+          msg.includes("Run Prisma migrations")
+        ) {
+          toast.error(
+            "Checklists non disponibili: applica prima le migrations Prisma.",
+          );
         } else {
           toast.error(msg);
         }
@@ -109,11 +124,15 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
         body: JSON.stringify({ title }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Create failed"));
+      if (!res.ok)
+        throw new Error(String((data as any)?.error || "Create failed"));
       const checklist = (data as any)?.checklist;
       if (checklist?.id) {
         setChecklists((prev) => {
-          const next = [...prev, normalizeChecklists({ checklists: [checklist] })[0]].filter(Boolean) as Checklist[];
+          const next = [
+            ...prev,
+            normalizeChecklists({ checklists: [checklist] })[0],
+          ].filter(Boolean) as Checklist[];
           checklistsCache.set(baseUrl, next);
           return next;
         });
@@ -140,9 +159,12 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
         body: JSON.stringify({ title }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Update failed"));
+      if (!res.ok)
+        throw new Error(String((data as any)?.error || "Update failed"));
       setChecklists((prev) => {
-        const next = prev.map((c) => (c.id === checklistId ? { ...c, title } : c));
+        const next = prev.map((c) =>
+          c.id === checklistId ? { ...c, title } : c,
+        );
         checklistsCache.set(baseUrl, next);
         return next;
       });
@@ -157,9 +179,12 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
   const deleteChecklist = async (checklistId: string) => {
     setLoading(true);
     try {
-      const res = await fetch(`${baseUrl}/${encodeURIComponent(checklistId)}`, { method: "DELETE" });
+      const res = await fetch(`${baseUrl}/${encodeURIComponent(checklistId)}`, {
+        method: "DELETE",
+      });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Delete failed"));
+      if (!res.ok)
+        throw new Error(String((data as any)?.error || "Delete failed"));
       setChecklists((prev) => {
         const next = prev.filter((c) => c.id !== checklistId);
         checklistsCache.set(baseUrl, next);
@@ -178,20 +203,35 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     if (!content) return;
     setLoading(true);
     try {
-      const res = await fetch(`${baseUrl}/${encodeURIComponent(checklistId)}/items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
+      const res = await fetch(
+        `${baseUrl}/${encodeURIComponent(checklistId)}/items`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        },
+      );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Create failed"));
+      if (!res.ok)
+        throw new Error(String((data as any)?.error || "Create failed"));
       const item = (data as any)?.item;
       if (item?.id) {
         setChecklists((prev) => {
           const next = prev.map((c) =>
             c.id === checklistId
-              ? { ...c, items: [...c.items, { id: item.id, content, completed: false, position: item.position ?? 0 }] }
-              : c
+              ? {
+                  ...c,
+                  items: [
+                    ...c.items,
+                    {
+                      id: item.id,
+                      content,
+                      completed: false,
+                      position: item.position ?? 0,
+                    },
+                  ],
+                }
+              : c,
           );
           checklistsCache.set(baseUrl, next);
           return next;
@@ -208,10 +248,21 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     }
   };
 
-  const toggleItem = async (checklistId: string, itemId: string, completed: boolean) => {
+  const toggleItem = async (
+    checklistId: string,
+    itemId: string,
+    completed: boolean,
+  ) => {
     setChecklists((prev) => {
       const next = prev.map((c) =>
-        c.id === checklistId ? { ...c, items: c.items.map((i) => (i.id === itemId ? { ...i, completed } : i)) } : c
+        c.id === checklistId
+          ? {
+              ...c,
+              items: c.items.map((i) =>
+                i.id === itemId ? { ...i, completed } : i,
+              ),
+            }
+          : c,
       );
       checklistsCache.set(baseUrl, next);
       return next;
@@ -223,10 +274,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ completed }),
-        }
+        },
       );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Update failed"));
+      if (!res.ok)
+        throw new Error(String((data as any)?.error || "Update failed"));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Update failed");
       await refresh();
@@ -238,12 +290,17 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     try {
       const res = await fetch(
         `${baseUrl}/${encodeURIComponent(checklistId)}/items/${encodeURIComponent(itemId)}`,
-        { method: "DELETE" }
+        { method: "DELETE" },
       );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(String((data as any)?.error || "Delete failed"));
+      if (!res.ok)
+        throw new Error(String((data as any)?.error || "Delete failed"));
       setChecklists((prev) => {
-        const next = prev.map((c) => (c.id === checklistId ? { ...c, items: c.items.filter((i) => i.id !== itemId) } : c));
+        const next = prev.map((c) =>
+          c.id === checklistId
+            ? { ...c, items: c.items.filter((i) => i.id !== itemId) }
+            : c,
+        );
         checklistsCache.set(baseUrl, next);
         return next;
       });
@@ -259,7 +316,12 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="font-semibold">Checklists</div>
-        <Button variant="outline" size="sm" onClick={() => void refresh()} disabled={loading}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void refresh()}
+          disabled={loading}
+        >
           Refresh
         </Button>
       </div>
@@ -298,7 +360,12 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
             <div className="flex items-center gap-2">
               <Input
                 value={editingTitles[c.id] ?? c.title}
-                onChange={(e) => setEditingTitles((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                onChange={(e) =>
+                  setEditingTitles((prev) => ({
+                    ...prev,
+                    [c.id]: e.target.value,
+                  }))
+                }
                 onBlur={() => void saveChecklistTitle(c.id)}
                 disabled={disabled || loading}
                 className="font-medium"
@@ -308,6 +375,8 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
                 size="icon"
                 onClick={() => void deleteChecklist(c.id)}
                 disabled={disabled || loading}
+                aria-label="Elimina checklist"
+                title="Elimina checklist"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -315,16 +384,29 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
 
             <div className="mt-3 space-y-2">
               {c.items.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Nessun elemento.</div>
+                <div className="text-sm text-muted-foreground">
+                  Nessun elemento.
+                </div>
               ) : null}
               {c.items.map((i) => (
-                <div key={i.id} className="flex items-center gap-2 rounded-md border px-2 py-1">
+                <div
+                  key={i.id}
+                  className="flex items-center gap-2 rounded-md border px-2 py-1"
+                >
                   <Checkbox
                     checked={i.completed}
-                    onCheckedChange={(checked) => void toggleItem(c.id, i.id, !!checked)}
+                    onCheckedChange={(checked) =>
+                      void toggleItem(c.id, i.id, !!checked)
+                    }
                     disabled={disabled || loading}
                   />
-                  <div className={i.completed ? "text-sm line-through text-muted-foreground flex-1" : "text-sm flex-1"}>
+                  <div
+                    className={
+                      i.completed
+                        ? "text-sm line-through text-muted-foreground flex-1"
+                        : "text-sm flex-1"
+                    }
+                  >
                     {i.content}
                   </div>
                   <Button
@@ -332,6 +414,8 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
                     size="icon"
                     onClick={() => void deleteItem(c.id, i.id)}
                     disabled={disabled || loading}
+                    aria-label="Elimina elemento"
+                    title="Elimina elemento"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -342,7 +426,12 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
             <div className="mt-3 flex items-center gap-2">
               <Input
                 value={draftItemByChecklist[c.id] ?? ""}
-                onChange={(e) => setDraftItemByChecklist((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                onChange={(e) =>
+                  setDraftItemByChecklist((prev) => ({
+                    ...prev,
+                    [c.id]: e.target.value,
+                  }))
+                }
                 placeholder="Aggiungi elemento…"
                 disabled={disabled || loading}
                 onKeyDown={(e) => {
@@ -351,7 +440,11 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
                   void addItem(c.id);
                 }}
               />
-              <Button variant="outline" onClick={() => void addItem(c.id)} disabled={disabled || loading}>
+              <Button
+                variant="outline"
+                onClick={() => void addItem(c.id)}
+                disabled={disabled || loading}
+              >
                 Add
               </Button>
             </div>
@@ -361,5 +454,3 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
     </div>
   );
 }
-
-
