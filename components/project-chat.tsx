@@ -174,6 +174,8 @@ export function ProjectChat({ projectId }: ProjectChatProps) {
             fetchInitialMessages();
           }}
           disabled={isLoading}
+          aria-label="Aggiorna messaggi"
+          title="Aggiorna messaggi"
         >
           <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
         </Button>
@@ -245,7 +247,7 @@ export function ProjectChat({ projectId }: ProjectChatProps) {
                 }
               }}
             />
-            <Button type="submit" disabled={isSending || !newMessage.trim()}>
+            <Button type="submit" disabled={isSending || !newMessage.trim()} aria-label="Invia messaggio" title="Invia messaggio">
               {isSending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (

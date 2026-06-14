@@ -120,6 +120,8 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
                     link.target = "_blank";
                     link.click();
                   }}
+                  aria-label="Scarica file"
+                  title="Scarica file"
                 >
                   <Download className="h-4 w-4" />
                 </Button>
@@ -127,6 +129,8 @@ export function ProjectFiles({ projectId }: ProjectFilesProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDelete(file.id)}
+                  aria-label="Elimina file"
+                  title="Elimina file"
                 >
                   <Trash2 className="h-4 w-4 text-red-600" />
                 </Button>
