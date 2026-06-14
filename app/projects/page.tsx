@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate } from "@/lib/export";
 import { useProjectsList } from "@/hooks/use-projects-list";
+import { usePrefetchProject } from "@/hooks/use-project";
 
 interface Project {
   id: string;
@@ -107,6 +108,7 @@ export default function ProjectsPage() {
 
   // Use React Query hook for fetching projects
   const { data, isLoading, error: queryError, refetch } = useProjectsList(filters);
+  const prefetchProject = usePrefetchProject();
   const projects: Project[] = data?.projects || [];
   const pagination: PaginationInfo | null = data?.pagination ? {
     ...data.pagination,
@@ -843,7 +845,11 @@ export default function ProjectsPage() {
                                   />
                                 </td>
                                 <td className="p-4 align-middle">
-                                  <Link href={`/project/${project.id}`} className="block hover:underline group">
+                                  <Link
+                                    href={`/project/${project.id}`}
+                                    className="block hover:underline group"
+                                    onMouseEnter={() => prefetchProject(project.id)}
+                                  >
                                     <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{project.name}</div>
                                     <div className="text-xs text-muted-foreground mt-0.5">Created: {formatDate(project.createdAt)}</div>
                                   </Link>
