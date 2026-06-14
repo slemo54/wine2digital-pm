@@ -5,3 +5,7 @@
 ## 2026-02-28 - [AutosizeTextarea for Modal Descriptions]
 **Learning:** Using a single-line `Input` for description or notes fields in modals severely limits multi-line readability and editing. Replacing it with the existing `AutosizeTextarea` component provides a significantly better micro-UX editing experience without breaking modal layout constraints.
 **Action:** Prefer `AutosizeTextarea` over standard `Input` for any modal field likely to contain multiple lines of text, such as descriptions or notes.
+
+## 2025-05-15 - [Global TooltipProvider Pattern]
+**Learning:** Moving the `TooltipProvider` to the global `Providers` component ensures that all tooltips across the application share a consistent `delayDuration` and eliminates the need for redundant local providers. This reduces code duplication and prevents subtle UX inconsistencies where tooltips might behave differently on different pages.
+**Action:** Always implement `TooltipProvider` at the root of the application. Remove local instances to maintain a single source of truth for tooltip configuration.
