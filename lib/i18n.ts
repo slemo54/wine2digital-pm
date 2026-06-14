@@ -9,7 +9,8 @@ export type I18nKey =
   | "kanban.empty.in_progress.body"
   | "kanban.empty.done.title"
   | "kanban.empty.done.body"
-  | "kanban.empty.cta";
+  | "kanban.empty.cta"
+  | "common.moreOptions";
 
 const STRINGS: Record<Locale, Record<I18nKey, string>> = {
   en: {
@@ -23,6 +24,7 @@ const STRINGS: Record<Locale, Record<I18nKey, string>> = {
     "kanban.empty.done.title": "No completed tasks yet",
     "kanban.empty.done.body": "Completed tasks will show up here.",
     "kanban.empty.cta": "Add a task",
+    "common.moreOptions": "More options",
   },
   it: {
     "theme.switchToDark": "Passa al tema scuro",
@@ -35,6 +37,7 @@ const STRINGS: Record<Locale, Record<I18nKey, string>> = {
     "kanban.empty.done.title": "Nessuna task completata",
     "kanban.empty.done.body": "Le task completate compariranno qui.",
     "kanban.empty.cta": "Aggiungi una task",
+    "common.moreOptions": "Altre opzioni",
   },
 };
 
