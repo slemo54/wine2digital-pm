@@ -30,20 +30,41 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: parsedDates.error }, { status: 400 });
     }
 
-    // Fetch projects for the user with DB-side filters where possible
-    const projects = await prisma.project.findMany({
-      where: {
-        OR: [
-          { creatorId: userId },
-          { members: { some: { userId } } },
-        ],
-        ...(status
+    // Prepare search condition for DB-side filtering
+    const searchFilter = search
+      ? {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' as const } },
+            { description: { contains: search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+
+    // Check if we can sort and paginate on DB side
+    const canDbSort = orderBy !== 'completionRate';
+
+    // Base query for counting total (before pagination)
+    const where = {
+      AND: [
+        {
+          OR: [
+            { creatorId: userId },
+            { members: { some: { userId } } },
+          ],
+        },
+        searchFilter,
+        status
           ? {
               status: status === 'running' ? 'active' : status, // normalize running -> active
             }
-          : {}),
-        ...buildProjectDateOverlapWhere({ start: parsedDates.start, end: parsedDates.end }),
-      },
+          : {},
+        buildProjectDateOverlapWhere({ start: parsedDates.start, end: parsedDates.end }),
+      ],
+    };
+
+    // DB-side sorting and pagination
+    const findManyArgs: any = {
+      where,
       include: {
         creator: {
           select: {
@@ -70,7 +91,7 @@ export async function GET(req: NextRequest) {
           },
         },
         tasks: {
-          where: { status: { not: "archived" } },
+          where: { status: "done" },
           select: {
             id: true,
             status: true,
@@ -78,26 +99,27 @@ export async function GET(req: NextRequest) {
         },
         _count: {
           select: {
-            tasks: true,
+            tasks: { where: { status: { not: "archived" } } },
           },
         },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
+    };
 
-    // In-memory search on name/description
-    const filtered = projects.filter((project) => {
-      if (!search) return true;
-      const haystack = `${project.name} ${project.description || ''}`.toLowerCase();
-      return haystack.includes(search.toLowerCase());
-    });
+    if (canDbSort) {
+      findManyArgs.orderBy = { [orderBy]: order };
+      findManyArgs.skip = (page - 1) * limit;
+      findManyArgs.take = limit;
+    }
+
+    const [total, projects] = await Promise.all([
+      prisma.project.count({ where }),
+      prisma.project.findMany(findManyArgs),
+    ]);
 
     // Add derived fields and normalize status
-    const withComputed = filtered.map((project) => {
-      const totalTasks = project.tasks.length;
-      const completedTasks = project.tasks.filter((task) => task.status === 'done').length;
+    const withComputed = projects.map((project) => {
+      const totalTasks = (project as any)._count?.tasks || 0;
+      const completedTasks = project.tasks.length;
       const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
       const normalizedStatus = project.status === 'active' ? 'running' : project.status;
 
@@ -110,29 +132,20 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // Sort in-memory (supports completionRate)
-    const sorted = [...withComputed].sort((a, b) => {
+    let result = withComputed;
+    if (!canDbSort) {
+      // Manual sorting and pagination for 'completionRate'
       const dir = order === 'asc' ? 1 : -1;
-      switch (orderBy) {
-        case 'name':
-          return a.name.localeCompare(b.name) * dir;
-        case 'status':
-          return a.status.localeCompare(b.status) * dir;
-        case 'completionRate':
-          return (a.completionRate - b.completionRate) * dir;
-        case 'createdAt':
-        default:
-          return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
-      }
-    });
+      result.sort((a, b) => (a.completionRate - b.completionRate) * dir);
 
-    const total = sorted.length;
+      const start = (page - 1) * limit;
+      result = result.slice(start, start + limit);
+    }
+
     const totalPages = Math.max(Math.ceil(total / limit), 1);
-    const start = (page - 1) * limit;
-    const paged = sorted.slice(start, start + limit);
 
     return NextResponse.json({
-      projects: paged,
+      projects: result,
       pagination: {
         page,
         limit,
