@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const checklistsCache = new Map<string, Checklist[]>();
 
@@ -303,14 +304,20 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
                 disabled={disabled || loading}
                 className="font-medium"
               />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => void deleteChecklist(c.id)}
-                disabled={disabled || loading}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void deleteChecklist(c.id)}
+                    disabled={disabled || loading}
+                    aria-label="Elimina checklist"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Elimina checklist</TooltipContent>
+              </Tooltip>
             </div>
 
             <div className="mt-3 space-y-2">
@@ -327,14 +334,20 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
                   <div className={i.completed ? "text-sm line-through text-muted-foreground flex-1" : "text-sm flex-1"}>
                     {i.content}
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => void deleteItem(c.id, i.id)}
-                    disabled={disabled || loading}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void deleteItem(c.id, i.id)}
+                        disabled={disabled || loading}
+                        aria-label="Elimina elemento"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Elimina elemento</TooltipContent>
+                  </Tooltip>
                 </div>
               ))}
             </div>
