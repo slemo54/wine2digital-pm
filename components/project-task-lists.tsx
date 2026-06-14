@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List, X } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
@@ -833,7 +833,23 @@ export function ProjectTaskLists(props: {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="relative w-full sm:max-w-md">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Cerca task…" className="pl-9" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Cerca task…"
+            className="pl-9 pr-9"
+          />
+          {q && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => setQ("")}
+              aria-label="Pulisci ricerca"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <DropdownMenu>
