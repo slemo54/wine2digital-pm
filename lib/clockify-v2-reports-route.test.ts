@@ -14,7 +14,7 @@ test("report routes preserve disabled/auth/validation statuses", async () => {
 });
 
 test("report CSV uses the same engine and responds as downloadable text", async () => {
-  const route = createClockifyReportRouteHandlers({ getActor: async () => ({ actor }), run: async () => ({ type: "summary", totalMin: 1, timeSeries: [], bar: [] }), exportCsv: async () => "Date,Minutes\r\n" });
+  const route = createClockifyReportRouteHandlers({ getActor: async () => ({ actor }), run: async () => ({ type: "summary", totalMin: 1, timeSeries: [], bar: [] }), exportCsv: () => new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode("Date,Minutes\r\n")); controller.close(); } }) });
   const response = await route.CSV(new Request("http://test?from=2026-07-01&to=2026-07-02"));
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") || "", /text\/csv/);

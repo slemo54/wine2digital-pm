@@ -21,7 +21,7 @@ export function createClockifyReportRouteHandlers(overrides: Partial<ReportDepen
   async function report(request: Request): Promise<unknown> { const auth = await dependencies.getActor(); if (!auth.actor) return auth.response!; return dependencies.run(prisma, auth.actor, normalizeClockifyReportInput(paramsFor(request))); }
   return {
     async GET(request): Promise<NextResponse> { try { const result = await report(request); return result instanceof NextResponse ? result : NextResponse.json(result); } catch (error) { return reportError(error); } },
-    async CSV(request): Promise<NextResponse> { try { const auth = await dependencies.getActor(); if (!auth.actor) return auth.response!; const input = normalizeClockifyReportInput(paramsFor(request)); return new NextResponse(await dependencies.exportCsv(prisma, auth.actor, input), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=clockify-report.csv", "Cache-Control": "no-store" } }); } catch (error) { return reportError(error); } },
+    async CSV(request): Promise<NextResponse> { try { const auth = await dependencies.getActor(); if (!auth.actor) return auth.response!; const input = normalizeClockifyReportInput(paramsFor(request)); return new NextResponse(dependencies.exportCsv(prisma, auth.actor, input), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=clockify-report.csv", "Cache-Control": "no-store" } }); } catch (error) { return reportError(error); } },
   };
 }
 
@@ -35,7 +35,7 @@ export function createClockifyReportShareRouteHandlers(overrides: Partial<ShareD
 }
 
 /** No session is consulted here: the stored author's current active role and scope are checked by the service for every request. */
-export async function publicClockifyReportShareRoute(_: Request, token: string, load: typeof getClockifyPublicShare = getClockifyPublicShare): Promise<NextResponse> {
-  try { return NextResponse.json(await load(prisma, token), { headers: { "Cache-Control": "no-store" } }); }
+export async function publicClockifyReportShareRoute(request: Request, token: string, load: typeof getClockifyPublicShare = getClockifyPublicShare): Promise<NextResponse> {
+  try { const params = new URL(request.url).searchParams; return NextResponse.json(await load(prisma, token, { cursor: params.get("cursor"), limit: params.get("limit") }), { headers: { "Cache-Control": "no-store" } }); }
   catch (error) { return error instanceof ClockifyReportError ? clockifyV2Error(error.status, error.message) : clockifyV2Error(404, "Share not found"); }
 }

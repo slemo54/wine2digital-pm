@@ -3,10 +3,12 @@ import test from "node:test";
 import { Prisma } from "@prisma/client";
 import {
   ClockifyReportError,
+  allocateClockifyTagMinutes,
   buildClockifyReportWhere,
   createClockifyReportShare,
   csvCell,
   hashClockifyShareToken,
+  createClockifyDetailedCsvStream,
   getClockifyPublicShare,
   normalizeClockifyReportInput,
   roundClockifyMinutes,
@@ -87,4 +89,21 @@ test("a revoked or inactive author cannot serve a public share before report dat
   await assert.rejects(() => getClockifyPublicShare(inactiveDb, token), (error: any) => error instanceof ClockifyReportError && error.status === 404);
   const revokedDb = { clockifyReportShare: { findUnique: async () => ({ tokenHash, revokedAt: new Date(), createdBy: { id: "u1", role: "admin", department: null, isActive: true } }) } };
   await assert.rejects(() => getClockifyPublicShare(revokedDb, token), (error: any) => error instanceof ClockifyReportError && error.status === 404);
+});
+
+test("tag allocation uses distinct tags plus an untagged bucket and conserves the rounded entry total", () => {
+  const rounding = { increment: 5 as const, mode: "up" as const };
+  const tagged = allocateClockifyTagMinutes(11, [" client ", "client", "delivery"], rounding);
+  assert.deepEqual(tagged.map((row) => row.label), ["client", "delivery"]);
+  assert.equal(tagged.reduce((sum, row) => sum + row.totalMin, 0), 15);
+  const untagged = allocateClockifyTagMinutes(11, ["", "  "], rounding);
+  assert.deepEqual(untagged, [{ label: "Senza tag", totalMin: 15 }]);
+});
+
+test("detailed CSV is a readable stream that emits cursor pages without duplicate headers", async () => {
+  const row = (id: string, description: string) => ({ id, workDate: "2026-07-01", startAt: "a", endAt: "b", description, tags: [], billable: false, durationMin: 10, userEmail: "u", client: "c", projectName: "p" });
+  const stream = createClockifyDetailedCsvStream(async (cursor) => cursor ? { type: "detailed", rows: [row("b", "next")], nextCursor: null } : { type: "detailed", rows: [row("a", "=formula")], nextCursor: "next" });
+  const text = await new Response(stream).text();
+  assert.equal((text.match(/Date,Start/g) || []).length, 1);
+  assert.match(text, /'=formula/);
 });
