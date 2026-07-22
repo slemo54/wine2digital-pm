@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { GET as clientsGet } from "./clients/route";
 import { createClientsRouteHandlers } from "@/lib/clockify-v2-clients-route";
+import { getClockifyV2CatalogActor } from "@/lib/clockify-v2-api";
 import { POST as archivePost } from "./projects/[projectId]/archive/route";
 import { POST as taskDeactivatePost } from "./projects/[projectId]/tasks/[taskId]/deactivate/route";
 
@@ -34,7 +35,11 @@ test("V2 clients route handler returns stable 401 JSON without a session", async
 
 test("V2 clients route handler denies an authenticated, DB-active member with stable 403 JSON", async () => {
   const handler = createClientsRouteHandlers({
-    getActor: async () => ({ actor: { userId: "member-1", role: "member", department: null } }),
+    getActor: () => getClockifyV2CatalogActor({
+      isEnabled: () => true,
+      getSession: async () => ({ id: "member-1", email: "member@example.test", globalRole: "manager", department: "Sales" }),
+      findUser: async () => ({ id: "member-1", role: "member", department: "Marketing", isActive: true }),
+    }),
     listClients: async () => [],
     createClient: async () => { throw new Error("not called"); },
   });

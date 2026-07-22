@@ -11,6 +11,28 @@ export type ClockifyV2Actor = {
   department: string | null;
 };
 
+type ClockifyV2ActorDbUser = {
+  id: string;
+  role: string;
+  department: string | null;
+  isActive: boolean;
+};
+
+export type ClockifyV2ActorDependencies = {
+  isEnabled: () => boolean;
+  getSession: typeof getSessionUser;
+  findUser: (id: string) => Promise<ClockifyV2ActorDbUser | null>;
+};
+
+const defaultClockifyV2ActorDependencies: ClockifyV2ActorDependencies = {
+  isEnabled: isClockifyV2Enabled,
+  getSession: getSessionUser,
+  findUser: (id) => prisma.user.findUnique({
+    where: { id },
+    select: { id: true, role: true, department: true, isActive: true },
+  }),
+};
+
 export function clockifyV2Error(status: number, error: string): NextResponse {
   return NextResponse.json({ error }, { status });
 }
@@ -42,22 +64,19 @@ export function canUseClockifyV2Catalog(role: ClockifyGlobalRole): boolean {
   return role === "admin" || role === "manager";
 }
 
-export async function getClockifyV2Actor(): Promise<{ actor: ClockifyV2Actor | null; response?: NextResponse }> {
-  if (!isClockifyV2Enabled()) return { actor: null, response: clockifyV2Error(404, "Not found") };
+export async function getClockifyV2Actor(dependencies: ClockifyV2ActorDependencies = defaultClockifyV2ActorDependencies): Promise<{ actor: ClockifyV2Actor | null; response?: NextResponse }> {
+  if (!dependencies.isEnabled()) return { actor: null, response: clockifyV2Error(404, "Not found") };
 
   let sessionUser;
   try {
-    sessionUser = await getSessionUser();
+    sessionUser = await dependencies.getSession();
   } catch {
     // Route handlers must not turn an unavailable/invalid session into a 500 response.
     return { actor: null, response: clockifyV2Error(401, "Unauthorized") };
   }
   if (!sessionUser) return { actor: null, response: clockifyV2Error(401, "Unauthorized") };
 
-  const user = await prisma.user.findUnique({
-    where: { id: sessionUser.id },
-    select: { id: true, role: true, department: true, isActive: true },
-  });
+  const user = await dependencies.findUser(sessionUser.id);
   if (!user || !user.isActive) return { actor: null, response: clockifyV2Error(401, "Unauthorized") };
 
   return {
@@ -70,8 +89,8 @@ export async function getClockifyV2Actor(): Promise<{ actor: ClockifyV2Actor | n
 }
 
 /** Catalog management is intentionally narrower than future V2 time-entry APIs. */
-export async function getClockifyV2CatalogActor(): Promise<{ actor: ClockifyV2Actor | null; response?: NextResponse }> {
-  const auth = await getClockifyV2Actor();
+export async function getClockifyV2CatalogActor(dependencies?: ClockifyV2ActorDependencies): Promise<{ actor: ClockifyV2Actor | null; response?: NextResponse }> {
+  const auth = await getClockifyV2Actor(dependencies);
   if (!auth.actor || !canUseClockifyV2Catalog(auth.actor.role)) {
     return auth.actor ? { actor: null, response: clockifyV2Error(403, "Forbidden") } : auth;
   }
