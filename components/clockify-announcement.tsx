@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -52,17 +51,14 @@ export function ClockifyAnnouncement() {
           <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
             <Timer className="h-5 w-5" />
           </div>
-          <DialogTitle>È disponibile il nuovo modulo Clockify</DialogTitle>
+          <DialogTitle>Avviso Clockify</DialogTitle>
           <DialogDescription>
-            Registra le attività giornaliere, consulta le ore lavorate e organizza il tempo per progetto direttamente da Wine2Digital PM.
+            Aggiunto clockify per reportino ma non utilizzatelo ancora grazie - Anselmo
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => void dismiss()} disabled={saving}>
             Ho capito
-          </Button>
-          <Button asChild onClick={() => void dismiss()}>
-            <Link href="/clockify">Apri Clockify</Link>
           </Button>
         </DialogFooter>
       </DialogContent>
