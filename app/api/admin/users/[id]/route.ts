@@ -3,15 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session-user";
 import { publishRealtimeEvent } from "@/lib/realtime";
 import { normalizeDepartment } from "@/lib/departments";
+import {
+  buildAdminUserAuditChanges,
+  parseAdminUserUpdate,
+  wouldDisableLastActiveAdmin,
+} from "@/lib/admin-user-update";
 
 export const dynamic = "force-dynamic";
-
-type PatchBody = {
-  role?: "admin" | "manager" | "member";
-  isActive?: boolean;
-  calendarEnabled?: boolean;
-  department?: string | null;
-};
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -19,7 +17,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (!me) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     if (me.globalRole !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const body = (await req.json()) as PatchBody;
+    const parsed = parseAdminUserUpdate(await req.json());
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+    const body = parsed.value;
     const nextRole = body?.role;
     const nextActive = body?.isActive;
     const nextCalendarEnabled = body?.calendarEnabled;
@@ -37,15 +38,18 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     const target = await prisma.user.findUnique({
       where: { id: params.id },
-      select: { id: true, role: true, isActive: true, department: true, calendarEnabled: true },
+      select: { id: true, email: true, role: true, isActive: true, department: true, calendarEnabled: true },
     });
     if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    // guard: prevent locking out last admin (best-effort)
-    if (target.role === "admin" && nextRole && nextRole !== "admin") {
+    const removesActiveAdmin =
+      target.role === "admin" &&
+      target.isActive &&
+      (nextActive === false || (nextRole !== undefined && nextRole !== "admin"));
+    if (removesActiveAdmin) {
       const adminCount = await prisma.user.count({ where: { role: "admin", isActive: true } });
-      if (adminCount <= 1) {
-        return NextResponse.json({ error: "Cannot demote last active admin" }, { status: 400 });
+      if (wouldDisableLastActiveAdmin({ target, patch: body, activeAdminCount: adminCount })) {
+        return NextResponse.json({ error: "Cannot disable or demote the last active admin" }, { status: 400 });
       }
     }
 
@@ -82,6 +86,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
         entityType: "User",
         entityId: updated.id,
         metadata: {
+          targetEmail: target.email,
+          changes: buildAdminUserAuditChanges(target, updated),
           from: { role: target.role, isActive: target.isActive, department: target.department, calendarEnabled: target.calendarEnabled },
           to: { role: updated.role, isActive: updated.isActive, department: updated.department, calendarEnabled: updated.calendarEnabled },
         },
@@ -100,5 +106,3 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
-

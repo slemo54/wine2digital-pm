@@ -12,6 +12,7 @@ import { toast } from "react-hot-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Loader2, Shield } from "lucide-react";
 import { useAdminUsers, useUpdateAdminUser } from "@/hooks/use-admin";
+import type { AdminUserUpdate } from "@/lib/admin-user-update";
 
 const UNASSIGNED_DEPARTMENT_VALUE = "__unassigned__";
 
@@ -29,6 +30,8 @@ type AdminUser = {
   createdAt: string;
   updatedAt: string;
 };
+
+type AdminRole = NonNullable<AdminUserUpdate["role"]>;
 
 function displayName(u: AdminUser): string {
   const name = (u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim()).trim();
@@ -72,7 +75,7 @@ export default function AdminUsersPage() {
 
   const { data, isLoading, refetch } = useAdminUsers(filters);
   const updateMutation = useUpdateAdminUser();
-  const [roleChangeTarget, setRoleChangeTarget] = useState<{ id: string; role: string; name: string } | null>(null);
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{ id: string; role: AdminRole; name: string } | null>(null);
 
   const users = useMemo(() => {
     if (!data?.users) return [];
@@ -117,15 +120,8 @@ export default function AdminUsersPage() {
     });
   };
 
-  const updateUser = async (id: string, patch: { role?: string; isActive?: boolean; department?: string | null; calendarEnabled?: boolean }) => {
-    // Map our patch to match the API expectations
-    const apiPatch: Partial<{ role: string; active: boolean; department: string | null; calendarEnabled: boolean }> = {};
-    if (patch.role !== undefined) apiPatch.role = patch.role;
-    if (patch.isActive !== undefined) apiPatch.active = patch.isActive;
-    if (patch.department !== undefined) apiPatch.department = patch.department;
-    if (patch.calendarEnabled !== undefined) apiPatch.calendarEnabled = patch.calendarEnabled;
-
-    updateMutation.mutate({ id, data: apiPatch });
+  const updateUser = (id: string, patch: AdminUserUpdate) => {
+    updateMutation.mutate({ id, data: patch });
   };
 
   const header = useMemo(() => {
@@ -228,7 +224,7 @@ export default function AdminUsersPage() {
 
                       <div className="md:col-span-2">
                         <div className="text-xs text-muted-foreground md:hidden mb-1">Ruolo</div>
-                        <Select value={u.role} onValueChange={(v) => setRoleChangeTarget({ id: u.id, role: v, name: displayName(u) })}>
+                        <Select value={u.role} onValueChange={(v) => setRoleChangeTarget({ id: u.id, role: v as AdminRole, name: displayName(u) })}>
                           <SelectTrigger className="h-9 w-full">
                             <SelectValue />
                           </SelectTrigger>
