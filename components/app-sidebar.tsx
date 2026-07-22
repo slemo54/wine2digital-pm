@@ -23,7 +23,7 @@ import {
   Bell,
   Timer,
 } from "lucide-react";
-import { isClockifyEnabled } from "@/lib/feature-flags";
+import { isClockifyEnabled, isClockifyV2Enabled } from "@/lib/feature-flags";
 
 type NavItem = {
   href: string;
@@ -163,6 +163,20 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 <Timer className="h-4 w-4" />
                 Gestione Straordinari
               </Link>
+              {isClockifyV2Enabled() ? (
+                <Link
+                  href="/admin/clockify"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                    pathname.startsWith("/admin/clockify")
+                      ? "bg-accent text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                  )}
+                >
+                  <Timer className="h-4 w-4" />
+                  Catalogo Clockify
+                </Link>
+              ) : null}
               <Link
                 href="/admin/settings"
                 className={cn(
@@ -193,6 +207,20 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 <Timer className="h-4 w-4" />
                 Gestione Straordinari
               </Link>
+              {isClockifyV2Enabled() ? (
+                <Link
+                  href="/admin/clockify"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                    pathname.startsWith("/admin/clockify")
+                      ? "bg-accent text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                  )}
+                >
+                  <Timer className="h-4 w-4" />
+                  Catalogo Clockify
+                </Link>
+              ) : null}
             </div>
           ) : null}
         </nav>
