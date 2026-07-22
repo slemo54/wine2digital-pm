@@ -34,3 +34,9 @@ test("public report share rejects invalid/revoked/inactive tokens as 404 and is 
   const inactive = await publicClockifyReportShareRoute(new Request("http://test"), "a".repeat(43), async () => { throw new ClockifyReportError(404, "Share not found"); });
   assert.equal(inactive.status, 404);
 });
+
+test("public report shares are unavailable when the global V2 flag is off without consulting rollout roles", async () => {
+  const response = await publicClockifyReportShareRoute(new Request("http://test"), "a".repeat(43), async () => { throw new Error("not called"); }, () => false);
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Not found" });
+});

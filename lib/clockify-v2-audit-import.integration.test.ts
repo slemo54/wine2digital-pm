@@ -13,6 +13,7 @@ test("PostgreSQL audit excludes deleted records and controlled import is idempot
     const parsed = parseClockifyProjectCsv(`Project,Client\n${marker}-one,${marker}-client\n${marker}-two,${marker}-client\n`, 2);
     const beforeInvalid = await db.clockifyProject.count({ where: { name: { startsWith: marker } } });
     assert.throws(() => parseClockifyProjectCsv(`Project,Client\n${marker}-bad,${marker}-client\n`, 2));
+    assert.throws(() => parseClockifyProjectCsv(`\uFEFFProject,Client\n,${marker}-client\n`, 0));
     assert.equal(await db.clockifyProject.count({ where: { name: { startsWith: marker } } }), beforeInvalid);
     assert.deepEqual(await importClockifyProjects(db, parsed, true), { clients: 1, projects: 2, dryRun: true });
     const first = await importClockifyProjects(db, parsed, false); assert.equal(first.projects, 2); assert.equal(first.clients, 1);

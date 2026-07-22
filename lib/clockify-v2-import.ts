@@ -13,14 +13,15 @@ function cell(value: unknown): string { return String(value ?? "").normalize("NF
 export function parseClockifyProjectCsv(csv: string, expectedProjects: number): ClockifyImportProject[] {
   if (!Number.isInteger(expectedProjects) || expectedProjects < 0) throw new ClockifyImportError("expected projects must be a non-negative integer");
   let records: Record<string, unknown>[];
-  try { records = parse(csv, { columns: true, skip_empty_lines: true, relax_column_count: false, trim: false }); }
+  const source = csv.replace(/^\uFEFF/, "");
+  try { records = parse(source, { columns: true, skip_empty_lines: true, relax_column_count: false, trim: false }); }
   catch { throw new ClockifyImportError("CSV columns are invalid"); }
-  const first = csv.replace(/^\uFEFF/, "").split(/\r?\n/, 1)[0]?.split(",").map((header) => header.trim()) || [];
+  const first = source.split(/\r?\n/, 1)[0]?.split(",").map((header) => header.trim()) || [];
   if (first.length !== 2 || first[0] !== "Project" || first[1] !== "Client") throw new ClockifyImportError("CSV header must be exactly Project,Client");
   const unique = new Map<string, ClockifyImportProject>();
   for (const record of records) {
     const name = cell(record.Project); const client = cell(record.Client);
-    if (!name) continue;
+    if (!name) throw new ClockifyImportError("Every CSV row requires a Project value");
     const normalizedClient = normalizeClockifyName(client || "Senza cliente");
     const project = { name, client, normalizedClient };
     unique.set(`${name}\u0000${client}`, project);

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "./prisma";
 import { clockifyV2Error, clockifyV2ServerError, getClockifyV2Actor, parseClockifyV2Json } from "./clockify-v2-api";
 import { ClockifyReportError, createClockifyReportShare, exportClockifyReportCsv, getClockifyPublicShare, listClockifyReportShares, normalizeClockifyReportInput, revokeClockifyReportShare, runClockifyReport } from "./clockify-v2-reports";
+import { isClockifyV2Enabled } from "./feature-flags";
 
 type ReportDependencies = { getActor: typeof getClockifyV2Actor; run: typeof runClockifyReport; exportCsv: typeof exportClockifyReportCsv };
 type ShareDependencies = { getActor: typeof getClockifyV2Actor; create: typeof createClockifyReportShare; list: typeof listClockifyReportShares; revoke: typeof revokeClockifyReportShare };
@@ -35,7 +36,8 @@ export function createClockifyReportShareRouteHandlers(overrides: Partial<ShareD
 }
 
 /** No session is consulted here: the stored author's current active role and scope are checked by the service for every request. */
-export async function publicClockifyReportShareRoute(request: Request, token: string, load: typeof getClockifyPublicShare = getClockifyPublicShare): Promise<NextResponse> {
+export async function publicClockifyReportShareRoute(request: Request, token: string, load: typeof getClockifyPublicShare = getClockifyPublicShare, isEnabled: () => boolean = isClockifyV2Enabled): Promise<NextResponse> {
+  if (!isEnabled()) return clockifyV2Error(404, "Not found");
   try { const params = new URL(request.url).searchParams; return NextResponse.json(await load(prisma, token, { cursor: params.get("cursor"), limit: params.get("limit") }), { headers: { "Cache-Control": "no-store" } }); }
   catch (error) { return error instanceof ClockifyReportError ? clockifyV2Error(error.status, error.message) : clockifyV2Error(404, "Share not found"); }
 }

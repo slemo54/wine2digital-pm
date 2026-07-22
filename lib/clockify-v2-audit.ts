@@ -1,5 +1,6 @@
+import { Prisma } from "@prisma/client";
 import type { ClockifyV2Actor } from "./clockify-v2-api";
-import { findClockifyEffectivePeriodLockIds } from "./clockify-v2-entries";
+import { canonicalizeClockifyActor } from "./clockify-v2-entries";
 import { getClockifyReportScope } from "./clockify-v2-permissions";
 
 type Db = any;
@@ -36,21 +37,41 @@ export function classifyClockifyAuditEntry(input: { deletedAt: Date | null; star
 
 function encodeCursor(entry: { startAt: Date; id: string }): string { return Buffer.from(JSON.stringify({ startAt: entry.startAt.toISOString(), id: entry.id })).toString("base64url"); }
 
+export function isAuditPeriodEffectivelyLocked(entry: { lockKind: string | null; lockPeriodId: string | null; workDate: Date; userId: string; department: string | null }, period: { id: string; unlockedAt: Date | null; startDate: Date; endDate: Date; scopeType: string; targetUserId: string | null; department: string | null } | null): boolean {
+  if (entry.lockKind === "manual") return true;
+  if (entry.lockKind !== "period" || !entry.lockPeriodId || !period || period.id !== entry.lockPeriodId || period.unlockedAt) return false;
+  if (period.startDate > entry.workDate || period.endDate < entry.workDate) return false;
+  return period.scopeType === "all" || (period.scopeType === "user" && period.targetUserId === entry.userId) || (period.scopeType === "department" && !!entry.department && period.department?.trim().toLowerCase() === entry.department.trim().toLowerCase());
+}
+
+async function normalizeAuditDepartment(db: Db, value: unknown): Promise<string | null> {
+  const requested = String(value ?? "").normalize("NFKC").trim(); if (!requested) return null;
+  const fallback = ["Backoffice", "IT", "Grafica", "Social"];
+  const departments = typeof db.workSettings?.findFirst === "function" ? ((await db.workSettings.findFirst({ select: { departments: true } }))?.departments || fallback) : fallback;
+  return departments.find((department: string) => department.toLocaleLowerCase("it-IT") === requested.toLocaleLowerCase("it-IT")) || null;
+}
+
 /** Read-only, bounded audit; anomaly is a distinct filter rather than a report status. */
 export async function auditClockifyEntries(db: Db, actor: ClockifyV2Actor, input: ClockifyAuditInput): Promise<{ entries: unknown[]; nextCursor: string | null }> {
-  const scope = getClockifyReportScope(actor);
-  const scopeWhere = scope.kind === "self" ? { userId: scope.userId } : scope.kind === "department" ? { user: { department: { equals: scope.department, mode: "insensitive" } } } : {};
-  const cursorWhere = input.cursor ? { OR: [{ startAt: { gt: new Date(input.cursor.startAt) } }, { startAt: new Date(input.cursor.startAt), id: { gt: input.cursor.id } }] } : {};
-  const rows = await db.clockifyEntry.findMany({ where: { deletedAt: null, ...scopeWhere, ...cursorWhere }, orderBy: [{ startAt: "asc" }, { id: "asc" }], take: input.limit + 1, include: { user: { select: { id: true, name: true, email: true, department: true } }, project: { select: { id: true, name: true, client: true, isActive: true, archivedAt: true } }, clockifyTask: { select: { id: true, name: true, isActive: true } } } });
+  const canonical = await canonicalizeClockifyActor(actor, (value) => normalizeAuditDepartment(db, value));
+  const scope = getClockifyReportScope(canonical);
+  const scopeSql = scope.kind === "self" ? Prisma.sql`e."userId" = ${scope.userId}` : scope.kind === "department" ? Prisma.sql`lower(btrim(u.department)) = lower(btrim(${scope.department}))` : Prisma.sql`TRUE`;
+  const cursorSql = input.cursor ? Prisma.sql`AND ("startAt" > ${new Date(input.cursor.startAt)} OR ("startAt" = ${new Date(input.cursor.startAt)} AND id > ${input.cursor.id}))` : Prisma.empty;
+  const anomalySql = input.anomaly ? Prisma.sql`AND ${input.anomaly} = ANY(reasons)` : Prisma.empty;
+  const rows: any[] = await db.$queryRaw(Prisma.sql`
+    WITH audited AS (
+      SELECT e.id, e."userId", e."workDate", e."startAt", e."endAt", e."durationMin", u.name AS "userName", u.email AS "userEmail", u.department AS "userDepartment", p.id AS "projectId", p.name AS "projectName", p.client AS "projectClient", t.id AS "taskId", t.name AS "taskName",
+      array_remove(ARRAY[
+        CASE WHEN EXISTS (SELECT 1 FROM "ClockifyEntry" o WHERE o."deletedAt" IS NULL AND o."userId" = e."userId" AND o.id <> e.id AND o."startAt" < e."endAt" AND o."endAt" > e."startAt") THEN 'overlap' END,
+        CASE WHEN e."durationMin" < 5 THEN 'duration_short' END, CASE WHEN e."durationMin" > 720 THEN 'duration_long' END,
+        CASE WHEN e."endAt" <= e."startAt" OR round(extract(epoch FROM (e."endAt" - e."startAt")) / 60) <> e."durationMin" THEN 'temporal_inconsistency' END,
+        CASE WHEN p.id IS NULL OR NOT p."isActive" OR p."archivedAt" IS NOT NULL THEN 'missing_project' END,
+        CASE WHEN e."taskId" IS NOT NULL AND (t.id IS NULL OR NOT t."isActive") THEN 'missing_task' END,
+        CASE WHEN e."lockKind" = 'period' AND NOT EXISTS (SELECT 1 FROM "ClockifyLockPeriod" lp WHERE lp.id = e."lockPeriodId" AND lp."unlockedAt" IS NULL AND lp."startDate" <= e."workDate" AND lp."endDate" >= e."workDate" AND (lp."scopeType" = 'all' OR (lp."scopeType" = 'user' AND lp."targetUserId" = e."userId") OR (lp."scopeType" = 'department' AND u.department IS NOT NULL AND lower(btrim(lp.department)) = lower(btrim(u.department))))) THEN 'active_lock_missing' END
+      ], NULL) AS reasons
+      FROM "ClockifyEntry" e JOIN "User" u ON u.id = e."userId" LEFT JOIN "ClockifyProject" p ON p.id = e."projectId" LEFT JOIN "ClockifyTask" t ON t.id = e."taskId"
+      WHERE e."deletedAt" IS NULL AND ${scopeSql}
+    ) SELECT * FROM audited WHERE cardinality(reasons) > 0 ${anomalySql} ${cursorSql} ORDER BY "startAt" ASC, id ASC LIMIT ${input.limit + 1}`);
   const page = rows.slice(0, input.limit);
-  const effective = await findClockifyEffectivePeriodLockIds(db, page);
-  const entries = await Promise.all(page.map(async (entry: any) => {
-    const overlapCount = await db.clockifyEntry.count({ where: { userId: entry.userId, deletedAt: null, NOT: { id: entry.id }, startAt: { lt: entry.endAt }, endAt: { gt: entry.startAt } } });
-    const expectedLocked = entry.lockKind === "period" || !!entry.lockPeriodId;
-    const effectivelyLocked = entry.lockKind === "manual" || (expectedLocked && effective.has(entry.id));
-    const reasons = classifyClockifyAuditEntry({ ...entry, overlapCount, projectPresent: !!entry.project && entry.project.isActive && !entry.project.archivedAt, taskPresent: !entry.taskId || !!entry.clockifyTask && entry.clockifyTask.isActive, effectivelyLocked, expectedLocked });
-    return { id: entry.id, user: entry.user, project: entry.project ? { id: entry.project.id, name: entry.project.name, client: entry.project.client } : null, task: entry.clockifyTask ? { id: entry.clockifyTask.id, name: entry.clockifyTask.name } : null, workDate: entry.workDate, startAt: entry.startAt, endAt: entry.endAt, durationMin: entry.durationMin, reasons };
-  }));
-  const filtered = input.anomaly ? entries.filter((entry: any) => entry.reasons.includes(input.anomaly)) : entries.filter((entry: any) => entry.reasons.length);
-  return { entries: filtered, nextCursor: rows.length > input.limit && page.length ? encodeCursor(page[page.length - 1]) : null };
+  return { entries: page.map((row) => ({ id: row.id, user: { id: row.userId, name: row.userName, email: row.userEmail, department: row.userDepartment }, project: row.projectId ? { id: row.projectId, name: row.projectName, client: row.projectClient } : null, task: row.taskId ? { id: row.taskId, name: row.taskName } : null, workDate: row.workDate, startAt: row.startAt, endAt: row.endAt, durationMin: Number(row.durationMin), reasons: row.reasons })), nextCursor: rows.length > input.limit && page.length ? encodeCursor(page[page.length - 1]) : null };
 }
