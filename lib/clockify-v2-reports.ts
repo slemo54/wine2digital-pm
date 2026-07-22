@@ -164,6 +164,14 @@ export async function buildClockifyReportWhere(actor: ClockifyV2Actor, filters: 
   if (filters.locked !== null) conditions.push(filters.locked ? activeLockExpression() : Prisma.sql`NOT ${activeLockExpression()}`);
   return Prisma.join(conditions, " AND ");
 }
+/** Report normalization stays on the supplied database handle, including TEST_DATABASE_URL integration clients. */
+async function normalizeReportDepartment(db: Db, input: unknown): Promise<string | null> {
+  const value = String(input ?? "").normalize("NFKC").trim(); if (!value) return null;
+  const fallback = ["Backoffice", "IT", "Grafica", "Social"];
+  const departments = typeof db.workSettings?.findFirst === "function" ? ((await db.workSettings.findFirst({ select: { departments: true } }))?.departments || fallback) : fallback;
+  return departments.find((department: string) => department.toLocaleLowerCase("it-IT") === value.toLocaleLowerCase("it-IT")) || null;
+}
+function reportNormalizer(db: Db): (department: unknown) => Promise<string | null> { return (department) => normalizeReportDepartment(db, department); }
 function reportFrom(includeTags = false): Prisma.Sql {
   return includeTags
     ? Prisma.sql`FROM "ClockifyEntry" e JOIN "User" u ON u.id = e."userId" JOIN "ClockifyProject" p ON p.id = e."projectId" LEFT JOIN "ClockifyTask" t ON t.id = e."taskId" LEFT JOIN LATERAL (SELECT DISTINCT btrim(tag_value) AS value FROM unnest(e."tags") tag_value WHERE btrim(tag_value) <> '') report_tag ON TRUE`
@@ -171,7 +179,7 @@ function reportFrom(includeTags = false): Prisma.Sql {
 }
 
 export async function getClockifySummaryReport(db: Db, actor: ClockifyV2Actor, input: ClockifyReportInput): Promise<unknown> {
-  const where = await buildClockifyReportWhere(actor, input.filters), duration = roundedExpression(input.rounding), includeTags = input.groupBy === "tag";
+  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db)), duration = roundedExpression(input.rounding), includeTags = input.groupBy === "tag";
   // Tag expansion belongs only to the tag distribution. Applying it to totals would count a multi-tag entry more than once.
   const from = reportFrom(false), groupFrom = reportFrom(includeTags);
   const [totalRows, seriesRows, groups] = await Promise.all([
@@ -189,7 +197,7 @@ export async function getClockifySummaryReport(db: Db, actor: ClockifyV2Actor, i
 }
 
 export async function getClockifyDetailedReport(db: Db, actor: ClockifyV2Actor, input: ClockifyReportInput): Promise<unknown> {
-  const where = await buildClockifyReportWhere(actor, input.filters), duration = roundedExpression(input.rounding);
+  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db)), duration = roundedExpression(input.rounding);
   const detailedCursor = input.cursor?.kind === "detailed" ? input.cursor : null;
   const cursor = detailedCursor ? Prisma.sql`AND (e."startAt" > ${new Date(detailedCursor.startAt)} OR (e."startAt" = ${new Date(detailedCursor.startAt)} AND e.id > ${detailedCursor.id}))` : Prisma.empty;
   const rows = await db.$queryRaw(Prisma.sql`SELECT e.id, e."workDate", e."startAt", e."endAt", e."description", e."task", e."tags", e."billable", e."durationMin" AS "storedDurationMin", ${duration} AS "durationMin", ${activeLockExpression()} AS "effectiveLocked", e."userId", u."name" AS "userName", u.email AS "userEmail", u.department, e."projectId", p.name AS "projectName", p.client, e."taskId" ${reportFrom()} WHERE ${where} ${cursor} ORDER BY e."startAt" ASC, e.id ASC LIMIT ${input.limit + 1}`);
@@ -200,26 +208,26 @@ export async function getClockifyDetailedReport(db: Db, actor: ClockifyV2Actor, 
 }
 
 export async function getClockifyWeeklyReport(db: Db, actor: ClockifyV2Actor, input: ClockifyReportInput): Promise<unknown> {
-  const where = await buildClockifyReportWhere(actor, input.filters), duration = roundedExpression(input.rounding);
+  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db)), duration = roundedExpression(input.rounding);
   const weeklyCursor = input.cursor?.kind === "weekly" ? input.cursor : null;
-  const cursorClause = weeklyCursor ? Prisma.sql`WHERE (COALESCE("userName", "userEmail") > ${weeklyCursor.name} OR (COALESCE("userName", "userEmail") = ${weeklyCursor.name} AND "userEmail" > ${weeklyCursor.email}) OR (COALESCE("userName", "userEmail") = ${weeklyCursor.name} AND "userEmail" = ${weeklyCursor.email} AND "userId" > ${weeklyCursor.id}))` : Prisma.empty;
+  const cursorClause = weeklyCursor ? Prisma.sql`WHERE ("sortName" > ${weeklyCursor.name} OR ("sortName" = ${weeklyCursor.name} AND "userEmail" > ${weeklyCursor.email}) OR ("sortName" = ${weeklyCursor.name} AND "userEmail" = ${weeklyCursor.email} AND "userId" > ${weeklyCursor.id}))` : Prisma.empty;
   const rows = await db.$queryRaw(Prisma.sql`
     WITH filtered AS (SELECT e.*, u."name" AS "userName", u.email AS "userEmail" ${reportFrom()} WHERE ${where}),
-    people AS (SELECT DISTINCT "userId", "userName", "userEmail" FROM filtered),
-    page_people AS (SELECT * FROM people ${cursorClause} ORDER BY COALESCE("userName", "userEmail"), "userEmail", "userId" LIMIT ${input.limit + 1}),
+    people AS (SELECT DISTINCT "userId", "userName", "userEmail", COALESCE(NULLIF(btrim("userName"), ''), "userEmail") AS "sortName" FROM filtered),
+    page_people AS (SELECT * FROM people ${cursorClause} ORDER BY "sortName", "userEmail", "userId" LIMIT ${input.limit + 1}),
     days AS (SELECT generate_series(${input.filters.from}::date, ${input.filters.to}::date, interval '1 day')::date AS day),
     person_day_totals AS (SELECT e."userId", (e."workDate" AT TIME ZONE ${ROME})::date AS day, SUM(${duration})::numeric AS "totalMin" FROM filtered e GROUP BY 1, 2),
     all_day_totals AS (SELECT day, SUM("totalMin")::numeric AS "totalMin" FROM person_day_totals GROUP BY day)
-    SELECT page_people."userId", page_people."userName", page_people."userEmail", days.day::text AS date, COALESCE(person_day_totals."totalMin", 0)::numeric AS "totalMin", COALESCE(all_day_totals."totalMin", 0)::numeric AS "globalDayTotal"
+    SELECT page_people."userId", page_people."userName", page_people."userEmail", page_people."sortName", days.day::text AS date, COALESCE(person_day_totals."totalMin", 0)::numeric AS "totalMin", COALESCE(all_day_totals."totalMin", 0)::numeric AS "globalDayTotal"
     FROM page_people CROSS JOIN days LEFT JOIN person_day_totals ON person_day_totals."userId" = page_people."userId" AND person_day_totals.day = days.day LEFT JOIN all_day_totals ON all_day_totals.day = days.day
-    ORDER BY COALESCE(page_people."userName", page_people."userEmail"), page_people."userEmail", page_people."userId", days.day`);
+    ORDER BY page_people."sortName", page_people."userEmail", page_people."userId", days.day`);
   const days = dateRange(input.filters.from, input.filters.to);
   const byUser = new Map<string, any>();
   const globalByDay = new Map<string, number>();
-  for (const row of rows as any[]) { const person = byUser.get(row.userId) || { userId: row.userId, name: row.userName || row.userEmail, email: row.userEmail, days: [], totalMin: 0 }; const totalMin = number(row.totalMin); person.days.push({ date: row.date, totalMin }); person.totalMin += totalMin; byUser.set(row.userId, person); globalByDay.set(row.date, number(row.globalDayTotal)); }
+  for (const row of rows as any[]) { const person = byUser.get(row.userId) || { userId: row.userId, name: row.userName || row.userEmail, email: row.userEmail, sortName: row.sortName, days: [], totalMin: 0 }; const totalMin = number(row.totalMin); person.days.push({ date: row.date, totalMin }); person.totalMin += totalMin; byUser.set(row.userId, person); globalByDay.set(row.date, number(row.globalDayTotal)); }
   const allPeople = [...byUser.values()]; const hasMore = allPeople.length > input.limit; const people = hasMore ? allPeople.slice(0, input.limit) : allPeople;
   const last = people[people.length - 1]; const dayTotals = days.map((date) => ({ date, totalMin: globalByDay.get(date) || 0 }));
-  return { type: "weekly", days, people, dayTotals, grandTotalMin: dayTotals.reduce((sum, day) => sum + day.totalMin, 0), nextCursor: hasMore && last ? Buffer.from(JSON.stringify({ name: last.name, email: last.email, id: last.userId })).toString("base64url") : null };
+  return { type: "weekly", days, people, dayTotals, grandTotalMin: dayTotals.reduce((sum, day) => sum + day.totalMin, 0), nextCursor: hasMore && last ? Buffer.from(JSON.stringify({ name: last.sortName, email: last.email, id: last.userId })).toString("base64url") : null };
 }
 function dateRange(from: string, to: string): string[] { const values: string[] = []; for (let date = new Date(`${from}T12:00:00Z`), end = new Date(`${to}T12:00:00Z`); date <= end; date.setUTCDate(date.getUTCDate() + 1)) values.push(date.toISOString().slice(0, 10)); return values; }
 
