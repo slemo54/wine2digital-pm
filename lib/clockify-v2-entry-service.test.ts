@@ -61,6 +61,26 @@ test("V2 list always filters soft-deleted entries and bounds the report period",
   await assert.rejects(() => listClockifyEntries(db, actor, { from: "2026-01-01", to: "2026-06-01" }), /93 days/);
 });
 
+test("V2 list uses a stable startAt/id cursor, bounded pages, and full-period totals", async () => {
+  const first = { ...source, id: "e1", durationMin: 60, startAt: new Date("2026-07-22T07:00:00.000Z") };
+  const second = { ...source, id: "e2", durationMin: 30, startAt: new Date("2026-07-22T08:00:00.000Z") };
+  const calls: any[] = [];
+  const db = {
+    clockifyEntry: {
+      findMany: async (value: any) => { calls.push(value); return [first, second]; },
+      aggregate: async () => ({ _sum: { durationMin: 90 }, _count: { id: 2 } }),
+    },
+  };
+  const result: any = await listClockifyEntries(db, actor, { from: "2026-07-22", to: "2026-07-22", limit: "1" });
+  assert.equal(calls[0].take, 2);
+  assert.equal(result.page.limit, 1);
+  assert.equal(result.groups.period.totalMin, 90);
+  assert.ok(result.nextCursor);
+  const decoded = JSON.parse(Buffer.from(result.nextCursor, "base64url").toString("utf8"));
+  assert.deepEqual(decoded, { startAt: first.startAt.toISOString(), id: "e1" });
+  void second;
+});
+
 test("V2 update and duplicate reject manually or period-locked own entries through the mutation protocol", async () => {
   const manual = { ...source, lockedAt: new Date() };
   const manuallyLocked = { $transaction: async (work: any) => work(manuallyLocked), clockifyEntry: { findFirst: async () => manual } };
@@ -72,12 +92,12 @@ test("V2 update and duplicate reject manually or period-locked own entries throu
 test("V2 list scopes managers to the normalized department and returns effective period locks", async () => {
   let entryWhere: any; let lockWhere: any;
   const db = {
-    clockifyEntry: { findMany: async (value: any) => { entryWhere = value.where; return [source]; } },
-    clockifyLockPeriod: { findMany: async (value: any) => { lockWhere = value.where; return [{ id: "p-lock", startDate: new Date("2026-07-21T00:00:00.000Z"), endDate: new Date("2026-07-23T00:00:00.000Z"), scopeType: "department", department: "Grafica", targetUserId: null }]; } },
+    clockifyEntry: { findMany: async (value: any) => { entryWhere = value.where; return [{ ...source, user: { id: "u1", name: "User", email: "u1@test", department: "Grafica" } }]; } },
+    clockifyLockPeriod: { findFirst: async (value: any) => { lockWhere = value.where; return { id: "p-lock" }; } },
   };
   const result: any = await listClockifyEntries(db, { ...actor, role: "manager", department: " grafica " }, { from: "2026-07-22", to: "2026-07-22" });
-  assert.equal(entryWhere.user.department, "Grafica");
-  assert.equal(lockWhere.OR[1].department, "Grafica");
+  assert.equal(entryWhere.user.department.equals, "Grafica");
+  assert.equal(lockWhere.OR[1].department.equals, "Grafica");
   assert.equal(result.entries[0].effectiveLocked, true);
   assert.equal(result.entries[0].effectiveLockKind, "period");
 });

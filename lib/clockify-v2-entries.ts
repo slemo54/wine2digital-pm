@@ -317,26 +317,62 @@ export function groupClockifyEntries<T extends { workDate: Date; durationMin: nu
   return { days, weeks: [...byWeek.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([startDate, values]) => ({ startDate, ...values })), period: { totalMin, billableMin } };
 }
 
-export async function listClockifyEntries(db: Db, actor: ClockifyV2Actor, input: { from?: unknown; to?: unknown }): Promise<{ entries: unknown[]; groups: ReturnType<typeof groupClockifyEntries> }> {
+type ClockifyEntryCursor = { startAt: string; id: string };
+function parseEntryCursor(value: unknown): ClockifyEntryCursor | null {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(String(value), "base64url").toString("utf8"));
+    const startAt = new Date(String(parsed?.startAt || "")); const id = String(parsed?.id || "");
+    if (!id || Number.isNaN(startAt.getTime())) throw new Error("bad cursor");
+    return { startAt: startAt.toISOString(), id };
+  } catch { throw new ClockifyEntryError(400, "cursor is invalid"); }
+}
+
+function parsePageLimit(value: unknown): number {
+  if (value === undefined || value === null || String(value).trim() === "") return 100;
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new ClockifyEntryError(400, "limit must be an integer between 1 and 500");
+  return limit;
+}
+
+async function effectivePeriodLock(db: Db, entry: any): Promise<boolean> {
+  if (entry.lockedAt || entry.lockKind || typeof db.clockifyLockPeriod?.findFirst !== "function") return false;
+  const canonical = await canonicalizeClockifyActor({ userId: entry.userId, role: "member", department: entry.user?.department || null });
+  const lock = await db.clockifyLockPeriod.findFirst({
+    where: {
+      unlockedAt: null, startDate: { lte: entry.workDate }, endDate: { gte: entry.workDate },
+      OR: [{ scopeType: "all" }, ...(canonical.department ? [{ scopeType: "department", department: { equals: canonical.department, mode: "insensitive" } }] : []), { scopeType: "user", targetUserId: entry.userId }],
+    }, select: { id: true },
+  });
+  return !!lock;
+}
+
+export async function listClockifyEntries(db: Db, actor: ClockifyV2Actor, input: { from?: unknown; to?: unknown; cursor?: unknown; limit?: unknown }): Promise<{ entries: unknown[]; groups: ReturnType<typeof groupClockifyEntries>; nextCursor: string | null; page: { limit: number; count: number; total: number } }> {
   const from = asDatePart(input.from), to = asDatePart(input.to);
   const fromDate = romeWallTimeToInstant(from.value, "00:00"), endExclusive = romeWallTimeToInstant(nextDate(to.value), "00:00");
   if (endExclusive.getTime() <= fromDate.getTime() || endExclusive.getTime() - fromDate.getTime() > 93 * 24 * 60 * 60 * 1000) throw new ClockifyEntryError(400, "Report period must be between one and 93 days");
   const canonicalActor = await canonicalizeClockifyActor(actor);
   const scope = getClockifyReportScope(canonicalActor);
-  const scopeWhere = scope.kind === "all" ? {} : scope.kind === "department" ? { user: { department: scope.department } } : { userId: scope.userId };
-  const entries = await db.clockifyEntry.findMany({ where: { deletedAt: null, workDate: { gte: fromDate, lt: endExclusive }, ...scopeWhere }, orderBy: [{ workDate: "asc" }, { startAt: "asc" }], take: 5000, select: entrySelect });
-  const periods = typeof db.clockifyLockPeriod?.findMany === "function" ? await db.clockifyLockPeriod.findMany({
-    where: {
-      unlockedAt: null, startDate: { lt: endExclusive }, endDate: { gte: fromDate },
-      OR: [{ scopeType: "all" }, ...(canonicalActor.department ? [{ scopeType: "department", department: canonicalActor.department }] : []), { scopeType: "user", targetUserId: canonicalActor.userId }],
-    },
-    select: { id: true, startDate: true, endDate: true, scopeType: true, department: true, targetUserId: true },
-  }) : [];
-  const effectiveEntries = entries.map((entry: any) => {
-    const period = periods.find((lock: any) => lockAppliesToWorkDate(lock, canonicalActor, entry.workDate));
+  const scopeWhere = scope.kind === "all" ? {} : scope.kind === "department" ? { user: { department: { equals: scope.department, mode: "insensitive" } } } : { userId: scope.userId };
+  const where = { deletedAt: null, workDate: { gte: fromDate, lt: endExclusive }, ...scopeWhere };
+  const cursor = parseEntryCursor(input.cursor); const limit = parsePageLimit(input.limit);
+  const cursorWhere = cursor ? { OR: [{ startAt: { gt: new Date(cursor.startAt) } }, { startAt: new Date(cursor.startAt), id: { gt: cursor.id } }] } : {};
+  const rows = await db.clockifyEntry.findMany({ where: { ...where, ...cursorWhere }, orderBy: [{ startAt: "asc" }, { id: "asc" }], take: limit + 1, select: entrySelect });
+  const hasMore = rows.length > limit; const entries = hasMore ? rows.slice(0, limit) : rows;
+  const effectiveEntries = await Promise.all(entries.map(async (entry: any) => {
+    const period = await effectivePeriodLock(db, entry);
     return { ...entry, effectiveLocked: Boolean(entry.lockedAt || entry.lockKind || period), effectiveLockKind: entry.lockKind || (period ? "period" : null) };
-  });
-  return { entries: effectiveEntries, groups: groupClockifyEntries(effectiveEntries) };
+  }));
+  const pageGroups = groupClockifyEntries(effectiveEntries);
+  const aggregate = typeof db.clockifyEntry.aggregate === "function" ? await db.clockifyEntry.aggregate({ where, _sum: { durationMin: true }, _count: { id: true } }) : null;
+  const period = aggregate ? { totalMin: aggregate._sum.durationMin || 0, billableMin: 0 } : pageGroups.period;
+  if (typeof db.clockifyEntry.aggregate === "function") {
+    const billable = await db.clockifyEntry.aggregate({ where: { ...where, billable: true }, _sum: { durationMin: true } });
+    period.billableMin = billable._sum.durationMin || 0;
+  }
+  const last: any = effectiveEntries[effectiveEntries.length - 1];
+  const nextCursor = hasMore && last ? Buffer.from(JSON.stringify({ startAt: last.startAt.toISOString(), id: last.id })).toString("base64url") : null;
+  return { entries: effectiveEntries, groups: { ...pageGroups, period }, nextCursor, page: { limit, count: effectiveEntries.length, total: aggregate?._count?.id ?? effectiveEntries.length } };
 }
 
 export function asClockifyEntryError(error: unknown): ClockifyEntryError | ClockifyCatalogError | null {

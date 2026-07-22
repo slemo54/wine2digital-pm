@@ -9,4 +9,3 @@ export async function POST(req: NextRequest, { params }: { params: { entryId: st
   try { const auth = await getClockifyV2Actor(); if (!auth.actor) return auth.response!; return NextResponse.json(await duplicateClockifyEntry(prisma, auth.actor, params.entryId, await parseClockifyV2Json(req) as ClockifyEntryInput), { status: 201 }); }
   catch (error) { return entryRouteError(error); }
 }
-

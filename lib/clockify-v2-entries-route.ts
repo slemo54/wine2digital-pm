@@ -32,7 +32,7 @@ export function createClockifyEntriesRouteHandlers(overrides: Partial<EntriesDep
         const auth = await dependencies.getActor();
         if (!auth.actor) return auth.response!;
         const params = new URL(request.url).searchParams;
-        return NextResponse.json(await dependencies.list(prisma, auth.actor, { from: params.get("from"), to: params.get("to") }));
+        return NextResponse.json(await dependencies.list(prisma, auth.actor, { from: params.get("from"), to: params.get("to"), cursor: params.get("cursor"), limit: params.get("limit") }));
       } catch (error) { return entryRouteError(error); }
     },
     async POST(request: Request): Promise<NextResponse> {
@@ -44,4 +44,3 @@ export function createClockifyEntriesRouteHandlers(overrides: Partial<EntriesDep
     },
   };
 }
-

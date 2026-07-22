@@ -14,4 +14,3 @@ export async function GET(): Promise<NextResponse> {
     return NextResponse.json({ projects });
   } catch (error) { return clockifyV2ServerError(error); }
 }
-
