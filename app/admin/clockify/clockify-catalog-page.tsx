@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Archive, Loader2, Plus, RotateCcw, Settings2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { Badge } from "@/components/ui/badge";
@@ -96,7 +97,7 @@ export default function ClockifyCatalogPage({ role }: { role: "admin" | "manager
   return <main className="min-h-screen bg-secondary"><div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
     <div><h1 className="flex items-center gap-2 text-2xl font-bold"><Settings2 className="h-6 w-6" /> Clockify · Catalogo</h1><p className="text-sm text-muted-foreground">Clienti, progetti e attività per la rendicontazione.</p></div>
     <Tabs value={tab} onValueChange={setTab}><TabsList aria-label="Sezioni catalogo Clockify"><TabsTrigger value="active">Progetti attivi</TabsTrigger><TabsTrigger value="archive">Archivio</TabsTrigger><TabsTrigger value="report">Report</TabsTrigger></TabsList>
-      <TabsContent value="report"><div className="space-y-4"><Card><CardHeader><CardTitle>Report</CardTitle></CardHeader><CardContent className="text-sm text-muted-foreground">I report avanzati saranno disponibili nella Fase 5.</CardContent></Card>{role === "admin" && <ClockifyLocksPanel />}</div></TabsContent>
+      <TabsContent value="report"><div className="space-y-4"><Card><CardHeader><CardTitle>Report</CardTitle></CardHeader><CardContent className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground"><span>Riepiloghi, dettaglio, settimanali, esportazioni e condivisioni pubbliche.</span><Button asChild><Link href="/clockify/reports">Apri report</Link></Button></CardContent></Card>{role === "admin" && <ClockifyLocksPanel />}</div></TabsContent>
       <TabsContent value="active"><div className="space-y-6"><ClockifyClientsPanel clients={clients} onCreate={createClient} onRename={renameClient} /><CatalogList title={title} q={q} setQ={setQ} loading={loading} projects={projects} onCreate={showCreate} onEdit={showEdit} onTasks={openTasks} onArchive={(project) => archive(project, true)} /></div></TabsContent>
       <TabsContent value="archive"><CatalogList title={title} q={q} setQ={setQ} loading={loading} projects={projects} onCreate={showCreate} onEdit={showEdit} onTasks={openTasks} onArchive={(project) => archive(project, false)} archived /></TabsContent>
     </Tabs>

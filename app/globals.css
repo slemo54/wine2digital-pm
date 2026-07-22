@@ -1,6 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Clockify reports retain their tabular hierarchy when printed or saved as PDF. */
+@media print {
+  .report-no-print { display: none !important; }
+  .report-page { max-width: none !important; padding: 0 !important; color: #000 !important; background: #fff !important; }
+  .report-page table { width: 100% !important; border-collapse: collapse !important; font-size: 10pt; }
+  .report-page th, .report-page td { border: 1px solid #d1d5db !important; padding: 0.35rem !important; }
+  .report-page tr { break-inside: avoid; }
+  .report-page .recharts-responsive-container { min-height: 240px !important; }
+}
  
 @layer base {
   :root {

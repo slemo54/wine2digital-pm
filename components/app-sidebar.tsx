@@ -42,6 +42,9 @@ const NAV: NavItem[] = [
   ...(isClockifyEnabled()
     ? [{ href: "/clockify", label: "Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify") }]
     : []),
+  ...(isClockifyV2Enabled()
+    ? [{ href: "/clockify/reports", label: "Report Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify/reports") }]
+    : []),
   { href: "/notifications", label: "Notifiche", icon: Bell, isActive: (p) => p.startsWith("/notifications"), hasBadge: true },
   { href: "/files", label: "File", icon: FileText, isActive: (p) => p.startsWith("/files") },
   { href: "/profile", label: "Profilo", icon: User, isActive: (p) => p.startsWith("/profile") },
