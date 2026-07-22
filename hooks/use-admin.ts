@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-hot-toast';
+import type { AdminUserUpdate } from '@/lib/admin-user-update';
 
 // Types
 export interface AdminUsersFilters {
@@ -103,7 +104,7 @@ export function useUpdateAdminUser() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: Partial<AdminUser> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: AdminUserUpdate }) => {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -117,37 +118,18 @@ export function useUpdateAdminUser() {
       return result.user as AdminUser;
     },
 
-    // OPTIMISTIC UPDATE - UI updates immediately
-    onMutate: async ({ id, data }) => {
-      // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['admin-users'] });
-
-      // Snapshot previous values
-      const previousData = queryClient.getQueryData<AdminUsersResponse>(['admin-users']);
-
-      // Optimistically update the user in the cache
-      queryClient.setQueryData(['admin-users'], (old: AdminUsersResponse | undefined) => {
-        if (!old?.users) return old;
-        return {
-          ...old,
-          users: old.users.map((user) =>
-            user.id === id ? { ...user, ...data } : user
-          ),
-        };
-      });
-
-      return { previousData };
-    },
-
-    onError: (err, variables, context) => {
-      // Rollback on error
-      if (context?.previousData) {
-        queryClient.setQueryData(['admin-users'], context.previousData);
-      }
+    onError: (err) => {
       toast.error(err instanceof Error ? err.message : 'Failed to update user');
     },
 
-    onSuccess: () => {
+    onSuccess: (updatedUser) => {
+      queryClient.setQueriesData<AdminUsersResponse>({ queryKey: ['admin-users'] }, (old) => {
+        if (!old?.users) return old;
+        return {
+          ...old,
+          users: old.users.map((user) => user.id === updatedUser.id ? updatedUser : user),
+        };
+      });
       toast.success('User updated successfully');
     },
 
