@@ -13,7 +13,8 @@ test("Clockify one-time announcement is persisted and rendered", () => {
   assert.match(route, /export async function POST/);
   assert.match(route, /userAnnouncementRead\.upsert/);
   assert.match(component, /api\/announcements\/clockify/);
-  assert.match(component, /Clockify/);
+  assert.match(component, /Aggiunto clockify per reportino ma non utilizzatelo ancora grazie - Anselmo/);
+  assert.doesNotMatch(component, /Apri Clockify/);
   assert.match(schema, /model UserAnnouncementRead/);
   assert.match(schema, /@@unique\(\[userId, announcementKey\]\)/);
 });
