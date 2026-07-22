@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { GET as clientsGet } from "./clients/route";
+import { createClientsRouteHandlers } from "@/lib/clockify-v2-clients-route";
 import { POST as archivePost } from "./projects/[projectId]/archive/route";
 import { POST as taskDeactivatePost } from "./projects/[projectId]/tasks/[taskId]/deactivate/route";
 
@@ -29,4 +30,15 @@ test("V2 clients route handler returns stable 401 JSON without a session", async
     assert.equal(response.status, 401);
     assert.deepEqual(await response.json(), { error: "Unauthorized" });
   });
+});
+
+test("V2 clients route handler denies an authenticated, DB-active member with stable 403 JSON", async () => {
+  const handler = createClientsRouteHandlers({
+    getActor: async () => ({ actor: { userId: "member-1", role: "member", department: null } }),
+    listClients: async () => [],
+    createClient: async () => { throw new Error("not called"); },
+  });
+  const response = await handler.GET(new Request("http://test/api/clockify/v2/clients") as any);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "Forbidden" });
 });
