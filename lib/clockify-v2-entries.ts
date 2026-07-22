@@ -1,4 +1,5 @@
 import { normalizeDepartment } from "./departments";
+import { Prisma } from "@prisma/client";
 import type { ClockifyV2Actor } from "./clockify-v2-api";
 import { ClockifyCatalogError } from "./clockify-v2-catalog";
 import { getClockifyReportScope } from "./clockify-v2-permissions";
@@ -29,12 +30,20 @@ export type ClockifyEntryInput = {
 };
 
 const ROME = "Europe/Rome";
+/**
+ * Invariant: every entry mutation and every period-lock writer must run through
+ * `runClockifySerializableTransaction`. PostgreSQL holds this advisory lock for
+ * the transaction, so a lock cannot commit between an entry lock check and its
+ * write (or vice versa). It is deliberately global until Phase 4 can safely
+ * partition by normalized scope/date.
+ */
+export const CLOCKIFY_LOCK_PROTOCOL = "clockify-v2:entry-and-period-lock";
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const timePattern = /^(\d{2}):(\d{2})$/;
 const entrySelect = {
   id: true, userId: true, projectId: true, taskId: true, workDate: true, description: true,
   task: true, tags: true, billable: true, startAt: true, endAt: true, durationMin: true,
-  lockedAt: true, lockKind: true, deletedAt: true, deletedById: true, createdAt: true, updatedAt: true,
+  lockedAt: true, lockKind: true, lockPeriodId: true, deletedAt: true, deletedById: true, createdAt: true, updatedAt: true,
   user: { select: { id: true, name: true, email: true, department: true } },
   project: { select: { id: true, name: true, client: true, isActive: true, color: true } },
   clockifyTask: { select: { id: true, name: true, isActive: true } },
@@ -84,6 +93,48 @@ export function romeWallTimeToInstant(dateValue: unknown, timeValue: unknown): D
     if (local.date === desiredDate && local.time === desiredTime) return candidate;
   }
   throw new ClockifyEntryError(400, `The selected Europe/Rome time does not exist: ${desiredDate} ${desiredTime}`);
+}
+
+export function parseClockifySplitAt(input: { splitDate?: unknown; splitTime?: unknown }): Date {
+  return romeWallTimeToInstant(input.splitDate, input.splitTime);
+}
+
+export type CanonicalClockifyActor = ClockifyV2Actor & { department: string | null };
+
+/** Shared with Phase 4 period-lock writers; never compare departments as raw session text. */
+export async function canonicalizeClockifyActor(
+  actor: ClockifyV2Actor,
+  normalizer: (department: unknown) => Promise<string | null> = normalizeDepartment,
+): Promise<CanonicalClockifyActor> {
+  return { ...actor, department: await normalizer(actor.department) };
+}
+
+function isSerializationConflict(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (
+    ("code" in error && ((error as { code?: string }).code === "P2034" || (error as { code?: string }).code === "40001"))
+    || /serialization/i.test(String((error as { message?: string }).message || ""))
+  );
+}
+
+export async function acquireClockifyLockProtocol(tx: Db): Promise<void> {
+  if (typeof tx.$queryRawUnsafe === "function") {
+    await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(hashtext($1))", CLOCKIFY_LOCK_PROTOCOL);
+  }
+}
+
+/** Shared transaction protocol for entry mutations and future period-lock creation. */
+export async function runClockifySerializableTransaction<T>(db: Db, work: (tx: Db) => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await db.$transaction(async (tx: Db) => {
+        await acquireClockifyLockProtocol(tx);
+        return work(tx);
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (!isSerializationConflict(error) || attempt === 2) throw error;
+    }
+  }
+  throw new Error("Clockify serializable transaction exhausted unexpectedly");
 }
 
 export function buildClockifyEntryTiming(input: Pick<ClockifyEntryInput, "date" | "startTime" | "endAt" | "durationMin">): { startAt: Date; endAt: Date; durationMin: number; workDate: Date } {
@@ -137,9 +188,15 @@ function periodEnd(workDate: Date): Date {
   return romeWallTimeToInstant(nextDate(local.date), "00:00");
 }
 
+function lockAppliesToWorkDate(lock: { startDate: Date; endDate: Date; scopeType: string; department: string | null; targetUserId: string | null }, actor: CanonicalClockifyActor, workDate: Date): boolean {
+  if (lock.startDate.getTime() >= periodEnd(workDate).getTime() || lock.endDate.getTime() < workDate.getTime()) return false;
+  return lock.scopeType === "all" || (lock.scopeType === "department" && !!actor.department && lock.department === actor.department) || (lock.scopeType === "user" && lock.targetUserId === actor.userId);
+}
+
 /** This predicate is invoked from every write transaction, including future-date creates. */
 export async function assertClockifyEntryUnlocked(db: Db, actor: ClockifyV2Actor, workDate: Date, entry?: { lockedAt?: Date | null; lockKind?: string | null }): Promise<void> {
   if (entry?.lockedAt || entry?.lockKind) throw new ClockifyEntryError(409, "This entry is locked");
+  const canonicalActor = await canonicalizeClockifyActor(actor);
   const lock = await db.clockifyLockPeriod.findFirst({
     where: {
       unlockedAt: null,
@@ -147,8 +204,8 @@ export async function assertClockifyEntryUnlocked(db: Db, actor: ClockifyV2Actor
       endDate: { gte: workDate },
       OR: [
         { scopeType: "all" },
-        ...(actor.department ? [{ scopeType: "department", department: actor.department }] : []),
-        { scopeType: "user", targetUserId: actor.userId },
+        ...(canonicalActor.department ? [{ scopeType: "department", department: canonicalActor.department }] : []),
+        { scopeType: "user", targetUserId: canonicalActor.userId },
       ],
     },
     select: { id: true },
@@ -181,7 +238,7 @@ async function createInTransaction(db: Db, actor: ClockifyV2Actor, raw: Clockify
 }
 
 export async function createClockifyEntry(db: Db, actor: ClockifyV2Actor, input: ClockifyEntryInput): Promise<{ entry: unknown; warnings: ClockifyEntryWarning[] }> {
-  return db.$transaction((tx: Db) => createInTransaction(tx, actor, input));
+  return runClockifySerializableTransaction(db, (tx) => createInTransaction(tx, actor, input));
 }
 
 async function requireOwnEntry(db: Db, actor: ClockifyV2Actor, entryId: string): Promise<any> {
@@ -191,7 +248,7 @@ async function requireOwnEntry(db: Db, actor: ClockifyV2Actor, entryId: string):
 }
 
 export async function updateClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string, input: ClockifyEntryInput): Promise<{ entry: unknown; warnings: ClockifyEntryWarning[] }> {
-  return db.$transaction(async (tx: Db) => {
+  return runClockifySerializableTransaction(db, async (tx: Db) => {
     const current = await requireOwnEntry(tx, actor, entryId);
     const data = normalizeInput(input);
     await assertClockifyEntryUnlocked(tx, actor, current.workDate, current);
@@ -206,7 +263,7 @@ export async function updateClockifyEntry(db: Db, actor: ClockifyV2Actor, entryI
 }
 
 export async function deleteClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string): Promise<void> {
-  await db.$transaction(async (tx: Db) => {
+  await runClockifySerializableTransaction(db, async (tx: Db) => {
     const entry = await requireOwnEntry(tx, actor, entryId);
     await assertClockifyEntryUnlocked(tx, actor, entry.workDate, entry);
     await tx.clockifyEntry.update({ where: { id: entryId }, data: { deletedAt: new Date(), deletedById: actor.userId } });
@@ -215,7 +272,7 @@ export async function deleteClockifyEntry(db: Db, actor: ClockifyV2Actor, entryI
 }
 
 export async function duplicateClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string, override: Pick<ClockifyEntryInput, "date" | "startTime" | "endAt" | "durationMin">): Promise<{ entry: unknown; warnings: ClockifyEntryWarning[] }> {
-  return db.$transaction(async (tx: Db) => {
+  return runClockifySerializableTransaction(db, async (tx: Db) => {
     const source = await requireOwnEntry(tx, actor, entryId);
     await assertClockifyEntryUnlocked(tx, actor, source.workDate, source);
     const duplicated = await createInTransaction(tx, actor, { projectId: source.projectId, taskId: source.taskId, description: source.description, tags: source.tags, billable: source.billable, ...override }, "clockify.entry.duplicate");
@@ -224,15 +281,17 @@ export async function duplicateClockifyEntry(db: Db, actor: ClockifyV2Actor, ent
   });
 }
 
-export async function splitClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string, splitAtValue: unknown): Promise<{ original: unknown; second: unknown; warnings: ClockifyEntryWarning[] }> {
-  return db.$transaction(async (tx: Db) => {
+export async function splitClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string, input: { splitDate?: unknown; splitTime?: unknown }): Promise<{ original: unknown; second: unknown; warnings: ClockifyEntryWarning[] }> {
+  return runClockifySerializableTransaction(db, async (tx: Db) => {
     const source = await requireOwnEntry(tx, actor, entryId);
     await assertClockifyEntryUnlocked(tx, actor, source.workDate, source);
-    const splitAt = new Date(String(splitAtValue ?? ""));
-    if (Number.isNaN(splitAt.getTime()) || splitAt.getTime() <= source.startAt.getTime() || splitAt.getTime() >= source.endAt.getTime()) throw new ClockifyEntryError(400, "splitAt must be strictly inside the entry");
-    const firstDuration = Math.round((splitAt.getTime() - source.startAt.getTime()) / 60_000);
-    const secondDuration = Math.round((source.endAt.getTime() - splitAt.getTime()) / 60_000);
-    if (firstDuration <= 0 || secondDuration <= 0 || firstDuration + secondDuration !== source.durationMin) throw new ClockifyEntryError(400, "splitAt must fall on an exact entry minute");
+    const splitAt = parseClockifySplitAt(input);
+    const sourceDuration = (source.endAt.getTime() - source.startAt.getTime()) / 60_000;
+    if (source.startAt.getTime() % 60_000 !== 0 || source.endAt.getTime() % 60_000 !== 0 || !Number.isInteger(sourceDuration) || source.durationMin !== sourceDuration) throw new ClockifyEntryError(400, "Entry timestamps must have exact minute precision before splitting");
+    if (splitAt.getTime() <= source.startAt.getTime() || splitAt.getTime() >= source.endAt.getTime()) throw new ClockifyEntryError(400, "splitAt must be strictly inside the entry");
+    const firstDuration = (splitAt.getTime() - source.startAt.getTime()) / 60_000;
+    const secondDuration = (source.endAt.getTime() - splitAt.getTime()) / 60_000;
+    if (!Number.isInteger(firstDuration) || !Number.isInteger(secondDuration) || firstDuration <= 0 || secondDuration <= 0 || firstDuration + secondDuration !== source.durationMin) throw new ClockifyEntryError(400, "splitAt must fall on an exact entry minute");
     const original = await tx.clockifyEntry.update({ where: { id: entryId }, data: { endAt: splitAt, durationMin: firstDuration }, select: entrySelect });
     const second = await tx.clockifyEntry.create({ data: { userId: source.userId, projectId: source.projectId, taskId: source.taskId, task: source.task, description: source.description, tags: source.tags, billable: source.billable, workDate: source.workDate, startAt: splitAt, endAt: source.endAt, durationMin: secondDuration }, select: entrySelect });
     await tx.auditLog.create({ data: { actorId: actor.userId, actionType: "clockify.entry.split", entityType: "ClockifyEntry", entityId: entryId, metadata: { secondEntryId: second.id, splitAt: splitAt.toISOString(), durationMin: firstDuration } } });
@@ -262,11 +321,22 @@ export async function listClockifyEntries(db: Db, actor: ClockifyV2Actor, input:
   const from = asDatePart(input.from), to = asDatePart(input.to);
   const fromDate = romeWallTimeToInstant(from.value, "00:00"), endExclusive = romeWallTimeToInstant(nextDate(to.value), "00:00");
   if (endExclusive.getTime() <= fromDate.getTime() || endExclusive.getTime() - fromDate.getTime() > 93 * 24 * 60 * 60 * 1000) throw new ClockifyEntryError(400, "Report period must be between one and 93 days");
-  const department = actor.role === "manager" ? await normalizeDepartment(actor.department) : actor.department;
-  const scope = getClockifyReportScope({ role: actor.role, userId: actor.userId, department });
+  const canonicalActor = await canonicalizeClockifyActor(actor);
+  const scope = getClockifyReportScope(canonicalActor);
   const scopeWhere = scope.kind === "all" ? {} : scope.kind === "department" ? { user: { department: scope.department } } : { userId: scope.userId };
   const entries = await db.clockifyEntry.findMany({ where: { deletedAt: null, workDate: { gte: fromDate, lt: endExclusive }, ...scopeWhere }, orderBy: [{ workDate: "asc" }, { startAt: "asc" }], take: 5000, select: entrySelect });
-  return { entries, groups: groupClockifyEntries(entries) };
+  const periods = typeof db.clockifyLockPeriod?.findMany === "function" ? await db.clockifyLockPeriod.findMany({
+    where: {
+      unlockedAt: null, startDate: { lt: endExclusive }, endDate: { gte: fromDate },
+      OR: [{ scopeType: "all" }, ...(canonicalActor.department ? [{ scopeType: "department", department: canonicalActor.department }] : []), { scopeType: "user", targetUserId: canonicalActor.userId }],
+    },
+    select: { id: true, startDate: true, endDate: true, scopeType: true, department: true, targetUserId: true },
+  }) : [];
+  const effectiveEntries = entries.map((entry: any) => {
+    const period = periods.find((lock: any) => lockAppliesToWorkDate(lock, canonicalActor, entry.workDate));
+    return { ...entry, effectiveLocked: Boolean(entry.lockedAt || entry.lockKind || period), effectiveLockKind: entry.lockKind || (period ? "period" : null) };
+  });
+  return { entries: effectiveEntries, groups: groupClockifyEntries(effectiveEntries) };
 }
 
 export function asClockifyEntryError(error: unknown): ClockifyEntryError | ClockifyCatalogError | null {

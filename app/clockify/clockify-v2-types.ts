@@ -3,7 +3,7 @@ export type ClockifyV2Project = { id: string; name: string; client: string; clie
 export type ClockifyV2Warning = { code: string; message: string };
 export type ClockifyV2Entry = {
   id: string; userId: string; projectId: string; taskId: string | null; description: string; task: string | null; tags: string[]; billable: boolean;
-  workDate: string; startAt: string; endAt: string; durationMin: number; lockedAt: string | null; lockKind: string | null;
+  workDate: string; startAt: string; endAt: string; durationMin: number; lockedAt: string | null; lockKind: string | null; effectiveLocked: boolean; effectiveLockKind: string | null;
   user?: { id: string; name: string | null; email: string; department: string | null };
   project?: { id: string; name: string; client: string; isActive: boolean; color: string };
   clockifyTask?: ClockifyV2Task | null;
