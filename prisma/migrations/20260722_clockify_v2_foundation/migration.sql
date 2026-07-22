@@ -175,8 +175,11 @@ WHERE project."clientId" IS NULL
       ELSE lower(btrim(project."client"))
   END;
 
--- All rows present while this migration runs are legacy imported projects.
+-- Only projects without V2 ownership metadata are treated as legacy imports.
 UPDATE "ClockifyProject"
 SET "origin" = 'imported',
     "createdById" = NULL,
-    "managerId" = NULL;
+    "managerId" = NULL
+WHERE "origin" = 'manual'
+  AND "createdById" IS NULL
+  AND "managerId" IS NULL;
