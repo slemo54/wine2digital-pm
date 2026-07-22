@@ -61,7 +61,7 @@ CREATE TABLE "ClockifyReportShare" (
 ALTER TABLE "ClockifyProject"
     ADD COLUMN "clientId" TEXT,
     ADD COLUMN "color" TEXT NOT NULL DEFAULT '#6B7280',
-    ADD COLUMN "origin" TEXT NOT NULL DEFAULT 'manual',
+    ADD COLUMN "origin" TEXT,
     ADD COLUMN "createdById" TEXT,
     ADD COLUMN "managerId" TEXT,
     ADD COLUMN "archivedAt" TIMESTAMP(3),
@@ -175,11 +175,12 @@ WHERE project."clientId" IS NULL
       ELSE lower(btrim(project."client"))
   END;
 
--- Only projects without V2 ownership metadata are treated as legacy imports.
+-- Only rows created before the V2 origin column existed have a NULL origin.
 UPDATE "ClockifyProject"
 SET "origin" = 'imported',
     "createdById" = NULL,
     "managerId" = NULL
-WHERE "origin" = 'manual'
-  AND "createdById" IS NULL
-  AND "managerId" IS NULL;
+WHERE "origin" IS NULL;
+
+ALTER TABLE "ClockifyProject" ALTER COLUMN "origin" SET DEFAULT 'manual';
+ALTER TABLE "ClockifyProject" ALTER COLUMN "origin" SET NOT NULL;
