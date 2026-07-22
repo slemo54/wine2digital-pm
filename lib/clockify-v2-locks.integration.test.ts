@@ -16,14 +16,15 @@ test("PostgreSQL serializes period writes against every V2 entry mutation", { sk
   try {
     const runRace = async (date: string, mutation: (entryId: string) => Promise<unknown>): Promise<void> => {
       const source = await createClockifyEntry(db, admin, input(date));
-      const [period, result] = await Promise.allSettled([
-        createClockifyLockPeriod(db, admin, { startDate: date, endDate: date, scopeType: "all" }),
-        mutation((source.entry as { id: string }).id),
-      ]);
-      assert.equal(period.status, "fulfilled");
-      if (result.status === "rejected") assert.match(String(result.reason), /locked/i);
-      const periodId = (period.value as { id: string }).id;
-      await assert.rejects(() => updateClockifyEntry(db, admin, (source.entry as { id: string }).id, input(date, "11:00")), /locked/i);
+      const periodPromise = createClockifyLockPeriod(db, admin, { startDate: date, endDate: date, scopeType: "all" });
+      const mutationPromise = mutation((source.entry as { id: string }).id);
+      const period = await periodPromise;
+      const mutationResult = await mutationPromise.then(() => ({ ok: true as const }), (error) => ({ ok: false as const, error }));
+      if (!mutationResult.ok) assert.match(String(mutationResult.error), /locked/i);
+      // A delete can legitimately commit first. Once the observed period commit completes,
+      // a fresh applicable create must still be rejected regardless of that race outcome.
+      await assert.rejects(() => createClockifyEntry(db, admin, input(date, "14:00")), /locked/i);
+      const periodId = (period as { id: string }).id;
       await unlockClockifyLockPeriod(db, admin, periodId);
     };
     await runRace("2026-07-10", async () => createClockifyEntry(db, admin, input("2026-07-10", "11:00")));
