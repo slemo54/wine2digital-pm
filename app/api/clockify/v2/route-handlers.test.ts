@@ -33,7 +33,7 @@ test("V2 clients route handler returns stable 401 JSON without a session", async
   });
 });
 
-test("V2 clients route handler denies an authenticated, DB-active member with stable 403 JSON", async () => {
+test("V2 clients route handler denies an authenticated member excluded by rollout with stable 404 JSON", async () => {
   const handler = createClientsRouteHandlers({
     getActor: () => getClockifyV2CatalogActor({
       isEnabled: () => true,
@@ -44,6 +44,6 @@ test("V2 clients route handler denies an authenticated, DB-active member with st
     createClient: async () => { throw new Error("not called"); },
   });
   const response = await handler.GET(new Request("http://test/api/clockify/v2/clients") as any);
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), { error: "Forbidden" });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Not found" });
 });

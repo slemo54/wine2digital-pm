@@ -4,6 +4,7 @@ import { prisma } from "./prisma";
 import { getSessionUser } from "./session-user";
 import type { ClockifyGlobalRole } from "./clockify-v2-permissions";
 import { ClockifyCatalogError } from "./clockify-v2-catalog";
+import { canUseClockifyV2ForRole } from "./clockify-v2-rollout";
 
 export type ClockifyV2Actor = {
   userId: string;
@@ -79,13 +80,9 @@ export async function getClockifyV2Actor(dependencies: ClockifyV2ActorDependenci
   const user = await dependencies.findUser(sessionUser.id);
   if (!user || !user.isActive) return { actor: null, response: clockifyV2Error(401, "Unauthorized") };
 
-  return {
-    actor: {
-      userId: user.id,
-      role: normalizeClockifyRole(user.role || sessionUser.globalRole),
-      department: normalizeClockifyDepartment(user.department ?? sessionUser.department),
-    },
-  };
+  const role = normalizeClockifyRole(user.role || sessionUser.globalRole);
+  if (!canUseClockifyV2ForRole(role, true)) return { actor: null, response: clockifyV2Error(404, "Not found") };
+  return { actor: { userId: user.id, role, department: normalizeClockifyDepartment(user.department ?? sessionUser.department) } };
 }
 
 /** Catalog management is intentionally narrower than future V2 time-entry APIs. */
