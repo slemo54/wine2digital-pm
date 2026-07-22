@@ -8,6 +8,7 @@ import { PerfOverlay } from "@/components/perf-overlay";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Menu } from "lucide-react";
+import { ClockifyAnnouncement } from "@/components/clockify-announcement";
 
 function shouldShowAppShell(pathname: string): boolean {
   if (!pathname) return false;
@@ -54,6 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </div>
         <CommandPalette />
+        <ClockifyAnnouncement />
         <PerfOverlay />
         <footer className="py-2 text-center mt-auto border-t border-border/40">
           <p className="text-[10px] text-muted-foreground/40 font-mono">by Anselmo Acquah</p>
@@ -62,6 +64,5 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
 
 
