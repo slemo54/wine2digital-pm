@@ -63,14 +63,15 @@ Il reparto utente è gestito da admin in `Admin · Utenti` come **dropdown fisso
 Valori “legacy/non standard” restano salvati in DB finché un admin non li riallinea.
 
 ## Feature flag (attivazione/disattivazione)
-Clockify è controllato da una variabile ambiente:
-- `NEXT_PUBLIC_CLOCKIFY_ENABLED=true`
+Clockify è attivo per impostazione predefinita. La variabile ambiente è un kill switch opzionale:
+- `NEXT_PUBLIC_CLOCKIFY_ENABLED=false`
 
-Se non impostata o diversa da `"true"`, Clockify viene:
+Quando è impostata esattamente a `"false"`, Clockify viene:
 - **nascosto dalla sidebar**
 - la route `/clockify` **non viene mostrata** (redirect a `/dashboard`)
 
-Per riattivarlo:
-1) Impostare `NEXT_PUBLIC_CLOCKIFY_ENABLED=true` (Vercel → Environment Variables)
+Per riattivarlo è sufficiente:
+1) Rimuovere `NEXT_PUBLIC_CLOCKIFY_ENABLED` oppure impostarlo a `true` (Vercel → Environment Variables)
 2) Fare redeploy
 
+Al primo accesso dopo il rilascio, ogni utente vede un annuncio informativo una sola volta. La chiusura viene salvata nel database tramite la migration `20260722_user_announcement_reads`.
