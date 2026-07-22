@@ -33,6 +33,13 @@ function rethrowCatalogError(error: unknown): never {
   throw error;
 }
 
+export function validateClockifyTaskPatch(input: { name?: unknown; isActive?: unknown }): { name?: unknown; isActive?: boolean } {
+  if (input.isActive !== undefined && typeof input.isActive !== "boolean") {
+    throw new ClockifyCatalogError(400, "isActive must be a boolean");
+  }
+  return { name: input.name, isActive: input.isActive as boolean | undefined };
+}
+
 export async function listClockifyClients(db: Db, q = ""): Promise<unknown[]> {
   return db.clockifyClient.findMany({
     where: q ? { name: { contains: q, mode: "insensitive" } } : {},
@@ -42,19 +49,21 @@ export async function listClockifyClients(db: Db, q = ""): Promise<unknown[]> {
   });
 }
 
-export async function createClockifyClient(db: Db, actor: ClockifyV2Actor, input: { name: unknown }): Promise<unknown> {
+export async function createClockifyClient(db: Db, actor: ClockifyV2Actor, input: { name?: unknown }): Promise<unknown> {
   const name = displayClockifyName(input.name);
   const normalizedName = normalizeClockifyName(name);
   try {
     const existing = await db.clockifyClient.findUnique({ where: { normalizedName }, select: { id: true } });
     if (existing) throw new ClockifyCatalogError(409, "A client with this normalized name already exists");
-    const client = await db.clockifyClient.create({ data: { name, normalizedName, createdById: actor.userId } });
-    await audit(db, actor.userId, "clockify.client.create", "ClockifyClient", client.id, { name });
-    return client;
+    return await db.$transaction(async (tx: Db) => {
+      const client = await tx.clockifyClient.create({ data: { name, normalizedName, createdById: actor.userId } });
+      await audit(tx, actor.userId, "clockify.client.create", "ClockifyClient", client.id, { name });
+      return client;
+    });
   } catch (error) { rethrowCatalogError(error); }
 }
 
-export async function updateClockifyClient(db: Db, actor: ClockifyV2Actor, clientId: string, input: { name: unknown }): Promise<unknown> {
+export async function updateClockifyClient(db: Db, actor: ClockifyV2Actor, clientId: string, input: { name?: unknown }): Promise<unknown> {
   const name = displayClockifyName(input.name);
   const normalizedName = normalizeClockifyName(name);
   try {
@@ -95,16 +104,18 @@ async function validateManager(db: Db, managerId: string | null): Promise<void> 
   }
 }
 
-export async function createClockifyProject(db: Db, actor: ClockifyV2Actor, input: { name: unknown; clientId: unknown; color?: unknown; managerId?: unknown }): Promise<unknown> {
+export async function createClockifyProject(db: Db, actor: ClockifyV2Actor, input: { name?: unknown; clientId?: unknown; color?: unknown; managerId?: unknown }): Promise<unknown> {
   const client = await requireClient(db, String(input.clientId ?? "").trim());
   const data = createClockifyProjectInput(actor, { name: input.name, client, color: input.color, managerId: input.managerId });
   await validateManager(db, data.managerId);
   try {
     const duplicate = await db.clockifyProject.findFirst({ where: { name: data.name, client: data.client }, select: { id: true } });
     if (duplicate) throw new ClockifyCatalogError(409, "A project with this client and name already exists");
-    const project = await db.clockifyProject.create({ data, select: projectSelect });
-    await audit(db, actor.userId, "clockify.project.create", "ClockifyProject", project.id, { clientId: data.clientId, origin: data.origin });
-    return project;
+    return await db.$transaction(async (tx: Db) => {
+      const project = await tx.clockifyProject.create({ data, select: projectSelect });
+      await audit(tx, actor.userId, "clockify.project.create", "ClockifyProject", project.id, { clientId: data.clientId, origin: data.origin });
+      return project;
+    });
   } catch (error) { rethrowCatalogError(error); }
 }
 
@@ -133,9 +144,11 @@ export async function updateClockifyProject(db: Db, actor: ClockifyV2Actor, proj
   const duplicate = await db.clockifyProject.findFirst({ where: { name, client, NOT: { id: projectId } }, select: { id: true } });
   if (duplicate) throw new ClockifyCatalogError(409, "A project with this client and name already exists");
   try {
-    const updated = await db.clockifyProject.update({ where: { id: projectId }, data, select: projectSelect });
-    await audit(db, actor.userId, "clockify.project.update", "ClockifyProject", projectId, { fields: Object.keys(data) });
-    return updated;
+    return await db.$transaction(async (tx: Db) => {
+      const updated = await tx.clockifyProject.update({ where: { id: projectId }, data, select: projectSelect });
+      await audit(tx, actor.userId, "clockify.project.update", "ClockifyProject", projectId, { fields: Object.keys(data) });
+      return updated;
+    });
   } catch (error) { rethrowCatalogError(error); }
 }
 
@@ -155,9 +168,11 @@ export async function setClockifyProjectManager(db: Db, actor: ClockifyV2Actor, 
   await managedProject(db, actor, projectId);
   const nextManagerId = String(managerId ?? "").trim() || null;
   await validateManager(db, nextManagerId);
-  const project = await db.clockifyProject.update({ where: { id: projectId }, data: { managerId: nextManagerId }, select: projectSelect });
-  await audit(db, actor.userId, "clockify.project.assignment", "ClockifyProject", projectId, { managerId: nextManagerId });
-  return project;
+  return db.$transaction(async (tx: Db) => {
+    const project = await tx.clockifyProject.update({ where: { id: projectId }, data: { managerId: nextManagerId }, select: projectSelect });
+    await audit(tx, actor.userId, "clockify.project.assignment", "ClockifyProject", projectId, { managerId: nextManagerId });
+    return project;
+  });
 }
 
 export async function listClockifyTasks(db: Db, actor: ClockifyV2Actor, projectId: string): Promise<unknown[]> {
@@ -165,29 +180,34 @@ export async function listClockifyTasks(db: Db, actor: ClockifyV2Actor, projectI
   return db.clockifyTask.findMany({ where: { projectId }, orderBy: [{ isActive: "desc" }, { name: "asc" }] });
 }
 
-export async function createClockifyTask(db: Db, actor: ClockifyV2Actor, projectId: string, input: { name: unknown }): Promise<unknown> {
+export async function createClockifyTask(db: Db, actor: ClockifyV2Actor, projectId: string, input: { name?: unknown }): Promise<unknown> {
   await managedProject(db, actor, projectId);
   const name = displayClockifyName(input.name), normalizedName = normalizeClockifyName(name);
   try {
     const duplicate = await db.clockifyTask.findUnique({ where: { projectId_normalizedName: { projectId, normalizedName } }, select: { id: true } });
     if (duplicate) throw new ClockifyCatalogError(409, "A task with this normalized name already exists");
-    const task = await db.clockifyTask.create({ data: { projectId, name, normalizedName, createdById: actor.userId } });
-    await audit(db, actor.userId, "clockify.task.create", "ClockifyTask", task.id, { projectId });
-    return task;
+    return await db.$transaction(async (tx: Db) => {
+      const task = await tx.clockifyTask.create({ data: { projectId, name, normalizedName, createdById: actor.userId } });
+      await audit(tx, actor.userId, "clockify.task.create", "ClockifyTask", task.id, { projectId });
+      return task;
+    });
   } catch (error) { rethrowCatalogError(error); }
 }
 
 export async function updateClockifyTask(db: Db, actor: ClockifyV2Actor, projectId: string, taskId: string, input: { name?: unknown; isActive?: unknown }): Promise<unknown> {
   await managedProject(db, actor, projectId);
+  validateClockifyTaskPatch(input);
   const task = await db.clockifyTask.findFirst({ where: { id: taskId, projectId } });
   if (!task) throw new ClockifyCatalogError(404, "Task not found");
   const data: Record<string, unknown> = {};
   if (input.name !== undefined) { const name = displayClockifyName(input.name); data.name = name; data.normalizedName = normalizeClockifyName(name); }
-  if (input.isActive !== undefined) data.isActive = Boolean(input.isActive);
+  if (input.isActive !== undefined) data.isActive = input.isActive;
   if (!Object.keys(data).length) throw new ClockifyCatalogError(400, "No task changes supplied");
   try {
-    const updated = await db.clockifyTask.update({ where: { id: taskId }, data });
-    await audit(db, actor.userId, input.isActive === undefined ? "clockify.task.update" : "clockify.task.status", "ClockifyTask", taskId, { projectId, isActive: data.isActive });
-    return updated;
+    return await db.$transaction(async (tx: Db) => {
+      const updated = await tx.clockifyTask.update({ where: { id: taskId }, data });
+      await audit(tx, actor.userId, input.isActive === undefined ? "clockify.task.update" : "clockify.task.status", "ClockifyTask", taskId, { projectId, isActive: data.isActive });
+      return updated;
+    });
   } catch (error) { rethrowCatalogError(error); }
 }

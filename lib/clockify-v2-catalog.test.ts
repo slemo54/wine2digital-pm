@@ -74,7 +74,8 @@ test("catalog service writes project client relation and legacy client string, a
       update: async ({ data }: { data: Record<string, unknown> }) => { writes.push({ kind: "task.update", data }); return { id: "t1", ...data }; },
     },
     auditLog: { create: async ({ data }: { data: Record<string, unknown> }) => { writes.push({ kind: "audit", data }); return data; } },
-    $transaction: async (operations: Promise<unknown>[]) => Promise.all(operations),
+    $transaction: async (operations: Promise<unknown>[] | ((tx: unknown) => Promise<unknown>)) =>
+      typeof operations === "function" ? operations(db) : Promise.all(operations),
   };
   const actor = { role: "manager" as const, userId: "manager", department: null };
   await createClockifyProject(db, actor, { name: "Sito", clientId: "c1" });
@@ -84,4 +85,9 @@ test("catalog service writes project client relation and legacy client string, a
   await updateClockifyTask(db, actor, "p1", "t1", { isActive: false });
   assert.deepEqual(writes.find((write) => write.kind === "task.update")?.data, { isActive: false });
   assert.equal(writes.some((write) => write.kind === "task.delete"), false);
+});
+
+test("Clockify catalog rejects a coerced task status", async () => {
+  const { validateClockifyTaskPatch } = await import("./clockify-v2-catalog-service");
+  assert.throws(() => validateClockifyTaskPatch({ isActive: "false" }), /isActive must be a boolean/);
 });
