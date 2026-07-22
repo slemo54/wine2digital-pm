@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   ClockifyEntryError,
   canonicalizeClockifyActor,
+  findClockifyEffectivePeriodLockIds,
   parseClockifySplitAt,
   runClockifySerializableTransaction,
 } from "./clockify-v2-entries";
@@ -13,6 +14,17 @@ test("entry lock actors use the canonical department shared with period-lock wri
     async (department) => String(department).trim().toLocaleUpperCase("it-IT"),
   );
   assert.equal(actor.department, "GRAFICA");
+});
+
+test("effective period locks use one parameterized batch query for all page entries", async () => {
+  const queries: unknown[] = [];
+  const db = { $queryRaw: async (query: unknown) => { queries.push(query); return [{ id: "e1" }]; } };
+  const ids = await findClockifyEffectivePeriodLockIds(db, [
+    { id: "e1", userId: "u1", workDate: new Date("2026-07-22T22:00:00.000Z"), user: { department: " grafica " } },
+    { id: "e2", userId: "u2", workDate: new Date("2026-07-22T22:00:00.000Z"), user: { department: "GRAFICA" } },
+  ]);
+  assert.deepEqual([...ids], ["e1"]);
+  assert.equal(queries.length, 1);
 });
 
 test("entry mutations use a Serializable transaction, advisory protocol lock, and retry serialization conflicts", async () => {

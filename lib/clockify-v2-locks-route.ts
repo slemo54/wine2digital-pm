@@ -2,10 +2,11 @@ import { NextResponse } from "next/server";
 import { prisma } from "./prisma";
 import { clockifyV2Error, clockifyV2ServerError, getClockifyV2Actor, parseClockifyV2Json } from "./clockify-v2-api";
 import { asClockifyLockError, createClockifyLockPeriod, listClockifyLockPeriods, lockClockifyEntry, unlockClockifyEntry } from "./clockify-v2-locks";
+import { ClockifyCatalogError } from "./clockify-v2-catalog";
 
 function errorResponse(error: unknown): NextResponse {
   const known = asClockifyLockError(error);
-  return known ? clockifyV2Error(known.status, known.message) : clockifyV2ServerError(error);
+  return known ? clockifyV2Error(known.status, known.message) : error instanceof ClockifyCatalogError ? clockifyV2Error(error.status, error.message) : clockifyV2ServerError(error);
 }
 
 type EntryDependencies = { getActor: typeof getClockifyV2Actor; lock: typeof lockClockifyEntry; unlock: typeof unlockClockifyEntry };

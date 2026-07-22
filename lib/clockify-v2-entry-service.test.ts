@@ -27,7 +27,7 @@ test("V2 write lock queries normalize the actor department before matching a per
   let where: any;
   const db = { $transaction: async (work: any) => work(db), clockifyProject: { findUnique: async () => ({ id: "p1", isActive: true, archivedAt: null }) }, clockifyLockPeriod: { findFirst: async (value: any) => { where = value.where; return { id: "lock" }; } } };
   await assert.rejects(() => createClockifyEntry(db, { ...actor, department: " grafica " }, input), (error: unknown) => error instanceof ClockifyEntryError && error.status === 409);
-  assert.equal(where.OR[1].department, "Grafica");
+  assert.equal(where.OR[1].department.equals, "Grafica");
 });
 
 test("V2 delete finds only an own non-deleted entry and performs a soft delete plus audit", async () => {

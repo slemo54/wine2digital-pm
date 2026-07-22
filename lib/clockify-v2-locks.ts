@@ -28,9 +28,11 @@ async function normalizeInput(input: ClockifyLockPeriodInput): Promise<{ startDa
   if (scopeType !== "all" && scopeType !== "department" && scopeType !== "user") throw new ClockifyLockError(400, "scopeType must be all, department, or user");
   const targetUserId = String(input.targetUserId ?? "").trim() || null;
   const department = await normalizeDepartment(input.department);
-  if (scopeType === "all" && (department || targetUserId)) throw new ClockifyLockError(400, "all scope cannot have a department or user target");
-  if (scopeType === "department" && (!department || targetUserId)) throw new ClockifyLockError(400, "department scope requires only a valid department");
-  if (scopeType === "user" && (!targetUserId || department)) throw new ClockifyLockError(400, "user scope requires only targetUserId");
+  const suppliedDepartment = input.department !== undefined && input.department !== null && String(input.department).trim() !== "";
+  const suppliedTarget = input.targetUserId !== undefined && input.targetUserId !== null && String(input.targetUserId).trim() !== "";
+  if (scopeType === "all" && (suppliedDepartment || suppliedTarget)) throw new ClockifyLockError(400, "all scope cannot have a department or user target");
+  if (scopeType === "department" && (!department || suppliedTarget)) throw new ClockifyLockError(400, "department scope requires only a valid department");
+  if (scopeType === "user" && (!targetUserId || suppliedDepartment)) throw new ClockifyLockError(400, "user scope requires only targetUserId");
   return { startDate, endDate, scopeType, department: scopeType === "department" ? department : null, targetUserId: scopeType === "user" ? targetUserId : null };
 }
 

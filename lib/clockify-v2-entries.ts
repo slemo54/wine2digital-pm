@@ -196,6 +196,11 @@ function lockAppliesToWorkDate(lock: { startDate: Date; endDate: Date; scopeType
 /** This predicate is invoked from every write transaction, including future-date creates. */
 export async function assertClockifyEntryUnlocked(db: Db, actor: ClockifyV2Actor, workDate: Date, entry?: { lockedAt?: Date | null; lockKind?: string | null }): Promise<void> {
   if (entry?.lockedAt || entry?.lockKind) throw new ClockifyEntryError(409, "This entry is locked");
+  if (typeof db.$queryRaw === "function") {
+    const locked = await findClockifyEffectivePeriodLockIds(db, [{ id: "__clockify_lock_check__", userId: actor.userId, workDate, user: { department: actor.department } }]);
+    if (locked.has("__clockify_lock_check__")) throw new ClockifyEntryError(409, "This reporting period is locked");
+    return;
+  }
   const canonicalActor = await canonicalizeClockifyActor(actor);
   const lock = await db.clockifyLockPeriod.findFirst({
     where: {
@@ -204,7 +209,7 @@ export async function assertClockifyEntryUnlocked(db: Db, actor: ClockifyV2Actor
       endDate: { gte: workDate },
       OR: [
         { scopeType: "all" },
-        ...(canonicalActor.department ? [{ scopeType: "department", department: canonicalActor.department }] : []),
+        ...(canonicalActor.department ? [{ scopeType: "department", department: { equals: canonicalActor.department, mode: "insensitive" } }] : []),
         { scopeType: "user", targetUserId: canonicalActor.userId },
       ],
     },
@@ -335,7 +340,7 @@ function parsePageLimit(value: unknown): number {
   return limit;
 }
 
-async function effectivePeriodLock(db: Db, entry: any): Promise<boolean> {
+async function effectivePeriodLockFallback(db: Db, entry: any): Promise<boolean> {
   if (entry.lockedAt || entry.lockKind || typeof db.clockifyLockPeriod?.findFirst !== "function") return false;
   const canonical = await canonicalizeClockifyActor({ userId: entry.userId, role: "member", department: entry.user?.department || null });
   const lock = await db.clockifyLockPeriod.findFirst({
@@ -345,6 +350,39 @@ async function effectivePeriodLock(db: Db, entry: any): Promise<boolean> {
     }, select: { id: true },
   });
   return !!lock;
+}
+
+/** One parameterized EXISTS query is shared by entry mutations and page lock decoration. */
+export async function findClockifyEffectivePeriodLockIds(db: Db, entries: Array<{ id: string; userId: string; workDate: Date; user?: { department?: unknown } }>): Promise<Set<string>> {
+  const candidates = entries.filter((entry: any) => !entry.lockedAt && !entry.lockKind);
+  if (candidates.length === 0) return new Set();
+  if (typeof db.$queryRaw !== "function") {
+    const result = await Promise.all(candidates.map(async (entry) => (await effectivePeriodLockFallback(db, entry)) ? entry.id : null));
+    return new Set(result.filter((id): id is string => !!id));
+  }
+  const departmentCache = new Map<string, Promise<string | null>>();
+  const canonicalDepartments = await Promise.all(candidates.map((entry) => {
+    const raw = entry.user?.department ?? null; const key = String(raw ?? "").normalize("NFKC").trim().toLocaleLowerCase("it-IT");
+    if (!departmentCache.has(key)) departmentCache.set(key, canonicalizeClockifyActor({ userId: entry.userId, role: "member", department: raw as string | null }).then((actor) => actor.department));
+    return departmentCache.get(key)!;
+  }));
+  const values = candidates.map((entry, index) => Prisma.sql`(${entry.id}, ${entry.userId}, ${entry.workDate}, ${canonicalDepartments[index]})`);
+  const rows = await db.$queryRaw(Prisma.sql`
+    WITH page_entry(id, user_id, work_date, department) AS (VALUES ${Prisma.join(values)})
+    SELECT page_entry.id
+    FROM page_entry
+    WHERE EXISTS (
+      SELECT 1 FROM "ClockifyLockPeriod" period
+      WHERE period."unlockedAt" IS NULL
+        AND period."startDate" <= page_entry.work_date
+        AND period."endDate" >= page_entry.work_date
+        AND (period."scopeType" = 'all'
+          OR (period."scopeType" = 'user' AND period."targetUserId" = page_entry.user_id)
+          OR (period."scopeType" = 'department' AND page_entry.department IS NOT NULL
+            AND lower(btrim(period."department")) = lower(btrim(page_entry.department))))
+    )
+  `) as Array<{ id: string }>;
+  return new Set(rows.map((row) => row.id));
 }
 
 export async function listClockifyEntries(db: Db, actor: ClockifyV2Actor, input: { from?: unknown; to?: unknown; cursor?: unknown; limit?: unknown }): Promise<{ entries: unknown[]; groups: ReturnType<typeof groupClockifyEntries>; nextCursor: string | null; page: { limit: number; count: number; total: number } }> {
@@ -359,10 +397,11 @@ export async function listClockifyEntries(db: Db, actor: ClockifyV2Actor, input:
   const cursorWhere = cursor ? { OR: [{ startAt: { gt: new Date(cursor.startAt) } }, { startAt: new Date(cursor.startAt), id: { gt: cursor.id } }] } : {};
   const rows = await db.clockifyEntry.findMany({ where: { ...where, ...cursorWhere }, orderBy: [{ startAt: "asc" }, { id: "asc" }], take: limit + 1, select: entrySelect });
   const hasMore = rows.length > limit; const entries = hasMore ? rows.slice(0, limit) : rows;
-  const effectiveEntries = await Promise.all(entries.map(async (entry: any) => {
-    const period = await effectivePeriodLock(db, entry);
+  const periodLockedIds = await findClockifyEffectivePeriodLockIds(db, entries);
+  const effectiveEntries = entries.map((entry: any) => {
+    const period = periodLockedIds.has(entry.id);
     return { ...entry, effectiveLocked: Boolean(entry.lockedAt || entry.lockKind || period), effectiveLockKind: entry.lockKind || (period ? "period" : null) };
-  }));
+  });
   const pageGroups = groupClockifyEntries(effectiveEntries);
   const aggregate = typeof db.clockifyEntry.aggregate === "function" ? await db.clockifyEntry.aggregate({ where, _sum: { durationMin: true }, _count: { id: true } }) : null;
   const period = aggregate ? { totalMin: aggregate._sum.durationMin || 0, billableMin: 0 } : pageGroups.period;

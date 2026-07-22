@@ -29,6 +29,8 @@ test("lock writers reject non-admins and malformed scope/date combinations", asy
   await assert.rejects(() => createClockifyLockPeriod(db, member, { startDate: "2026-07-23", endDate: "2026-07-22", scopeType: "all" }), (error: unknown) => error instanceof ClockifyLockError && error.status === 403);
   await assert.rejects(() => createClockifyLockPeriod(db, admin, { startDate: "2026-07-23", endDate: "2026-07-22", scopeType: "all" }), (error: unknown) => error instanceof ClockifyLockError && error.status === 400);
   await assert.rejects(() => createClockifyLockPeriod(db, admin, { startDate: "2026-07-22", endDate: "2026-07-22", scopeType: "user" }), (error: unknown) => error instanceof ClockifyLockError && error.status === 400);
+  await assert.rejects(() => createClockifyLockPeriod(db, admin, { startDate: "2026-07-22", endDate: "2026-07-22", scopeType: "all", department: "not-a-department" }), (error: unknown) => error instanceof ClockifyLockError && error.status === 400);
+  await assert.rejects(() => createClockifyLockPeriod(db, admin, { startDate: "2026-07-22", endDate: "2026-07-22", scopeType: "user", targetUserId: "u2", department: "not-a-department" }), (error: unknown) => error instanceof ClockifyLockError && error.status === 400);
 });
 
 test("manual lock uses the shared transaction protocol and records distinguishable provenance", async () => {

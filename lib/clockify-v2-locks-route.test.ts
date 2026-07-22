@@ -21,3 +21,10 @@ test("lock routes map malformed data and successful manual/period actions", asyn
   assert.equal((await periods.GET(new Request("http://test"))).status, 200);
   assert.equal((await periods.POST(new Request("http://test", { method: "POST", body: "{}" }))).status, 400);
 });
+
+test("lock period route maps malformed JSON to the stable parser 400", async () => {
+  const periods = createClockifyLockPeriodsRouteHandlers({ getActor: async () => ({ actor: admin }) });
+  const response = await periods.POST(new Request("http://test", { method: "POST", body: "{" }));
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error, "Invalid JSON body");
+});
