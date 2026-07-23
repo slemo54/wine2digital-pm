@@ -23,7 +23,8 @@ import {
   Bell,
   Timer,
 } from "lucide-react";
-import { isClockifyEnabled } from "@/lib/feature-flags";
+import { isClockifyEnabled, isClockifyV2Enabled } from "@/lib/feature-flags";
+import { canUseClockifyV2ForRole } from "@/lib/clockify-v2-rollout";
 
 type NavItem = {
   href: string;
@@ -42,6 +43,7 @@ const NAV: NavItem[] = [
   ...(isClockifyEnabled()
     ? [{ href: "/clockify", label: "Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify") }]
     : []),
+  ...(isClockifyV2Enabled() ? [{ href: "/clockify/reports", label: "Report Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify/reports") }] : []),
   { href: "/notifications", label: "Notifiche", icon: Bell, isActive: (p) => p.startsWith("/notifications"), hasBadge: true },
   { href: "/files", label: "File", icon: FileText, isActive: (p) => p.startsWith("/files") },
   { href: "/profile", label: "Profilo", icon: User, isActive: (p) => p.startsWith("/profile") },
@@ -64,6 +66,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const globalRole = (session?.user as any)?.role as string | undefined;
   const isAdmin = globalRole === "admin";
   const isManager = globalRole === "manager";
+  const v2Visible = canUseClockifyV2ForRole(isAdmin ? "admin" : isManager ? "manager" : "member", isClockifyV2Enabled());
   const calendarEnabled = (session?.user as any)?.calendarEnabled !== false;
 
   // React Query per unread count - sostituisce polling manuale
@@ -84,6 +87,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     if (item.href === "/calendar") {
       return isAdmin || calendarEnabled;
     }
+    if (item.href === "/clockify/reports") return v2Visible;
     return true;
   });
 
@@ -163,6 +167,20 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 <Timer className="h-4 w-4" />
                 Gestione Straordinari
               </Link>
+              {v2Visible ? (
+                <Link
+                  href="/admin/clockify"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                    pathname.startsWith("/admin/clockify")
+                      ? "bg-accent text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                  )}
+                >
+                  <Timer className="h-4 w-4" />
+                  Catalogo Clockify
+                </Link>
+              ) : null}
               <Link
                 href="/admin/settings"
                 className={cn(
@@ -193,6 +211,20 @@ export function AppSidebar({ className }: AppSidebarProps) {
                 <Timer className="h-4 w-4" />
                 Gestione Straordinari
               </Link>
+              {v2Visible ? (
+                <Link
+                  href="/admin/clockify"
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                    pathname.startsWith("/admin/clockify")
+                      ? "bg-accent text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                  )}
+                >
+                  <Timer className="h-4 w-4" />
+                  Catalogo Clockify
+                </Link>
+              ) : null}
             </div>
           ) : null}
         </nav>
