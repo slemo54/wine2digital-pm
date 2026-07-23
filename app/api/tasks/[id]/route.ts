@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth-options";
 import { prisma } from "@/lib/prisma";
 import { buildTaskAssignedNotifications, getAddedAssigneeIds, normalizeUserIdList } from "@/lib/task-assignment-notifications";
-import { MEMBER_TASK_EDITABLE_KEYS, validateMemberTaskUpdateKeys } from "@/lib/task-update-policy";
+import {
+  MEMBER_TASK_EDITABLE_KEYS,
+  normalizeTaskDescriptionUpdate,
+  validateMemberTaskUpdateKeys,
+} from "@/lib/task-update-policy";
 
 const DEFAULT_LIST_NAME = "Generale";
 
@@ -157,6 +161,12 @@ export async function PUT(
       amountCents,
     } = body || {};
 
+    const descriptionValidation = normalizeTaskDescriptionUpdate(description);
+    if (!descriptionValidation.ok) {
+      return NextResponse.json({ error: descriptionValidation.error }, { status: 400 });
+    }
+    const normalizedDescription = descriptionValidation.value;
+
     const statusStr = typeof status === "string" ? status.trim() : null;
     if (statusStr) {
       const allowedStatuses = new Set(["todo", "in_progress", "done", "archived"]);
@@ -290,7 +300,7 @@ export async function PUT(
         ...(typeof statusStr === "string" && statusStr ? { status: statusStr } : {}),
         ...(typeof priority === "string" ? { priority } : {}),
         ...(typeof title === "string" ? { title } : {}),
-        ...(typeof description === "string" ? { description } : {}),
+        ...(normalizedDescription !== undefined ? { description: normalizedDescription } : {}),
         ...(typeof list === "string" ? { list } : {}),
         ...(resolvedListId !== undefined ? { listId: resolvedListId } : {}),
         ...(typeof storyPoints === "number" ? { storyPoints } : {}),
@@ -351,8 +361,11 @@ export async function PUT(
     if (typeof title === "string" && title !== existing.title) {
       changes.push({ type: "task.title_changed", metadata: { from: existing.title, to: title } });
     }
-    if (typeof description === "string" && description !== existing.description) {
-      changes.push({ type: "task.description_changed", metadata: { from: existing.description, to: description } });
+    if (normalizedDescription !== undefined && normalizedDescription !== existing.description) {
+      changes.push({
+        type: "task.description_changed",
+        metadata: { from: existing.description, to: normalizedDescription },
+      });
     }
     if (typeof list === "string" && list !== existing.list) {
       changes.push({ type: "task.list_changed", metadata: { from: existing.list, to: list } });

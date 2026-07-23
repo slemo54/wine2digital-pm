@@ -12,6 +12,23 @@ export type MemberTaskUpdateKeysValidation =
   | { ok: true }
   | { ok: false; invalidKeys: string[] };
 
+export type TaskDescriptionUpdateNormalization =
+  | { ok: true; value: string | null | undefined }
+  | { ok: false; error: string };
+
+export function normalizeTaskDescriptionUpdate(
+  input: unknown
+): TaskDescriptionUpdateNormalization {
+  if (input === undefined) return { ok: true, value: undefined };
+  if (input === null) return { ok: true, value: null };
+  if (typeof input !== "string") {
+    return { ok: false, error: "description must be a string or null" };
+  }
+
+  const value = input.trim();
+  return { ok: true, value: value || null };
+}
+
 export function validateMemberTaskUpdateKeys(body: unknown): MemberTaskUpdateKeysValidation {
   if (!body || typeof body !== "object") return { ok: true };
   const allowed = new Set<string>(MEMBER_TASK_EDITABLE_KEYS);
@@ -27,4 +44,3 @@ export function canMemberEditSubtaskDetails(input: {
 }): boolean {
   return input.isTaskAssignee || input.isSubtaskAssignee;
 }
-
