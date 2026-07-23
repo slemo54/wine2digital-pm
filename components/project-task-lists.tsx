@@ -720,8 +720,12 @@ export function ProjectTaskLists(props: {
     }
   };
 
-  const deleteList = async (listId: string, name: string) => {
-    if (!confirm(`Eliminare la categoria “${name}”? Le task verranno spostate in “${DEFAULT_LIST_NAME}”.`)) return;
+  const deleteList = async (listId: string, name: string, taskCount: number) => {
+    if (taskCount > 0) {
+      toast.error(`Sposta prima le ${taskCount} task presenti nella categoria.`);
+      return;
+    }
+    if (!confirm(`Eliminare definitivamente la categoria “${name}”?`)) return;
     try {
       const res = await fetch(`/api/projects/${projectId}/lists/${listId}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
@@ -1007,10 +1011,9 @@ export function ProjectTaskLists(props: {
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              deleteList(l.id, l.name);
+                              deleteList(l.id, l.name, l._count?.tasks ?? listTasks.length);
                             }}
                             title="Elimina"
-                            disabled={l.name === DEFAULT_LIST_NAME}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -1250,5 +1253,4 @@ export function ProjectTaskLists(props: {
     </div>
   );
 }
-
 

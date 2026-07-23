@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/session-user";
 import { canManageProjectMembers } from "@/lib/project-permissions";
+import { decideTaskListDeletion } from "@/lib/task-list-deletion";
 
 export const dynamic = "force-dynamic";
 
@@ -77,24 +78,20 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 
     const target = await prisma.taskList.findFirst({
       where: { id: params.listId, projectId: params.id },
-      select: { id: true, name: true },
+      select: { id: true, name: true, _count: { select: { tasks: true } } },
     });
     if (!target) return NextResponse.json({ error: "List not found" }, { status: 404 });
-    if (target.name === DEFAULT_LIST_NAME) {
-      return NextResponse.json({ error: "Cannot delete default list" }, { status: 400 });
+
+    const decision = decideTaskListDeletion({
+      name: target.name,
+      taskCount: target._count.tasks,
+    });
+    if (!decision.ok) {
+      return NextResponse.json(
+        { error: decision.error, taskCount: decision.taskCount },
+        { status: decision.status }
+      );
     }
-
-    const defaultList = await prisma.taskList.upsert({
-      where: { projectId_name: { projectId: params.id, name: DEFAULT_LIST_NAME } },
-      create: { projectId: params.id, name: DEFAULT_LIST_NAME },
-      update: {},
-      select: { id: true },
-    });
-
-    await prisma.task.updateMany({
-      where: { projectId: params.id, listId: params.listId },
-      data: { listId: defaultList.id },
-    });
 
     await prisma.taskList.delete({ where: { id: params.listId } });
 
@@ -110,5 +107,3 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
-
-

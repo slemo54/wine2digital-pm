@@ -278,6 +278,9 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const [isEditingTaskTitle, setIsEditingTaskTitle] = useState(false);
   const [taskDraftTitle, setTaskDraftTitle] = useState("");
   const [savingTaskTitle, setSavingTaskTitle] = useState(false);
+  const [isEditingTaskDescription, setIsEditingTaskDescription] = useState(false);
+  const [taskDraftDescription, setTaskDraftDescription] = useState("");
+  const [savingTaskDescription, setSavingTaskDescription] = useState(false);
   const [subtaskDetailOpen, setSubtaskDetailOpen] = useState(false);
   const [selectedSubtask, setSelectedSubtask] = useState<Subtask | null>(null);
   const [isSavingSubtaskMeta, setIsSavingSubtaskMeta] = useState(false);
@@ -486,6 +489,25 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
       setIsEditingTaskTitle(false);
     } finally {
       setSavingTaskTitle(false);
+    }
+  };
+
+  const saveTaskDescription = async () => {
+    const nextDescription = taskDraftDescription.trim();
+    if (nextDescription === String(task?.description || "")) {
+      setIsEditingTaskDescription(false);
+      return;
+    }
+
+    setSavingTaskDescription(true);
+    try {
+      await updateTaskMeta(
+        { description: nextDescription || null },
+        { successMessage: "Descrizione aggiornata" }
+      );
+      setIsEditingTaskDescription(false);
+    } finally {
+      setSavingTaskDescription(false);
     }
   };
 
@@ -1493,9 +1515,77 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                       </>
                     )}
                   </div>
-                  {task.description ? (
-                    <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{task.description}</p>
-                  ) : null}
+                  <div className="mt-3">
+                    {isEditingTaskDescription ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          aria-label="Modifica descrizione"
+                          value={taskDraftDescription}
+                          onChange={(event) => setTaskDraftDescription(event.target.value)}
+                          rows={4}
+                          disabled={
+                            !canEditTaskDetails ||
+                            updateTaskMutation.isPending ||
+                            savingTaskDescription
+                          }
+                          placeholder="Aggiungi una descrizione…"
+                        />
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => void saveTaskDescription()}
+                            disabled={
+                              !canEditTaskDetails ||
+                              updateTaskMutation.isPending ||
+                              savingTaskDescription
+                            }
+                          >
+                            Salva
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setIsEditingTaskDescription(false);
+                              setTaskDraftDescription(String(task?.description || ""));
+                            }}
+                            disabled={savingTaskDescription}
+                          >
+                            Annulla
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-1">
+                        {task.description ? (
+                          <p className="flex-1 whitespace-pre-wrap text-sm text-muted-foreground">
+                            {task.description}
+                          </p>
+                        ) : canEditTaskDetails ? (
+                          <p className="flex-1 text-sm italic text-muted-foreground">
+                            Aggiungi una descrizione…
+                          </p>
+                        ) : null}
+                        {canEditTaskDetails ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0"
+                            onClick={() => {
+                              setTaskDraftDescription(String(task?.description || ""));
+                              setIsEditingTaskDescription(true);
+                            }}
+                            aria-label="Modifica descrizione"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
