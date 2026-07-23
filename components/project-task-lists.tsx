@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, Search, Download, Upload, List, Copy } from "lucide-react";
 import { toast } from "react-hot-toast";
 import { CreateTaskGlobalDialog } from "@/components/create-task-global-dialog";
 import { TaskDetailModal } from "@/components/task-detail-modal";
@@ -328,6 +328,7 @@ export function ProjectTaskLists(props: {
   const [editingTaskTitle, setEditingTaskTitle] = useState("");
   const [savingTaskTitle, setSavingTaskTitle] = useState(false);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [duplicatingTaskId, setDuplicatingTaskId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [defaultListIdForNewTask, setDefaultListIdForNewTask] = useState<string | undefined>(undefined);
   const [isExporting, setIsExporting] = useState(false);
@@ -778,6 +779,26 @@ export function ProjectTaskLists(props: {
     }
   };
 
+  const duplicateTask = async (t: TaskDto) => {
+    if (!canManageTasks) {
+      toast.error(noPermissionHint);
+      return;
+    }
+    setDuplicatingTaskId(t.id);
+    try {
+      const res = await fetch(`/api/tasks/${encodeURIComponent(t.id)}/duplicate`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Impossibile duplicare task");
+
+      toast.success(`Task duplicata: ${data?.task?.title || `${t.title}(1)`}`);
+      await fetchAll();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossibile duplicare task");
+    } finally {
+      setDuplicatingTaskId(null);
+    }
+  };
+
   const deleteTask = async (t: TaskDto) => {
     if (!canManageTasks) {
       toast.error(noPermissionHint);
@@ -1034,6 +1055,7 @@ export function ProjectTaskLists(props: {
                               const amountEur = typeof t?.amountCents === "number" ? formatEurCents(t.amountCents) : null;
                               const isEditing = editingTaskId === t.id;
                               const isDeleting = deletingTaskId === t.id;
+                              const isDuplicating = duplicatingTaskId === t.id;
                               const disableRowOpen = isEditing;
                               return (
                                 <SortableTask key={t.id} id={t.id} disabled={!!q}>
@@ -1134,6 +1156,16 @@ export function ProjectTaskLists(props: {
                                         ) : null}
 
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <Button
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-8 w-8"
+                                            onClick={() => void duplicateTask(t)}
+                                            disabled={!canManageTasks || isDuplicating || isEditing}
+                                            title={canManageTasks ? "Duplica task" : noPermissionHint}
+                                          >
+                                            {isDuplicating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
+                                          </Button>
                                           <Button
                                             size="icon"
                                             variant="ghost"
