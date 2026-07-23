@@ -5,6 +5,7 @@ import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { JWT } from 'next-auth/jwt';
+import { exposeActiveSessionUser } from '@/lib/active-session';
 
 type GlobalRole = 'admin' | 'manager' | 'member';
 
@@ -71,6 +72,7 @@ export const authOptions: NextAuthOptions = {
           role: user.role,
           department: user.department,
           calendarEnabled: user.calendarEnabled,
+          isActive: user.isActive,
         };
       },
     }),
@@ -118,6 +120,7 @@ export const authOptions: NextAuthOptions = {
         gToken.role = ((user as any).role || 'member').toLowerCase();
         gToken.department = (user as any).department || null;
         gToken.calendarEnabled = (user as any).calendarEnabled ?? true;
+        gToken.isActive = (user as any).isActive ?? true;
       }
 
       // OAuth login: ensure role and tokens are set for new users
@@ -127,6 +130,7 @@ export const authOptions: NextAuthOptions = {
         });
         if (dbUser) {
           gToken.role = (dbUser.role || 'member').toLowerCase();
+          gToken.isActive = dbUser.isActive;
         }
 
         // Persist Google tokens for API access
@@ -140,8 +144,8 @@ export const authOptions: NextAuthOptions = {
       }
 
       // Keep role/isActive synced with DB (avoid stale sessions after admin changes)
-      // Time-gated: only sync every 5 minutes to reduce DB load
-      const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+      // Keep deactivation propagation prompt without querying on every request.
+      const SYNC_INTERVAL_MS = 60 * 1000;
       const now = Date.now();
       const shouldSync = gToken.id && (!gToken.lastDbSync || now - gToken.lastDbSync > SYNC_INTERVAL_MS);
       
@@ -174,6 +178,12 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session?.user) {
         const gToken = token as GoogleToken;
+        const activeUser = exposeActiveSessionUser(session.user, gToken.isActive);
+        if (!activeUser) {
+          session.user = undefined;
+          return session;
+        }
+        session.user = activeUser;
         (session.user as any).id = gToken.id;
         (session.user as any).role = gToken.role;
         (session.user as any).department = gToken.department;
