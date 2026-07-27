@@ -37,6 +37,8 @@ const ROME = "Europe/Rome";
  * partition by normalized scope/date.
  */
 export const CLOCKIFY_LOCK_PROTOCOL = "clockify-v2:entry-and-period-lock";
+const CLOCKIFY_TRANSACTION_MAX_WAIT_MS = 10_000;
+const CLOCKIFY_TRANSACTION_TIMEOUT_MS = 15_000;
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const timePattern = /^(\d{2}):(\d{2})$/;
 const entrySelect = {
@@ -128,18 +130,47 @@ export async function acquireClockifyLockProtocol(tx: Db): Promise<void> {
 }
 
 /** Shared transaction protocol for entry mutations and future period-lock creation. */
-export async function runClockifySerializableTransaction<T>(db: Db, work: (tx: Db) => Promise<T>): Promise<T> {
+export async function runClockifySerializableTransaction<T>(
+  db: Db,
+  work: (tx: Db) => Promise<T>,
+  options: { maxWait?: number; timeout?: number } = {},
+): Promise<T> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await db.$transaction(async (tx: Db) => {
         await acquireClockifyLockProtocol(tx);
         return work(tx);
-      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        ...options,
+      });
     } catch (error) {
       if (!isSerializationConflict(error) || attempt === 2) throw error;
     }
   }
   throw new Error("Clockify serializable transaction exhausted unexpectedly");
+}
+
+/**
+ * Department normalization may require a separate settings query. Resolve it
+ * before opening the interactive transaction so connection latency cannot
+ * consume the transaction timeout for members and managers.
+ */
+export async function runClockifyActorTransaction<T>(
+  db: Db,
+  actor: ClockifyV2Actor,
+  work: (tx: Db, actor: CanonicalClockifyActor) => Promise<T>,
+  normalizer: (department: unknown) => Promise<string | null> = normalizeDepartment,
+): Promise<T> {
+  const canonicalActor = await canonicalizeClockifyActor(actor, normalizer);
+  if (String(actor.department ?? "").trim() && !canonicalActor.department) {
+    throw new ClockifyEntryError(409, "The user's department is not configured");
+  }
+  return runClockifySerializableTransaction(
+    db,
+    (tx) => work(tx, canonicalActor),
+    { maxWait: CLOCKIFY_TRANSACTION_MAX_WAIT_MS, timeout: CLOCKIFY_TRANSACTION_TIMEOUT_MS },
+  );
 }
 
 export function buildClockifyEntryTiming(input: Pick<ClockifyEntryInput, "date" | "startTime" | "endAt" | "durationMin">): { startAt: Date; endAt: Date; durationMin: number; workDate: Date } {
@@ -199,14 +230,17 @@ function lockAppliesToWorkDate(lock: { startDate: Date; endDate: Date; scopeType
 }
 
 /** This predicate is invoked from every write transaction, including future-date creates. */
-export async function assertClockifyEntryUnlocked(db: Db, actor: ClockifyV2Actor, workDate: Date, entry?: { lockedAt?: Date | null; lockKind?: string | null }): Promise<void> {
+export async function assertClockifyEntryUnlocked(db: Db, actor: CanonicalClockifyActor, workDate: Date, entry?: { lockedAt?: Date | null; lockKind?: string | null }): Promise<void> {
   if (entry?.lockedAt || entry?.lockKind) throw new ClockifyEntryError(409, "This entry is locked");
   if (typeof db.$queryRaw === "function") {
-    const locked = await findClockifyEffectivePeriodLockIds(db, [{ id: "__clockify_lock_check__", userId: actor.userId, workDate, user: { department: actor.department } }]);
+    const locked = await findClockifyEffectivePeriodLockIds(
+      db,
+      [{ id: "__clockify_lock_check__", userId: actor.userId, workDate, user: { department: actor.department } }],
+      { departmentsCanonical: true },
+    );
     if (locked.has("__clockify_lock_check__")) throw new ClockifyEntryError(409, "This reporting period is locked");
     return;
   }
-  const canonicalActor = await canonicalizeClockifyActor(actor);
   const lock = await db.clockifyLockPeriod.findFirst({
     where: {
       unlockedAt: null,
@@ -214,8 +248,8 @@ export async function assertClockifyEntryUnlocked(db: Db, actor: ClockifyV2Actor
       endDate: { gte: workDate },
       OR: [
         { scopeType: "all" },
-        ...(canonicalActor.department ? [{ scopeType: "department", department: { equals: canonicalActor.department, mode: "insensitive" } }] : []),
-        { scopeType: "user", targetUserId: canonicalActor.userId },
+        ...(actor.department ? [{ scopeType: "department", department: { equals: actor.department, mode: "insensitive" } }] : []),
+        { scopeType: "user", targetUserId: actor.userId },
       ],
     },
     select: { id: true },
@@ -237,7 +271,7 @@ async function countOverlaps(db: Db, userId: string, startAt: Date, endAt: Date,
   return db.clockifyEntry.count({ where: { userId, deletedAt: null, ...(excludeId ? { NOT: { id: excludeId } } : {}), startAt: { lt: endAt }, endAt: { gt: startAt } } });
 }
 
-async function createInTransaction(db: Db, actor: ClockifyV2Actor, raw: ClockifyEntryInput, action = "clockify.entry.create"): Promise<{ entry: unknown; warnings: ClockifyEntryWarning[] }> {
+async function createInTransaction(db: Db, actor: CanonicalClockifyActor, raw: ClockifyEntryInput, action = "clockify.entry.create"): Promise<{ entry: unknown; warnings: ClockifyEntryWarning[] }> {
   const data = normalizeInput(raw);
   await validateReferences(db, data);
   await assertClockifyEntryUnlocked(db, actor, data.timing.workDate);
@@ -249,7 +283,7 @@ async function createInTransaction(db: Db, actor: ClockifyV2Actor, raw: Clockify
 }
 
 export async function createClockifyEntry(db: Db, actor: ClockifyV2Actor, input: ClockifyEntryInput): Promise<{ entry: unknown; warnings: ClockifyEntryWarning[] }> {
-  return runClockifySerializableTransaction(db, (tx) => createInTransaction(tx, actor, input));
+  return runClockifyActorTransaction(db, actor, (tx, canonicalActor) => createInTransaction(tx, canonicalActor, input));
 }
 
 async function requireOwnEntry(db: Db, actor: ClockifyV2Actor, entryId: string): Promise<any> {
@@ -259,43 +293,43 @@ async function requireOwnEntry(db: Db, actor: ClockifyV2Actor, entryId: string):
 }
 
 export async function updateClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string, input: ClockifyEntryInput): Promise<{ entry: unknown; warnings: ClockifyEntryWarning[] }> {
-  return runClockifySerializableTransaction(db, async (tx: Db) => {
-    const current = await requireOwnEntry(tx, actor, entryId);
+  return runClockifyActorTransaction(db, actor, async (tx: Db, canonicalActor) => {
+    const current = await requireOwnEntry(tx, canonicalActor, entryId);
     const data = normalizeInput(input);
-    await assertClockifyEntryUnlocked(tx, actor, current.workDate, current);
-    await assertClockifyEntryUnlocked(tx, actor, data.timing.workDate);
+    await assertClockifyEntryUnlocked(tx, canonicalActor, current.workDate, current);
+    await assertClockifyEntryUnlocked(tx, canonicalActor, data.timing.workDate);
     await validateReferences(tx, data);
-    const overlaps = await countOverlaps(tx, actor.userId, data.timing.startAt, data.timing.endAt, entryId);
+    const overlaps = await countOverlaps(tx, canonicalActor.userId, data.timing.startAt, data.timing.endAt, entryId);
     const task = data.taskId ? await tx.clockifyTask.findUnique({ where: { id: data.taskId }, select: { name: true } }) : null;
     const entry = await tx.clockifyEntry.update({ where: { id: entryId }, data: { projectId: data.projectId, taskId: data.taskId, task: task?.name || null, description: data.description, tags: data.tags, billable: data.billable, ...data.timing }, select: entrySelect });
-    await tx.auditLog.create({ data: { actorId: actor.userId, actionType: "clockify.entry.update", entityType: "ClockifyEntry", entityId: entryId, metadata: { durationMin: data.timing.durationMin } } });
+    await tx.auditLog.create({ data: { actorId: canonicalActor.userId, actionType: "clockify.entry.update", entityType: "ClockifyEntry", entityId: entryId, metadata: { durationMin: data.timing.durationMin } } });
     return { entry, warnings: entryWarnings({ ...data.timing, overlaps }) };
   });
 }
 
 export async function deleteClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string): Promise<void> {
-  await runClockifySerializableTransaction(db, async (tx: Db) => {
-    const entry = await requireOwnEntry(tx, actor, entryId);
-    await assertClockifyEntryUnlocked(tx, actor, entry.workDate, entry);
-    await tx.clockifyEntry.update({ where: { id: entryId }, data: { deletedAt: new Date(), deletedById: actor.userId } });
-    await tx.auditLog.create({ data: { actorId: actor.userId, actionType: "clockify.entry.delete", entityType: "ClockifyEntry", entityId: entryId, metadata: {} } });
+  await runClockifyActorTransaction(db, actor, async (tx: Db, canonicalActor) => {
+    const entry = await requireOwnEntry(tx, canonicalActor, entryId);
+    await assertClockifyEntryUnlocked(tx, canonicalActor, entry.workDate, entry);
+    await tx.clockifyEntry.update({ where: { id: entryId }, data: { deletedAt: new Date(), deletedById: canonicalActor.userId } });
+    await tx.auditLog.create({ data: { actorId: canonicalActor.userId, actionType: "clockify.entry.delete", entityType: "ClockifyEntry", entityId: entryId, metadata: {} } });
   });
 }
 
 export async function duplicateClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string, override: Pick<ClockifyEntryInput, "date" | "startTime" | "endAt" | "durationMin">): Promise<{ entry: unknown; warnings: ClockifyEntryWarning[] }> {
-  return runClockifySerializableTransaction(db, async (tx: Db) => {
-    const source = await requireOwnEntry(tx, actor, entryId);
-    await assertClockifyEntryUnlocked(tx, actor, source.workDate, source);
-    const duplicated = await createInTransaction(tx, actor, { projectId: source.projectId, taskId: source.taskId, description: source.description, tags: source.tags, billable: source.billable, ...override }, "clockify.entry.duplicate");
-    await tx.auditLog.create({ data: { actorId: actor.userId, actionType: "clockify.entry.duplicate.source", entityType: "ClockifyEntry", entityId: entryId, metadata: { duplicateId: (duplicated.entry as { id: string }).id } } });
+  return runClockifyActorTransaction(db, actor, async (tx: Db, canonicalActor) => {
+    const source = await requireOwnEntry(tx, canonicalActor, entryId);
+    await assertClockifyEntryUnlocked(tx, canonicalActor, source.workDate, source);
+    const duplicated = await createInTransaction(tx, canonicalActor, { projectId: source.projectId, taskId: source.taskId, description: source.description, tags: source.tags, billable: source.billable, ...override }, "clockify.entry.duplicate");
+    await tx.auditLog.create({ data: { actorId: canonicalActor.userId, actionType: "clockify.entry.duplicate.source", entityType: "ClockifyEntry", entityId: entryId, metadata: { duplicateId: (duplicated.entry as { id: string }).id } } });
     return duplicated;
   });
 }
 
 export async function splitClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId: string, input: { splitDate?: unknown; splitTime?: unknown }): Promise<{ original: unknown; second: unknown; warnings: ClockifyEntryWarning[] }> {
-  return runClockifySerializableTransaction(db, async (tx: Db) => {
-    const source = await requireOwnEntry(tx, actor, entryId);
-    await assertClockifyEntryUnlocked(tx, actor, source.workDate, source);
+  return runClockifyActorTransaction(db, actor, async (tx: Db, canonicalActor) => {
+    const source = await requireOwnEntry(tx, canonicalActor, entryId);
+    await assertClockifyEntryUnlocked(tx, canonicalActor, source.workDate, source);
     const splitAt = parseClockifySplitAt(input);
     const sourceDuration = (source.endAt.getTime() - source.startAt.getTime()) / 60_000;
     if (source.startAt.getTime() % 60_000 !== 0 || source.endAt.getTime() % 60_000 !== 0 || !Number.isInteger(sourceDuration) || source.durationMin !== sourceDuration) throw new ClockifyEntryError(400, "Entry timestamps must have exact minute precision before splitting");
@@ -305,8 +339,8 @@ export async function splitClockifyEntry(db: Db, actor: ClockifyV2Actor, entryId
     if (!Number.isInteger(firstDuration) || !Number.isInteger(secondDuration) || firstDuration <= 0 || secondDuration <= 0 || firstDuration + secondDuration !== source.durationMin) throw new ClockifyEntryError(400, "splitAt must fall on an exact entry minute");
     const original = await tx.clockifyEntry.update({ where: { id: entryId }, data: { endAt: splitAt, durationMin: firstDuration }, select: entrySelect });
     const second = await tx.clockifyEntry.create({ data: { userId: source.userId, projectId: source.projectId, taskId: source.taskId, task: source.task, description: source.description, tags: source.tags, billable: source.billable, workDate: source.workDate, startAt: splitAt, endAt: source.endAt, durationMin: secondDuration }, select: entrySelect });
-    await tx.auditLog.create({ data: { actorId: actor.userId, actionType: "clockify.entry.split", entityType: "ClockifyEntry", entityId: entryId, metadata: { secondEntryId: second.id, splitAt: splitAt.toISOString(), durationMin: firstDuration } } });
-    await tx.auditLog.create({ data: { actorId: actor.userId, actionType: "clockify.entry.split", entityType: "ClockifyEntry", entityId: second.id, metadata: { originalEntryId: entryId, splitAt: splitAt.toISOString(), durationMin: secondDuration } } });
+    await tx.auditLog.create({ data: { actorId: canonicalActor.userId, actionType: "clockify.entry.split", entityType: "ClockifyEntry", entityId: entryId, metadata: { secondEntryId: second.id, splitAt: splitAt.toISOString(), durationMin: firstDuration } } });
+    await tx.auditLog.create({ data: { actorId: canonicalActor.userId, actionType: "clockify.entry.split", entityType: "ClockifyEntry", entityId: second.id, metadata: { originalEntryId: entryId, splitAt: splitAt.toISOString(), durationMin: secondDuration } } });
     return { original, second, warnings: entryWarnings({ startAt: splitAt, endAt: source.endAt, durationMin: secondDuration, overlaps: 0 }) };
   });
 }
@@ -346,28 +380,41 @@ function parsePageLimit(value: unknown): number {
   return limit;
 }
 
-async function effectivePeriodLockFallback(db: Db, entry: any): Promise<boolean> {
+async function effectivePeriodLockFallback(db: Db, entry: any, canonicalDepartment?: string | null): Promise<boolean> {
   if (entry.lockedAt || entry.lockKind || typeof db.clockifyLockPeriod?.findFirst !== "function") return false;
-  const canonical = await canonicalizeClockifyActor({ userId: entry.userId, role: "member", department: entry.user?.department || null });
+  const department = canonicalDepartment === undefined
+    ? (await canonicalizeClockifyActor({ userId: entry.userId, role: "member", department: entry.user?.department || null })).department
+    : canonicalDepartment;
   const lock = await db.clockifyLockPeriod.findFirst({
     where: {
       unlockedAt: null, startDate: { lte: entry.workDate }, endDate: { gte: entry.workDate },
-      OR: [{ scopeType: "all" }, ...(canonical.department ? [{ scopeType: "department", department: { equals: canonical.department, mode: "insensitive" } }] : []), { scopeType: "user", targetUserId: entry.userId }],
+      OR: [{ scopeType: "all" }, ...(department ? [{ scopeType: "department", department: { equals: department, mode: "insensitive" } }] : []), { scopeType: "user", targetUserId: entry.userId }],
     }, select: { id: true },
   });
   return !!lock;
 }
 
 /** One parameterized EXISTS query is shared by entry mutations and page lock decoration. */
-export async function findClockifyEffectivePeriodLockIds(db: Db, entries: Array<{ id: string; userId: string; workDate: Date; user?: { department?: unknown } }>): Promise<Set<string>> {
+export async function findClockifyEffectivePeriodLockIds(
+  db: Db,
+  entries: Array<{ id: string; userId: string; workDate: Date; user?: { department?: unknown } }>,
+  options: { departmentsCanonical?: boolean } = {},
+): Promise<Set<string>> {
   const candidates = entries.filter((entry: any) => !entry.lockedAt && !entry.lockKind);
   if (candidates.length === 0) return new Set();
   if (typeof db.$queryRaw !== "function") {
-    const result = await Promise.all(candidates.map(async (entry) => (await effectivePeriodLockFallback(db, entry)) ? entry.id : null));
+    const result = await Promise.all(candidates.map(async (entry) => {
+      const canonicalDepartment = options.departmentsCanonical
+        ? (typeof entry.user?.department === "string" ? entry.user.department : null)
+        : undefined;
+      return (await effectivePeriodLockFallback(db, entry, canonicalDepartment)) ? entry.id : null;
+    }));
     return new Set(result.filter((id): id is string => !!id));
   }
   const departmentCache = new Map<string, Promise<string | null>>();
-  const canonicalDepartments = await Promise.all(candidates.map((entry) => {
+  const canonicalDepartments = options.departmentsCanonical
+    ? candidates.map((entry) => (typeof entry.user?.department === "string" ? entry.user.department : null))
+    : await Promise.all(candidates.map((entry) => {
     const raw = entry.user?.department ?? null; const key = String(raw ?? "").normalize("NFKC").trim().toLocaleLowerCase("it-IT");
     if (!departmentCache.has(key)) departmentCache.set(key, canonicalizeClockifyActor({ userId: entry.userId, role: "member", department: raw as string | null }).then((actor) => actor.department));
     return departmentCache.get(key)!;
