@@ -10,3 +10,4 @@ export type ClockifyV2Entry = {
 };
 
 export type ClockifyV2Form = { projectId: string; taskId: string; description: string; tags: string; billable: boolean; date: string; startTime: string; endAt: string; durationMin: string; mode: "end" | "duration" };
+export type ClockifyV2EditorMode = "create" | "edit" | "duplicate" | "readonly";
