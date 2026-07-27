@@ -14,6 +14,7 @@ function shouldShowAppShell(pathname: string): boolean {
   if (!pathname) return false;
   if (pathname === "/") return false;
   if (pathname.startsWith("/auth")) return false;
+  if (pathname.startsWith("/clockify/fixture")) return false;
   // keep invite join as focused page (no shell)
   if (pathname.startsWith("/invites/join")) return false;
   return true;
@@ -64,5 +65,4 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
 
