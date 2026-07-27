@@ -14,9 +14,11 @@ const actor = { userId: "u1", role: "member" as const, department: "Grafica" };
 const input = { projectId: "p1", description: "Analisi", tags: [], billable: false, date: "2026-07-22", startTime: "09:00", durationMin: 60 };
 const source = { id: "e1", userId: "u1", projectId: "p1", taskId: null, task: null, description: "Analisi", tags: ["work"], billable: true, workDate: new Date("2026-07-21T22:00:00.000Z"), startAt: new Date("2026-07-22T07:00:00.000Z"), endAt: new Date("2026-07-22T08:00:00.000Z"), durationMin: 60, lockedAt: null, lockKind: null, deletedAt: null };
 
-test("V2 create rejects inactive projects, invalid tasks, and locks on a future work date", async () => {
+test("V2 create returns conflict for archived projects and rejects invalid tasks and future locks", async () => {
   const inactive = { $transaction: async (work: any) => work(inactive), clockifyProject: { findUnique: async () => ({ id: "p1", isActive: false, archivedAt: null }) } };
-  await assert.rejects(() => createClockifyEntry(inactive, actor, input), (error: unknown) => error instanceof ClockifyEntryError && error.status === 400);
+  await assert.rejects(() => createClockifyEntry(inactive, actor, input), (error: unknown) => error instanceof ClockifyEntryError && error.status === 409);
+  const archived = { $transaction: async (work: any) => work(archived), clockifyProject: { findUnique: async () => ({ id: "p1", isActive: false, archivedAt: new Date() }) } };
+  await assert.rejects(() => createClockifyEntry(archived, actor, input), (error: unknown) => error instanceof ClockifyEntryError && error.status === 409);
   const locked = { $transaction: async (work: any) => work(locked), clockifyProject: { findUnique: async () => ({ id: "p1", isActive: true, archivedAt: null }) }, clockifyLockPeriod: { findFirst: async () => ({ id: "future-lock" }) } };
   await assert.rejects(() => createClockifyEntry(locked, actor, input), (error: unknown) => error instanceof ClockifyEntryError && error.status === 409);
   const taskMismatch = { $transaction: async (work: any) => work(taskMismatch), clockifyProject: { findUnique: async () => ({ id: "p1", isActive: true, archivedAt: null }) }, clockifyTask: { findFirst: async () => null }, clockifyLockPeriod: { findFirst: async () => null } };
@@ -78,6 +80,12 @@ test("V2 list uses a stable startAt/id cursor, bounded pages, and full-period to
   assert.ok(result.nextCursor);
   const decoded = JSON.parse(Buffer.from(result.nextCursor, "base64url").toString("utf8"));
   assert.deepEqual(decoded, { startAt: first.startAt.toISOString(), id: "e1" });
+  assert.deepEqual(calls[0].orderBy, [{ startAt: "desc" }, { id: "desc" }]);
+  await listClockifyEntries(db, actor, { from: "2026-07-22", to: "2026-07-22", cursor: result.nextCursor, limit: "1" });
+  assert.deepEqual(calls[1].where.OR, [
+    { startAt: { lt: first.startAt } },
+    { startAt: first.startAt, id: { lt: "e1" } },
+  ]);
   void second;
 });
 
@@ -89,17 +97,20 @@ test("V2 update and duplicate reject manually or period-locked own entries throu
   await assert.rejects(() => duplicateClockifyEntry(periodLocked, actor, "e1", { date: "2026-07-23", startTime: "09:00", durationMin: 60 }), (error: unknown) => error instanceof ClockifyEntryError && error.status === 409);
 });
 
-test("V2 list scopes managers to the normalized department and returns effective period locks", async () => {
+test("V2 timesheet remains personal for managers and admins and returns effective period locks", async () => {
   let entryWhere: any; let lockWhere: any;
   const db = {
     clockifyEntry: { findMany: async (value: any) => { entryWhere = value.where; return [{ ...source, user: { id: "u1", name: "User", email: "u1@test", department: "Grafica" } }]; } },
     clockifyLockPeriod: { findFirst: async (value: any) => { lockWhere = value.where; return { id: "p-lock" }; } },
   };
   const result: any = await listClockifyEntries(db, { ...actor, role: "manager", department: " grafica " }, { from: "2026-07-22", to: "2026-07-22" });
-  assert.equal(entryWhere.user.department.equals, "Grafica");
+  assert.equal(entryWhere.userId, "u1");
+  assert.equal(entryWhere.user, undefined);
   assert.equal(lockWhere.OR[1].department.equals, "Grafica");
   assert.equal(result.entries[0].effectiveLocked, true);
   assert.equal(result.entries[0].effectiveLockKind, "period");
+  await listClockifyEntries(db, { ...actor, role: "admin" }, { from: "2026-07-22", to: "2026-07-22" });
+  assert.equal(entryWhere.userId, "u1");
 });
 
 test("V2 mutation rollback leaves no soft-delete write when the audited transaction fails", async () => {

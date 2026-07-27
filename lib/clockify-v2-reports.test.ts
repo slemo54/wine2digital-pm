@@ -27,11 +27,29 @@ test("report filters validate each supported field and reject unknown/injection 
   assert.equal(parsed.filters.locked, true);
   assert.equal(parsed.filters.billable, false);
   assert.equal(parsed.groupBy, "project");
+  assert.equal(parsed.granularity, "day");
   assert.equal(parsed.rounding.increment, 15);
   assert.throws(() => normalizeClockifyReportInput({ ...base, groupBy: 'project; DROP TABLE "User"' }), ClockifyReportError);
   assert.throws(() => normalizeClockifyReportInput({ ...base, roundingIncrement: 7 }), ClockifyReportError);
   assert.throws(() => normalizeClockifyReportInput({ ...base, roundingIncrement: 5, roundingMode: "nearest;select" }), ClockifyReportError);
   assert.throws(() => normalizeClockifyReportInput({ ...base, from: "2026-02-30" }), ClockifyReportError);
+});
+
+test("summary granularity is validated, auto-selected from the interval, and persisted in shares", async () => {
+  assert.equal(normalizeClockifyReportInput({ ...base, granularity: "week" }).granularity, "week");
+  assert.equal(normalizeClockifyReportInput({ from: "2026-01-01", to: "2026-04-01" }).granularity, "week");
+  assert.equal(normalizeClockifyReportInput({ from: "2026-01-01", to: "2026-12-31" }).granularity, "month");
+  assert.throws(() => normalizeClockifyReportInput({ ...base, granularity: "quarter" }), ClockifyReportError);
+
+  let storedFilters: any;
+  const db = {
+    $transaction: async (work: any) => work({
+      clockifyReportShare: { create: async ({ data }: any) => { storedFilters = data.filters; return { id: "s1", ...data, createdAt: new Date(), revokedAt: null }; } },
+      auditLog: { create: async () => undefined },
+    }),
+  };
+  await createClockifyReportShare(db, { userId: "u1", role: "member", department: null }, { reportType: "summary", ...base, granularity: "month" });
+  assert.equal(storedFilters.granularity, "month");
 });
 
 test("report rounding supports none and every permitted increment/mode without changing source values", () => {

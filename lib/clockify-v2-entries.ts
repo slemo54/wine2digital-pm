@@ -2,7 +2,6 @@ import { normalizeDepartment } from "./departments";
 import { Prisma } from "@prisma/client";
 import type { ClockifyV2Actor } from "./clockify-v2-api";
 import { ClockifyCatalogError } from "./clockify-v2-catalog";
-import { getClockifyReportScope } from "./clockify-v2-permissions";
 
 type Db = any;
 
@@ -220,7 +219,8 @@ export async function assertClockifyEntryUnlocked(db: Db, actor: ClockifyV2Actor
 
 async function validateReferences(db: Db, data: ReturnType<typeof normalizeInput>): Promise<void> {
   const project = await db.clockifyProject.findUnique({ where: { id: data.projectId }, select: { id: true, isActive: true, archivedAt: true } });
-  if (!project || !project.isActive || project.archivedAt) throw new ClockifyEntryError(400, "Project must be active and not archived");
+  if (!project) throw new ClockifyEntryError(400, "Project does not exist");
+  if (!project.isActive || project.archivedAt) throw new ClockifyEntryError(409, "Project is archived or inactive");
   if (data.taskId) {
     const task = await db.clockifyTask.findFirst({ where: { id: data.taskId, projectId: data.projectId, isActive: true }, select: { id: true, name: true } });
     if (!task) throw new ClockifyEntryError(400, "Task must be active and belong to the selected project");
@@ -389,13 +389,12 @@ export async function listClockifyEntries(db: Db, actor: ClockifyV2Actor, input:
   const from = asDatePart(input.from), to = asDatePart(input.to);
   const fromDate = romeWallTimeToInstant(from.value, "00:00"), endExclusive = romeWallTimeToInstant(nextDate(to.value), "00:00");
   if (endExclusive.getTime() <= fromDate.getTime() || endExclusive.getTime() - fromDate.getTime() > 93 * 24 * 60 * 60 * 1000) throw new ClockifyEntryError(400, "Report period must be between one and 93 days");
-  const canonicalActor = await canonicalizeClockifyActor(actor);
-  const scope = getClockifyReportScope(canonicalActor);
-  const scopeWhere = scope.kind === "all" ? {} : scope.kind === "department" ? { user: { department: { equals: scope.department, mode: "insensitive" } } } : { userId: scope.userId };
-  const where = { deletedAt: null, workDate: { gte: fromDate, lt: endExclusive }, ...scopeWhere };
+  // `/entries` is the personal timesheet for every role. Wider department/company
+  // visibility is deliberately isolated to Report and Audit endpoints.
+  const where = { deletedAt: null, workDate: { gte: fromDate, lt: endExclusive }, userId: actor.userId };
   const cursor = parseEntryCursor(input.cursor); const limit = parsePageLimit(input.limit);
-  const cursorWhere = cursor ? { OR: [{ startAt: { gt: new Date(cursor.startAt) } }, { startAt: new Date(cursor.startAt), id: { gt: cursor.id } }] } : {};
-  const rows = await db.clockifyEntry.findMany({ where: { ...where, ...cursorWhere }, orderBy: [{ startAt: "asc" }, { id: "asc" }], take: limit + 1, select: entrySelect });
+  const cursorWhere = cursor ? { OR: [{ startAt: { lt: new Date(cursor.startAt) } }, { startAt: new Date(cursor.startAt), id: { lt: cursor.id } }] } : {};
+  const rows = await db.clockifyEntry.findMany({ where: { ...where, ...cursorWhere }, orderBy: [{ startAt: "desc" }, { id: "desc" }], take: limit + 1, select: entrySelect });
   const hasMore = rows.length > limit; const entries = hasMore ? rows.slice(0, limit) : rows;
   const periodLockedIds = await findClockifyEffectivePeriodLockIds(db, entries);
   const effectiveEntries = entries.map((entry: any) => {

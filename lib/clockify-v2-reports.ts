@@ -10,6 +10,7 @@ const dayPattern = /^\d{4}-\d{2}-\d{2}$/;
 export const CLOCKIFY_REPORT_GROUPS = ["client", "project", "description", "task", "tag", "user"] as const;
 export type ClockifyReportGroup = (typeof CLOCKIFY_REPORT_GROUPS)[number];
 export type ClockifyReportType = "summary" | "detailed" | "weekly";
+export type ClockifyReportGranularity = "day" | "week" | "month";
 export type ClockifyRoundingMode = "nearest" | "up" | "down";
 export type ClockifyRounding = { increment: 5 | 10 | 15 | 30 | null; mode: ClockifyRoundingMode | null };
 
@@ -24,7 +25,7 @@ export type ClockifyReportFilters = {
 };
 export type ClockifyDetailedCursor = { kind: "detailed"; startAt: string; id: string };
 export type ClockifyWeeklyCursor = { kind: "weekly"; name: string; email: string; id: string };
-export type ClockifyReportInput = { reportType: ClockifyReportType; filters: ClockifyReportFilters; groupBy: ClockifyReportGroup | null; rounding: ClockifyRounding; cursor: ClockifyDetailedCursor | ClockifyWeeklyCursor | null; limit: number };
+export type ClockifyReportInput = { reportType: ClockifyReportType; filters: ClockifyReportFilters; groupBy: ClockifyReportGroup | null; granularity: ClockifyReportGranularity; rounding: ClockifyRounding; cursor: ClockifyDetailedCursor | ClockifyWeeklyCursor | null; limit: number };
 
 function requiredDay(value: unknown, label: string): string {
   const result = String(value ?? "").trim();
@@ -85,6 +86,17 @@ function parseLimit(value: unknown): number {
   if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new ClockifyReportError(400, "limit must be an integer between 1 and 500");
   return limit;
 }
+function parseGranularity(value: unknown, from: string, to: string): ClockifyReportGranularity {
+  if (value !== undefined && value !== null && String(value).trim() !== "") {
+    const granularity = String(value).trim().toLowerCase();
+    if (granularity === "day" || granularity === "week" || granularity === "month") return granularity;
+    throw new ClockifyReportError(400, "granularity is invalid");
+  }
+  const start = new Date(`${from}T12:00:00Z`);
+  const end = new Date(`${to}T12:00:00Z`);
+  const inclusiveDays = Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  return inclusiveDays <= 31 ? "day" : inclusiveDays <= 120 ? "week" : "month";
+}
 
 /** Parses HTTP params and share payloads identically, so exported/shared data cannot diverge. */
 export function normalizeClockifyReportInput(input: Record<string, unknown> & { reportType?: unknown }): ClockifyReportInput {
@@ -96,7 +108,7 @@ export function normalizeClockifyReportInput(input: Record<string, unknown> & { 
   return {
     reportType,
     filters: { from, to, department: nullableText(input.department, "department"), userId: nullableText(input.userId, "userId"), client: nullableText(input.client, "client"), projectId: nullableText(input.projectId, "projectId"), taskId: nullableText(input.taskId, "taskId"), tag: nullableText(input.tag, "tag"), locked: nullableBoolean(input.locked, "locked"), description: nullableText(input.description, "description", 500), billable: nullableBoolean(input.billable, "billable") },
-    groupBy: parseGroup(input.groupBy), rounding: parseRounding(input.roundingIncrement, input.roundingMode), cursor: parseCursor(input.cursor, reportType), limit: parseLimit(input.limit),
+    groupBy: parseGroup(input.groupBy), granularity: parseGranularity(input.granularity, from, to), rounding: parseRounding(input.roundingIncrement, input.roundingMode), cursor: parseCursor(input.cursor, reportType), limit: parseLimit(input.limit),
   };
 }
 
@@ -184,7 +196,7 @@ export async function getClockifySummaryReport(db: Db, actor: ClockifyV2Actor, i
   const from = reportFrom(false), groupFrom = reportFrom(includeTags);
   const [totalRows, seriesRows, groups] = await Promise.all([
     db.$queryRaw(Prisma.sql`SELECT COUNT(DISTINCT e.id)::int AS "entryCount", COALESCE(SUM(${duration}), 0)::bigint AS "totalMin", COALESCE(SUM(CASE WHEN e."billable" THEN ${duration} ELSE 0 END), 0)::bigint AS "billableMin" ${from} WHERE ${where}`),
-    db.$queryRaw(Prisma.sql`SELECT (e."workDate" AT TIME ZONE ${ROME})::date::text AS date, COALESCE(SUM(${duration}), 0)::bigint AS "totalMin" ${from} WHERE ${where} GROUP BY 1 ORDER BY 1`),
+    db.$queryRaw(Prisma.sql`SELECT date_trunc(${input.granularity}, e."workDate" AT TIME ZONE ${ROME})::date::text AS date, COALESCE(SUM(${duration}), 0)::bigint AS "totalMin" ${from} WHERE ${where} GROUP BY 1 ORDER BY 1`),
     input.groupBy ? db.$queryRaw(Prisma.sql`
       WITH grouped AS (SELECT ${groupExpression(input.groupBy)} AS label, COALESCE(SUM(${input.groupBy === "tag" ? tagAllocationExpression(input.rounding) : duration}), 0)::numeric AS "totalMin" ${groupFrom} WHERE ${where} GROUP BY 1),
       ranked AS (SELECT label, "totalMin", row_number() OVER (ORDER BY "totalMin" DESC, label ASC) AS position FROM grouped)
@@ -193,7 +205,7 @@ export async function getClockifySummaryReport(db: Db, actor: ClockifyV2Actor, i
   ]);
   const total = totalRows[0] || {};
   const totalMin = number(total.totalMin), billableMin = number(total.billableMin);
-  return { type: "summary", totalMin, totalHours: totalMin / 60, billableMin, billableHours: billableMin / 60, entryCount: number(total.entryCount), timeSeries: seriesRows.map((row: any) => ({ date: row.date, totalMin: number(row.totalMin), totalHours: number(row.totalMin) / 60 })), bar: groups.map((row: any) => ({ label: row.label || "—", totalMin: number(row.totalMin), totalHours: number(row.totalMin) / 60 })), distribution: groups.map((row: any) => ({ label: row.label || "—", totalMin: number(row.totalMin) })) };
+  return { type: "summary", granularity: input.granularity, totalMin, totalHours: totalMin / 60, billableMin, billableHours: billableMin / 60, entryCount: number(total.entryCount), timeSeries: seriesRows.map((row: any) => ({ date: row.date, totalMin: number(row.totalMin), totalHours: number(row.totalMin) / 60 })), bar: groups.map((row: any) => ({ label: row.label || "—", totalMin: number(row.totalMin), totalHours: number(row.totalMin) / 60 })), distribution: groups.map((row: any) => ({ label: row.label || "—", totalMin: number(row.totalMin) })) };
 }
 
 export async function getClockifyDetailedReport(db: Db, actor: ClockifyV2Actor, input: ClockifyReportInput): Promise<unknown> {
@@ -282,7 +294,7 @@ export async function createClockifyReportShare(db: Db, actor: ClockifyV2Actor, 
   const report = normalizeClockifyReportInput(input);
   const token = randomBytes(32).toString("base64url"), tokenHash = hashClockifyShareToken(token);
   const created = await db.$transaction(async (tx: Db) => {
-    const share = await tx.clockifyReportShare.create({ data: { tokenHash, reportType: report.reportType, filters: report.filters, groupBy: report.groupBy, roundingIncrement: report.rounding.increment, roundingMode: report.rounding.mode, createdById: actor.userId } });
+    const share = await tx.clockifyReportShare.create({ data: { tokenHash, reportType: report.reportType, filters: { ...report.filters, granularity: report.granularity }, groupBy: report.groupBy, roundingIncrement: report.rounding.increment, roundingMode: report.rounding.mode, createdById: actor.userId } });
     await tx.auditLog.create({ data: { actorId: actor.userId, actionType: "clockify.report_share.create", entityType: "ClockifyReportShare", entityId: share.id, metadata: { reportType: report.reportType, groupBy: report.groupBy } } });
     return share;
   });

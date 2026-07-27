@@ -21,6 +21,7 @@ const projectSelect = {
   clientRecord: { select: { id: true, name: true } },
   createdBy: { select: { id: true, name: true, email: true } },
   manager: { select: { id: true, name: true, email: true } },
+  _count: { select: { tasks: true } },
 };
 
 async function audit(db: Db, actorId: string, actionType: string, entityType: string, entityId: string, metadata?: Record<string, unknown>): Promise<void> {
