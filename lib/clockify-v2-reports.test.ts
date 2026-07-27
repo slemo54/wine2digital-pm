@@ -9,6 +9,8 @@ import {
   csvCell,
   hashClockifyShareToken,
   createClockifyDetailedCsvStream,
+  getClockifySummaryReport,
+  getClockifyWeeklyReport,
   getClockifyPublicShare,
   normalizeClockifyReportInput,
   roundClockifyMinutes,
@@ -50,6 +52,7 @@ test("summary granularity is validated, auto-selected from the interval, and per
   };
   await createClockifyReportShare(db, { userId: "u1", role: "member", department: null }, { reportType: "summary", ...base, granularity: "month" });
   assert.equal(storedFilters.granularity, "month");
+  assert.deepEqual(storedFilters.scopeSnapshot, { kind: "self", userId: "u1" });
 });
 
 test("report rounding supports none and every permitted increment/mode without changing source values", () => {
@@ -99,6 +102,42 @@ test("report scope is always intersected server-side for member, manager, and ad
   assert.ok(manager.values.includes("Grafica"));
   assert.ok(manager.values.includes("other"));
   assert.equal(admin.values.includes("admin"), false);
+});
+
+test("report SQL converts stored UTC workDate values to Europe/Rome before grouping", async () => {
+  const queries: Prisma.Sql[] = [];
+  const db = { $queryRaw: async (query: Prisma.Sql) => { queries.push(query); return []; } };
+  const actor = { userId: "admin", role: "admin" as const, department: null };
+  const input = normalizeClockifyReportInput({ reportType: "summary", ...base });
+  await getClockifySummaryReport(db, actor, input);
+  await getClockifyWeeklyReport(db, actor, { ...input, reportType: "weekly" });
+  const sql = queries.flatMap((query) => query.strings).join(" ");
+  assert.match(sql, /AT TIME ZONE 'UTC'/);
+  assert.match(sql, /timezone\('Europe\/Rome'/);
+});
+
+test("legacy public shares remain capped to the creator when their current role expands", async () => {
+  const token = "b".repeat(43), tokenHash = hashClockifyShareToken(token);
+  const queries: Prisma.Sql[] = [];
+  const db = {
+    clockifyReportShare: {
+      findUnique: async () => ({
+        id: "share-legacy",
+        tokenHash,
+        reportType: "summary",
+        filters: base,
+        groupBy: null,
+        roundingIncrement: null,
+        roundingMode: null,
+        revokedAt: null,
+        createdAt: new Date("2026-07-01T00:00:00Z"),
+        createdBy: { id: "creator", role: "admin", department: null, isActive: true },
+      }),
+    },
+    $queryRaw: async (query: Prisma.Sql) => { queries.push(query); return []; },
+  };
+  await getClockifyPublicShare(db, token);
+  assert.ok(queries.some((query) => query.values.includes("creator")));
 });
 
 test("a revoked or inactive author cannot serve a public share before report data is queried", async () => {

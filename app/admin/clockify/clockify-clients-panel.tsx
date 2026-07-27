@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ClockifyClient } from "./catalog-types";
 
-export function ClockifyClientsPanel({ clients, onCreate, onRename }: { clients: ClockifyClient[]; onCreate: (name: string) => Promise<void>; onRename: (client: ClockifyClient, name: string) => Promise<void> }): JSX.Element {
+export function ClockifyClientsPanel({ clients, canRename, onCreate, onRename }: { clients: ClockifyClient[]; canRename: boolean; onCreate: (name: string) => Promise<void>; onRename: (client: ClockifyClient, name: string) => Promise<void> }): JSX.Element {
   const [query, setQuery] = useState("");
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<ClockifyClient | null>(null);
@@ -42,7 +42,7 @@ export function ClockifyClientsPanel({ clients, onCreate, onRename }: { clients:
           <form className="flex gap-2" onSubmit={(event) => void create(event)}><Input required value={name} onChange={(event) => setName(event.target.value)} placeholder="Nuovo cliente" aria-label="Nuovo cliente" /><Button type="submit"><Plus className="mr-1 h-4 w-4" />Aggiungi</Button></form>
           <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca clienti" aria-label="Cerca clienti" />
           <ul className="max-h-64 divide-y overflow-auto rounded-lg border">
-            {visible.map((client) => <li key={client.id} className="flex items-center justify-between px-3 py-2.5 text-sm"><span className="font-medium">{client.name}</span><Button variant="ghost" size="icon" aria-label={`Rinomina ${client.name}`} onClick={() => { setEditing(client); setRename(client.name); }}><Pencil className="h-4 w-4" /></Button></li>)}
+            {visible.map((client) => <li key={client.id} className="flex items-center justify-between px-3 py-2.5 text-sm"><span className="font-medium">{client.name}</span>{canRename && <Button variant="ghost" size="icon" aria-label={`Rinomina ${client.name}`} onClick={() => { setEditing(client); setRename(client.name); }}><Pencil className="h-4 w-4" /></Button>}</li>)}
             {visible.length === 0 && <li className="p-4 text-sm text-muted-foreground">Nessun cliente trovato.</li>}
           </ul>
         </CardContent>

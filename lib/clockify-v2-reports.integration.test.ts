@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
+import { buildClockifyEntryTiming } from "./clockify-v2-entries";
 import { getClockifyPublicShare, normalizeClockifyReportInput, runClockifyReport } from "./clockify-v2-reports";
 
 const url = process.env.TEST_DATABASE_URL;
@@ -19,7 +20,9 @@ test("PostgreSQL report engine: Rome filters, cursors, tag allocation, bounded g
     ]);
     adminId = admin.id; managerId = manager.id; otherId = other.id; blankId = blank.id;
     const project = await db.clockifyProject.create({ data: { name: `report-${suffix}`, client: "Acme", origin: "manual", color: "#000000" } }); projectId = project.id;
-    const day = new Date("2026-03-29T00:00:00.000Z");
+    // Use the same Rome-midnight representation produced by V2 instead of a
+    // hand-built UTC midnight that would mask timezone regressions.
+    const day = buildClockifyEntryTiming({ date: "2026-03-29", startTime: "10:00", durationMin: 1 }).workDate;
     await db.clockifyEntry.createMany({ data: [
       { userId: manager.id, projectId, workDate: day, startAt: new Date("2026-03-29T08:00:00Z"), endAt: new Date("2026-03-29T08:11:00Z"), durationMin: 11, description: "first", tags: ["a", "a", "b"] },
       { userId: other.id, projectId, workDate: day, startAt: new Date("2026-03-29T09:00:00Z"), endAt: new Date("2026-03-29T09:20:00Z"), durationMin: 20, description: "second", tags: [] },
@@ -41,9 +44,9 @@ test("PostgreSQL report engine: Rome filters, cursors, tag allocation, bounded g
     } while (weeklyCursor);
     assert.deepEqual([...weeklySeen].sort(), [manager.id, other.id, blank.id].sort());
     const token = randomBytes(32).toString("base64url");
-    await db.clockifyReportShare.create({ data: { tokenHash: createHash("sha256").update(token).digest("hex"), reportType: "summary", filters: { from: "2026-03-29", to: "2026-03-29" }, createdById: manager.id } });
+    await db.clockifyReportShare.create({ data: { tokenHash: createHash("sha256").update(token).digest("hex"), reportType: "summary", filters: { from: "2026-03-29", to: "2026-03-29", scopeSnapshot: { kind: "department", department: "Grafica" } }, createdById: manager.id } });
     const detailToken = randomBytes(32).toString("base64url");
-    await db.clockifyReportShare.create({ data: { tokenHash: createHash("sha256").update(detailToken).digest("hex"), reportType: "detailed", filters: { from: "2026-03-29", to: "2026-03-29" }, createdById: manager.id } });
+    await db.clockifyReportShare.create({ data: { tokenHash: createHash("sha256").update(detailToken).digest("hex"), reportType: "detailed", filters: { from: "2026-03-29", to: "2026-03-29", scopeSnapshot: { kind: "department", department: "Grafica" } }, createdById: manager.id } });
     const publicDetail: any = await getClockifyPublicShare(db, detailToken, { limit: 1 }); assert.ok(publicDetail.report.nextCursor);
     const before: any = await getClockifyPublicShare(db, token); assert.equal(before.report.totalMin, 32);
     await db.user.update({ where: { id: manager.id }, data: { department: "Social" } });
@@ -52,6 +55,8 @@ test("PostgreSQL report engine: Rome filters, cursors, tag allocation, bounded g
     await db.user.update({ where: { id: manager.id }, data: { department: "Grafica" } });
     await db.user.update({ where: { id: manager.id }, data: { role: "member" } });
     const after: any = await getClockifyPublicShare(db, token); assert.equal(after.report.totalMin, 11);
+    await db.user.update({ where: { id: manager.id }, data: { role: "admin" } });
+    const promoted: any = await getClockifyPublicShare(db, token); assert.equal(promoted.report.totalMin, 32);
     await db.user.update({ where: { id: manager.id }, data: { isActive: false } });
     await assert.rejects(() => getClockifyPublicShare(db, token));
     await db.user.update({ where: { id: manager.id }, data: { isActive: true } });

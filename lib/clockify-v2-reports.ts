@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import type { ClockifyV2Actor } from "./clockify-v2-api";
 import { canonicalizeClockifyActor, romeWallTimeToInstant } from "./clockify-v2-entries";
-import { getClockifyReportScope } from "./clockify-v2-permissions";
+import { getClockifyReportScope, type ClockifyReportScope } from "./clockify-v2-permissions";
 
 type Db = any;
 const ROME = "Europe/Rome";
@@ -25,7 +25,7 @@ export type ClockifyReportFilters = {
 };
 export type ClockifyDetailedCursor = { kind: "detailed"; startAt: string; id: string };
 export type ClockifyWeeklyCursor = { kind: "weekly"; name: string; email: string; id: string };
-export type ClockifyReportInput = { reportType: ClockifyReportType; filters: ClockifyReportFilters; groupBy: ClockifyReportGroup | null; granularity: ClockifyReportGranularity; rounding: ClockifyRounding; cursor: ClockifyDetailedCursor | ClockifyWeeklyCursor | null; limit: number };
+export type ClockifyReportInput = { reportType: ClockifyReportType; filters: ClockifyReportFilters; groupBy: ClockifyReportGroup | null; granularity: ClockifyReportGranularity; rounding: ClockifyRounding; cursor: ClockifyDetailedCursor | ClockifyWeeklyCursor | null; limit: number; scopeSnapshot: ClockifyReportScope | null };
 
 function requiredDay(value: unknown, label: string): string {
   const result = String(value ?? "").trim();
@@ -108,7 +108,7 @@ export function normalizeClockifyReportInput(input: Record<string, unknown> & { 
   return {
     reportType,
     filters: { from, to, department: nullableText(input.department, "department"), userId: nullableText(input.userId, "userId"), client: nullableText(input.client, "client"), projectId: nullableText(input.projectId, "projectId"), taskId: nullableText(input.taskId, "taskId"), tag: nullableText(input.tag, "tag"), locked: nullableBoolean(input.locked, "locked"), description: nullableText(input.description, "description", 500), billable: nullableBoolean(input.billable, "billable") },
-    groupBy: parseGroup(input.groupBy), granularity: parseGranularity(input.granularity, from, to), rounding: parseRounding(input.roundingIncrement, input.roundingMode), cursor: parseCursor(input.cursor, reportType), limit: parseLimit(input.limit),
+    groupBy: parseGroup(input.groupBy), granularity: parseGranularity(input.granularity, from, to), rounding: parseRounding(input.roundingIncrement, input.roundingMode), cursor: parseCursor(input.cursor, reportType), limit: parseLimit(input.limit), scopeSnapshot: null,
   };
 }
 
@@ -159,12 +159,23 @@ function activeLockExpression(): Prisma.Sql {
         OR (lock_period."scopeType" = 'department' AND u."department" IS NOT NULL AND lower(btrim(lock_period."department")) = lower(btrim(u."department"))))
   ))`;
 }
-export async function buildClockifyReportWhere(actor: ClockifyV2Actor, filters: ClockifyReportFilters, normalizer?: (department: unknown) => Promise<string | null>): Promise<Prisma.Sql> {
+
+function appendScopeCondition(conditions: Prisma.Sql[], scope: ClockifyReportScope): void {
+  if (scope.kind === "self") conditions.push(Prisma.sql`e."userId" = ${scope.userId}`);
+  if (scope.kind === "department") conditions.push(Prisma.sql`lower(btrim(u."department")) = lower(btrim(${scope.department}))`);
+}
+
+export async function buildClockifyReportWhere(
+  actor: ClockifyV2Actor,
+  filters: ClockifyReportFilters,
+  normalizer?: (department: unknown) => Promise<string | null>,
+  scopeSnapshot?: ClockifyReportScope | null,
+): Promise<Prisma.Sql> {
   const canonical = await canonicalizeClockifyActor(actor, normalizer);
   const scope = getClockifyReportScope(canonical);
   const conditions: Prisma.Sql[] = [Prisma.sql`e."deletedAt" IS NULL`, Prisma.sql`e."workDate" >= ${romeWallTimeToInstant(filters.from, "00:00")}`, Prisma.sql`e."workDate" < ${endExclusive(filters.to)}`];
-  if (scope.kind === "self") conditions.push(Prisma.sql`e."userId" = ${scope.userId}`);
-  if (scope.kind === "department") conditions.push(Prisma.sql`lower(btrim(u."department")) = lower(btrim(${scope.department}))`);
+  appendScopeCondition(conditions, scope);
+  if (scopeSnapshot) appendScopeCondition(conditions, scopeSnapshot);
   if (filters.department) conditions.push(Prisma.sql`lower(btrim(u."department")) = lower(btrim(${filters.department}))`);
   if (filters.userId) conditions.push(Prisma.sql`e."userId" = ${filters.userId}`);
   if (filters.client) conditions.push(Prisma.sql`p."client" = ${filters.client}`);
@@ -190,13 +201,31 @@ function reportFrom(includeTags = false): Prisma.Sql {
     : Prisma.sql`FROM "ClockifyEntry" e JOIN "User" u ON u.id = e."userId" JOIN "ClockifyProject" p ON p.id = e."projectId" LEFT JOIN "ClockifyTask" t ON t.id = e."taskId"`;
 }
 
+function reportRomeWorkDate(): Prisma.Sql {
+  // Prisma maps DateTime to TIMESTAMP WITHOUT TIME ZONE and serializes JS Date
+  // instants as UTC values. Re-attach UTC before converting to Rome wall time.
+  return Prisma.sql`timezone('Europe/Rome', e."workDate" AT TIME ZONE 'UTC')`;
+}
+
+function reportRomeDate(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ROME,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
 export async function getClockifySummaryReport(db: Db, actor: ClockifyV2Actor, input: ClockifyReportInput): Promise<unknown> {
-  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db)), duration = roundedExpression(input.rounding), includeTags = input.groupBy === "tag";
+  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db), input.scopeSnapshot), duration = roundedExpression(input.rounding), includeTags = input.groupBy === "tag";
   // Tag expansion belongs only to the tag distribution. Applying it to totals would count a multi-tag entry more than once.
   const from = reportFrom(false), groupFrom = reportFrom(includeTags);
   const [totalRows, seriesRows, groups] = await Promise.all([
     db.$queryRaw(Prisma.sql`SELECT COUNT(DISTINCT e.id)::int AS "entryCount", COALESCE(SUM(${duration}), 0)::bigint AS "totalMin", COALESCE(SUM(CASE WHEN e."billable" THEN ${duration} ELSE 0 END), 0)::bigint AS "billableMin" ${from} WHERE ${where}`),
-    db.$queryRaw(Prisma.sql`SELECT date_trunc(${input.granularity}, e."workDate" AT TIME ZONE ${ROME})::date::text AS date, COALESCE(SUM(${duration}), 0)::bigint AS "totalMin" ${from} WHERE ${where} GROUP BY 1 ORDER BY 1`),
+    db.$queryRaw(Prisma.sql`SELECT date_trunc(${input.granularity}, ${reportRomeWorkDate()})::date::text AS date, COALESCE(SUM(${duration}), 0)::bigint AS "totalMin" ${from} WHERE ${where} GROUP BY 1 ORDER BY 1`),
     input.groupBy ? db.$queryRaw(Prisma.sql`
       WITH grouped AS (SELECT ${groupExpression(input.groupBy)} AS label, COALESCE(SUM(${input.groupBy === "tag" ? tagAllocationExpression(input.rounding) : duration}), 0)::numeric AS "totalMin" ${groupFrom} WHERE ${where} GROUP BY 1),
       ranked AS (SELECT label, "totalMin", row_number() OVER (ORDER BY "totalMin" DESC, label ASC) AS position FROM grouped)
@@ -209,18 +238,18 @@ export async function getClockifySummaryReport(db: Db, actor: ClockifyV2Actor, i
 }
 
 export async function getClockifyDetailedReport(db: Db, actor: ClockifyV2Actor, input: ClockifyReportInput): Promise<unknown> {
-  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db)), duration = roundedExpression(input.rounding);
+  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db), input.scopeSnapshot), duration = roundedExpression(input.rounding);
   const detailedCursor = input.cursor?.kind === "detailed" ? input.cursor : null;
   const cursor = detailedCursor ? Prisma.sql`AND (e."startAt" > ${new Date(detailedCursor.startAt)} OR (e."startAt" = ${new Date(detailedCursor.startAt)} AND e.id > ${detailedCursor.id}))` : Prisma.empty;
   const rows = await db.$queryRaw(Prisma.sql`SELECT e.id, e."workDate", e."startAt", e."endAt", e."description", e."task", e."tags", e."billable", e."durationMin" AS "storedDurationMin", ${duration} AS "durationMin", ${activeLockExpression()} AS "effectiveLocked", e."userId", u."name" AS "userName", u.email AS "userEmail", u.department, e."projectId", p.name AS "projectName", p.client, e."taskId" ${reportFrom()} WHERE ${where} ${cursor} ORDER BY e."startAt" ASC, e.id ASC LIMIT ${input.limit + 1}`);
   const totals = await db.$queryRaw(Prisma.sql`SELECT COUNT(*)::int AS count, COALESCE(SUM(${duration}), 0)::bigint AS "totalMin" ${reportFrom()} WHERE ${where}`);
   const hasMore = rows.length > input.limit, page = hasMore ? rows.slice(0, input.limit) : rows;
   const last: any = page[page.length - 1];
-  return { type: "detailed", rows: page.map((row: any) => ({ ...row, durationMin: number(row.durationMin), storedDurationMin: number(row.storedDurationMin), effectiveLocked: Boolean(row.effectiveLocked) })), total: { count: number(totals[0]?.count), totalMin: number(totals[0]?.totalMin) }, nextCursor: hasMore && last ? Buffer.from(JSON.stringify({ startAt: new Date(last.startAt).toISOString(), id: last.id })).toString("base64url") : null };
+  return { type: "detailed", rows: page.map((row: any) => ({ ...row, workDate: reportRomeDate(row.workDate), durationMin: number(row.durationMin), storedDurationMin: number(row.storedDurationMin), effectiveLocked: Boolean(row.effectiveLocked) })), total: { count: number(totals[0]?.count), totalMin: number(totals[0]?.totalMin) }, nextCursor: hasMore && last ? Buffer.from(JSON.stringify({ startAt: new Date(last.startAt).toISOString(), id: last.id })).toString("base64url") : null };
 }
 
 export async function getClockifyWeeklyReport(db: Db, actor: ClockifyV2Actor, input: ClockifyReportInput): Promise<unknown> {
-  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db)), duration = roundedExpression(input.rounding);
+  const where = await buildClockifyReportWhere(actor, input.filters, reportNormalizer(db), input.scopeSnapshot), duration = roundedExpression(input.rounding);
   const weeklyCursor = input.cursor?.kind === "weekly" ? input.cursor : null;
   const cursorClause = weeklyCursor ? Prisma.sql`WHERE ("sortName" > ${weeklyCursor.name} OR ("sortName" = ${weeklyCursor.name} AND "userEmail" > ${weeklyCursor.email}) OR ("sortName" = ${weeklyCursor.name} AND "userEmail" = ${weeklyCursor.email} AND "userId" > ${weeklyCursor.id}))` : Prisma.empty;
   const rows = await db.$queryRaw(Prisma.sql`
@@ -228,7 +257,7 @@ export async function getClockifyWeeklyReport(db: Db, actor: ClockifyV2Actor, in
     people AS (SELECT DISTINCT "userId", "userName", "userEmail", COALESCE(NULLIF(btrim("userName"), ''), "userEmail") AS "sortName" FROM filtered),
     page_people AS (SELECT * FROM people ${cursorClause} ORDER BY "sortName", "userEmail", "userId" LIMIT ${input.limit + 1}),
     days AS (SELECT generate_series(${input.filters.from}::date, ${input.filters.to}::date, interval '1 day')::date AS day),
-    person_day_totals AS (SELECT e."userId", (e."workDate" AT TIME ZONE ${ROME})::date AS day, SUM(${duration})::numeric AS "totalMin" FROM filtered e GROUP BY 1, 2),
+    person_day_totals AS (SELECT e."userId", ${reportRomeWorkDate()}::date AS day, SUM(${duration})::numeric AS "totalMin" FROM filtered e GROUP BY 1, 2),
     all_day_totals AS (SELECT day, SUM("totalMin")::numeric AS "totalMin" FROM person_day_totals GROUP BY day)
     SELECT page_people."userId", page_people."userName", page_people."userEmail", page_people."sortName", days.day::text AS date, COALESCE(person_day_totals."totalMin", 0)::numeric AS "totalMin", COALESCE(all_day_totals."totalMin", 0)::numeric AS "globalDayTotal"
     FROM page_people CROSS JOIN days LEFT JOIN person_day_totals ON person_day_totals."userId" = page_people."userId" AND person_day_totals.day = days.day LEFT JOIN all_day_totals ON all_day_totals.day = days.day
@@ -289,12 +318,31 @@ export function exportClockifyReportCsv(db: Db, actor: ClockifyV2Actor, input: C
 export function hashClockifyShareToken(token: string): string { return createHash("sha256").update(token).digest("hex"); }
 export function validateClockifyShareToken(token: unknown): string { const value = String(token ?? ""); if (!/^[A-Za-z0-9_-]{43}$/.test(value)) throw new ClockifyReportError(404, "Share not found"); return value; }
 function hashesEqual(left: string, right: string): boolean { const a = Buffer.from(left, "hex"), b = Buffer.from(right, "hex"); return a.length === b.length && timingSafeEqual(a, b); }
+function storedShareScope(value: unknown, creatorId: string): ClockifyReportScope {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const candidate = value as Record<string, unknown>;
+    if (candidate.kind === "all") return { kind: "all" };
+    if (candidate.kind === "department") {
+      const department = String(candidate.department ?? "").normalize("NFKC").trim();
+      if (department) return { kind: "department", department };
+    }
+    if (candidate.kind === "self" && String(candidate.userId ?? "") === creatorId) {
+      return { kind: "self", userId: creatorId };
+    }
+  }
+  // Legacy shares predate scope snapshots. The only safe non-expanding cap is
+  // the creator's own entries; an old token must never gain data after a role
+  // promotion.
+  return { kind: "self", userId: creatorId };
+}
 
 export async function createClockifyReportShare(db: Db, actor: ClockifyV2Actor, input: Record<string, unknown>): Promise<{ id: string; token: string; reportType: ClockifyReportType; createdAt: Date }> {
   const report = normalizeClockifyReportInput(input);
+  const canonicalActor = await canonicalizeClockifyActor(actor, reportNormalizer(db));
+  const scopeSnapshot = getClockifyReportScope(canonicalActor);
   const token = randomBytes(32).toString("base64url"), tokenHash = hashClockifyShareToken(token);
   const created = await db.$transaction(async (tx: Db) => {
-    const share = await tx.clockifyReportShare.create({ data: { tokenHash, reportType: report.reportType, filters: { ...report.filters, granularity: report.granularity }, groupBy: report.groupBy, roundingIncrement: report.rounding.increment, roundingMode: report.rounding.mode, createdById: actor.userId } });
+    const share = await tx.clockifyReportShare.create({ data: { tokenHash, reportType: report.reportType, filters: { ...report.filters, granularity: report.granularity, scopeSnapshot }, groupBy: report.groupBy, roundingIncrement: report.rounding.increment, roundingMode: report.rounding.mode, createdById: actor.userId } });
     await tx.auditLog.create({ data: { actorId: actor.userId, actionType: "clockify.report_share.create", entityType: "ClockifyReportShare", entityId: share.id, metadata: { reportType: report.reportType, groupBy: report.groupBy } } });
     return share;
   });
@@ -310,6 +358,10 @@ export async function getClockifyPublicShare(db: Db, rawToken: unknown, paging: 
   if (!share || share.revokedAt || !share.createdBy?.isActive || !hashesEqual(tokenHash, share.tokenHash)) throw new ClockifyReportError(404, "Share not found");
   const actor: ClockifyV2Actor = { userId: share.createdBy.id, role: share.createdBy.role === "admin" || share.createdBy.role === "manager" ? share.createdBy.role : "member", department: share.createdBy.department };
   // Only opaque page controls are accepted from the public request; filters/type remain share-owned.
-  const input = normalizeClockifyReportInput({ reportType: share.reportType, ...(share.filters as Record<string, unknown>), groupBy: share.groupBy, roundingIncrement: share.roundingIncrement, roundingMode: share.roundingMode, cursor: paging.cursor, limit: paging.limit });
+  const storedFilters = share.filters as Record<string, unknown>;
+  const input = {
+    ...normalizeClockifyReportInput({ reportType: share.reportType, ...storedFilters, groupBy: share.groupBy, roundingIncrement: share.roundingIncrement, roundingMode: share.roundingMode, cursor: paging.cursor, limit: paging.limit }),
+    scopeSnapshot: storedShareScope(storedFilters.scopeSnapshot, share.createdBy.id),
+  };
   return { share: { id: share.id, reportType: share.reportType, groupBy: share.groupBy, createdAt: share.createdAt }, report: await runClockifyReport(db, actor, input) };
 }

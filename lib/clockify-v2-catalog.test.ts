@@ -9,7 +9,7 @@ import {
   projectRestorePatch,
   taskStatusPatch,
 } from "./clockify-v2-catalog";
-import { createClockifyProject, setClockifyProjectArchive, updateClockifyTask } from "./clockify-v2-catalog-service";
+import { createClockifyProject, setClockifyProjectArchive, updateClockifyClient, updateClockifyTask } from "./clockify-v2-catalog-service";
 
 test("Clockify catalog authorization denies members and reserves imported unowned projects for admins", () => {
   const imported = { id: "project", createdById: null, managerId: null, origin: "imported" };
@@ -90,4 +90,21 @@ test("catalog service writes project client relation and legacy client string, a
 test("Clockify catalog rejects a coerced task status", async () => {
   const { validateClockifyTaskPatch } = await import("./clockify-v2-catalog-service");
   assert.throws(() => validateClockifyTaskPatch({ isActive: "false" }), /isActive must be a boolean/);
+});
+
+test("manager cannot rename a global client shared by projects outside their scope", async () => {
+  const db = {
+    clockifyClient: {
+      findUnique: async () => ({ id: "client" }),
+      findFirst: async () => null,
+      update: async () => ({ id: "client", name: "Nuovo nome" }),
+    },
+    clockifyProject: { updateMany: async () => ({ count: 3 }) },
+    auditLog: { create: async () => ({}) },
+    $transaction: async (operations: Promise<unknown>[]) => Promise.all(operations),
+  };
+  await assert.rejects(
+    () => updateClockifyClient(db, { userId: "manager", role: "manager", department: "Grafica" }, "client", { name: "Nuovo nome" }),
+    (error: any) => error?.status === 403,
+  );
 });

@@ -63,7 +63,7 @@ export function ClockifyAuditPanel({ appliedParams = defaultPeriod() }: { applie
             <TableBody>
               {(data.entries || []).map((entry: any) => (
                 <TableRow key={entry.id}>
-                  <TableCell className="py-4 capitalize">{formatClockifyDay(String(entry.workDate).slice(0, 10), "short")}</TableCell>
+                  <TableCell className="py-4 capitalize">{formatClockifyDay(clockifyRomeDate(entry.workDate), "short")}</TableCell>
                   <TableCell className="py-4"><p className="font-medium">{entry.user?.name || entry.user?.email}</p><p className="text-xs text-muted-foreground">{entry.user?.department || "—"}</p></TableCell>
                   <TableCell className="py-4">{entry.project ? <><p className="font-medium">{entry.project.name}</p><p className="text-xs text-muted-foreground">{entry.project.client || "Senza cliente"}</p></> : "—"}</TableCell>
                   <TableCell className="py-4 text-right font-semibold tabular-nums">{formatClockifyDuration(entry.durationMin)}</TableCell>

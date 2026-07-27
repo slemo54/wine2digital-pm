@@ -4,6 +4,22 @@ export class ClockifyRequestError extends Error {
   }
 }
 
+export type ClockifyRequestGate = {
+  begin: () => number;
+  isCurrent: (requestId: number) => boolean;
+};
+
+export function createClockifyRequestGate(): ClockifyRequestGate {
+  let latestRequestId = 0;
+  return {
+    begin: () => {
+      latestRequestId += 1;
+      return latestRequestId;
+    },
+    isCurrent: (requestId) => requestId === latestRequestId,
+  };
+}
+
 export async function clockifyRequest<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     cache: "no-store",

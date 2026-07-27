@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { BarChart3, CalendarRange, Clock3, List, ShieldCheck } from "lucide-react";
 import { useSession } from "next-auth/react";
@@ -15,7 +15,7 @@ import { ClockifyV2EntryEditor } from "./clockify-v2-entry-editor";
 import { ClockifyV2EntryForm } from "./clockify-v2-entry-form";
 import { ClockifyV2EntryList } from "./clockify-v2-entry-list";
 import { clockifyRomeDate, clockifyRomeTime } from "./clockify-v2-format";
-import { clockifyRequest } from "./clockify-v2-request";
+import { clockifyRequest, createClockifyRequestGate } from "./clockify-v2-request";
 import type { ClockifyV2EditorMode, ClockifyV2Entry, ClockifyV2Form, ClockifyV2Project, ClockifyV2Warning } from "./clockify-v2-types";
 
 type Day = { date: string; entries: ClockifyV2Entry[]; totalMin: number; billableMin: number };
@@ -84,14 +84,17 @@ export default function ClockifyV2ClientPage(): JSX.Element {
   const [splitEntry, setSplitEntry] = useState<ClockifyV2Entry | null>(null);
   const [splitDate, setSplitDate] = useState("");
   const [splitTime, setSplitTime] = useState("");
+  const loadGate = useRef(createClockifyRequestGate());
   const range = useMemo(() => getClockifyCalendarRange(calendarView, calendarAnchor), [calendarAnchor, calendarView]);
 
   const load = useCallback(async (cursor?: string) => {
+    const requestId = loadGate.current.begin();
     try {
       const [catalog, report] = await Promise.all([
         cursor ? Promise.resolve(null) : clockifyRequest<{ projects: ClockifyV2Project[] }>("/api/clockify/v2/entries/catalog"),
         clockifyRequest<EntriesResponse>(`/api/clockify/v2/entries?from=${range.from}&to=${range.to}&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
       ]);
+      if (!loadGate.current.isCurrent(requestId)) return;
       if (catalog) setProjects(catalog.projects);
       setEntries((current) => cursor ? mergeEntries(current, report.entries) : report.entries);
       setDays((current) => cursor ? mergeDays(current, report.groups.days) : report.groups.days);
@@ -99,6 +102,7 @@ export default function ClockifyV2ClientPage(): JSX.Element {
       setPeriodTotal(report.groups.period);
       setNextCursor(report.nextCursor);
     } catch (error) {
+      if (!loadGate.current.isCurrent(requestId)) return;
       toast.error(error instanceof Error ? error.message : "Errore di caricamento");
     }
   }, [range.from, range.to]);

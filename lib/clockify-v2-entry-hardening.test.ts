@@ -36,7 +36,15 @@ test("entry mutations use a Serializable transaction, advisory protocol lock, an
       if (attempts === 1) { const error: any = new Error("serialization failure"); error.code = "P2034"; throw error; }
       return work(db);
     },
-    $queryRawUnsafe: async (...args: any[]) => { locks.push(args); },
+    $queryRawUnsafe: async (...args: any[]) => {
+      locks.push(args);
+      if (!String(args[0]).includes("::text")) {
+        const error: any = new Error("Failed to deserialize column of type 'void'");
+        error.code = "P2010";
+        throw error;
+      }
+      return [{ lockResult: "" }];
+    },
   };
   const value = await runClockifySerializableTransaction(db, async () => "done");
   assert.equal(value, "done");

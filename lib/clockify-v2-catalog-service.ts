@@ -65,6 +65,9 @@ export async function createClockifyClient(db: Db, actor: ClockifyV2Actor, input
 }
 
 export async function updateClockifyClient(db: Db, actor: ClockifyV2Actor, clientId: string, input: { name?: unknown }): Promise<unknown> {
+  if (actor.role !== "admin") {
+    throw new ClockifyCatalogError(403, "Only admins can rename a shared client");
+  }
   const name = displayClockifyName(input.name);
   const normalizedName = normalizeClockifyName(name);
   try {

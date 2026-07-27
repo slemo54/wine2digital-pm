@@ -117,7 +117,13 @@ function isSerializationConflict(error: unknown): boolean {
 
 export async function acquireClockifyLockProtocol(tx: Db): Promise<void> {
   if (typeof tx.$queryRawUnsafe === "function") {
-    await tx.$queryRawUnsafe("SELECT pg_advisory_xact_lock(hashtext($1))", CLOCKIFY_LOCK_PROTOCOL);
+    // Prisma cannot deserialize PostgreSQL's `void` pseudo-type. Casting the
+    // transaction-scoped advisory lock result keeps the lock semantics while
+    // returning a supported scalar.
+    await tx.$queryRawUnsafe(
+      'SELECT pg_advisory_xact_lock(hashtext($1))::text AS "lockResult"',
+      CLOCKIFY_LOCK_PROTOCOL,
+    );
   }
 }
 
