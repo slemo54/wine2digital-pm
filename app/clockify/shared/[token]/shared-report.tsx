@@ -1,12 +1,38 @@
 "use client";
 
 import { useState } from "react";
-import { Printer } from "lucide-react";
+import { Printer, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { clockifyRequest } from "../../clockify-v2-request";
+import { ClockifyReportView } from "../../reports/clockify-report-view";
 
 export default function SharedClockifyReport({ token, report: initialReport }: { token: string; report: any }): JSX.Element {
-  const [report, setReport] = useState(initialReport); const [loading, setLoading] = useState(false);
-  async function loadMore(): Promise<void> { if (!report.nextCursor) return; setLoading(true); try { const response = await fetch(`/api/clockify/v2/shared/${encodeURIComponent(token)}?cursor=${encodeURIComponent(report.nextCursor)}&limit=100`, { cache: "no-store" }); const data = await response.json(); if (!response.ok) return; const next = data.report; setReport((current: any) => ({ ...next, rows: current.type === "detailed" ? [...current.rows, ...next.rows] : current.rows, people: current.type === "weekly" ? [...current.people, ...next.people] : current.people })); } finally { setLoading(false); } }
-  const minutes = (value: number) => `${Math.floor(value / 60)}h ${String(value % 60).padStart(2, "0")}m`;
-  return <main className="min-h-screen bg-secondary"><article className="report-page mx-auto max-w-5xl space-y-5 px-4 py-8"><div className="flex items-center justify-between"><div><h1 className="text-2xl font-bold">Report Clockify condiviso</h1><p className="text-sm text-muted-foreground">Sola lettura · dati aggiornati al momento della visualizzazione.</p></div><Button className="report-no-print" variant="outline" onClick={() => window.print()}><Printer className="mr-1 h-4 w-4" />Stampa</Button></div>{report.type === "summary" && <><p className="text-3xl font-semibold">{minutes(report.totalMin || 0)}</p><table className="w-full text-left text-sm"><thead><tr><th>Gruppo</th><th>Minuti</th></tr></thead><tbody>{(report.bar || report.timeSeries || []).map((row: any) => <tr className="border-b" key={row.label || row.date}><td>{row.label || row.date}</td><td>{row.totalMin}</td></tr>)}</tbody></table></>}{report.type === "detailed" && <table className="w-full text-left text-sm"><thead><tr><th>Data</th><th>Utente</th><th>Progetto</th><th>Descrizione</th><th>Minuti</th></tr></thead><tbody>{(report.rows || []).map((row: any) => <tr className="border-b" key={row.id}><td>{String(row.workDate).slice(0, 10)}</td><td>{row.userName || row.userEmail}</td><td>{row.projectName}</td><td>{row.description}</td><td>{row.durationMin}</td></tr>)}</tbody></table>}{report.type === "weekly" && <table className="w-full text-right text-sm"><thead><tr><th className="text-left">Persona</th>{report.days.map((day: string) => <th key={day}>{day.slice(5)}</th>)}<th>Totale</th></tr></thead><tbody>{report.people.map((person: any) => <tr className="border-b" key={person.userId}><td className="text-left">{person.name}</td>{person.days.map((day: any) => <td key={day.date}>{day.totalMin}</td>)}<td>{person.totalMin}</td></tr>)}</tbody></table>}{report.nextCursor && <Button className="report-no-print" variant="outline" disabled={loading} onClick={() => void loadMore()}>{loading ? "Caricamento…" : "Carica altro"}</Button>}</article></main>;
+  const [report, setReport] = useState(initialReport);
+  const [loading, setLoading] = useState(false);
+  async function loadMore(): Promise<void> {
+    if (!report.nextCursor) return;
+    setLoading(true);
+    try {
+      const data = await clockifyRequest<any>(`/api/clockify/v2/shared/${encodeURIComponent(token)}?cursor=${encodeURIComponent(report.nextCursor)}&limit=100`);
+      const next = data.report;
+      setReport((current: any) => ({
+        ...next,
+        rows: current.type === "detailed" ? [...current.rows, ...next.rows] : current.rows,
+        people: current.type === "weekly" ? [...current.people, ...next.people] : current.people,
+      }));
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <main className="min-h-screen bg-secondary/40">
+      <article className="report-page mx-auto max-w-[1400px] space-y-5 px-4 py-8">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div><div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary"><ShieldCheck className="h-4 w-4" />Sola lettura</div><h1 className="text-2xl font-bold sm:text-3xl">Report Clockify condiviso</h1><p className="mt-1 text-sm text-muted-foreground">Dati live aggiornati al momento della visualizzazione.</p></div>
+          <Button className="report-no-print" variant="outline" onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" />Stampa</Button>
+        </header>
+        <ClockifyReportView report={report} loading={loading} onLoadMore={loadMore} />
+      </article>
+    </main>
+  );
 }
