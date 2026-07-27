@@ -127,7 +127,7 @@ function SortableTask({ id, children, disabled }: { id: string; children: React.
         <div
           {...attributes}
           {...listeners}
-          className="mt-4 cursor-grab active:cursor-grabbing text-muted-foreground/20 hover:text-muted-foreground opacity-0 group-hover/task:opacity-100 transition-opacity shrink-0"
+          className="mt-4 shrink-0 cursor-grab text-muted-foreground/50 opacity-70 transition-opacity hover:text-muted-foreground active:cursor-grabbing md:opacity-30 md:group-hover/task:opacity-100"
         >
           <GripVertical className="w-4 h-4" />
         </div>
@@ -158,7 +158,7 @@ function SortableList({ id, children, disabled }: { id: string; children: React.
         <div
           {...attributes}
           {...listeners}
-          className="absolute left-1 top-4 z-10 cursor-grab active:cursor-grabbing text-muted-foreground/20 hover:text-muted-foreground opacity-0 group-hover/list:opacity-100 transition-opacity"
+          className="absolute left-1 top-4 z-10 cursor-grab text-muted-foreground/50 opacity-70 transition-opacity hover:text-muted-foreground active:cursor-grabbing md:opacity-30 md:group-hover/list:opacity-100"
         >
           <GripVertical className="w-4 h-4" />
         </div>
@@ -962,65 +962,59 @@ export function ProjectTaskLists(props: {
               const isOpen = expandedSet.has(l.id);
               return (
                 <SortableList key={l.id} id={l.id} disabled={!!q}>
-                  <AccordionItem value={l.id} className="border rounded-lg mb-3 bg-white">
-                    <AccordionTrigger className="px-4">
-                      <div className="flex items-center justify-between w-full pr-4">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="font-semibold truncate">{l.name}</div>
-                          <div className="flex items-center gap-2">
+                  <AccordionItem value={l.id} className="mb-4 overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
+                      <div className="min-w-0 flex-1">
+                        <AccordionTrigger className="w-full py-1 text-left hover:no-underline">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2 pr-3">
+                            <div className="truncate text-lg font-semibold">{l.name}</div>
                             <Badge variant="secondary">
                               {listTasks.length}/{l._count?.tasks ?? listTasks.length}
                             </Badge>
                             {categoryTotals.get(l.id) ? (
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                              <Badge variant="outline" className="border-blue-300 bg-blue-50 text-blue-700">
                                 Totale: {formatEurCents(categoryTotals.get(l.id) || 0)}
                               </Badge>
                             ) : null}
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setDefaultListIdForNewTask(l.id);
-                              setShowCreateTask(true);
-                            }}
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add task
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setRenameListId(l.id);
-                              setRenameValue(l.name);
-                            }}
-                            title="Rinomina"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              deleteList(l.id, l.name, l._count?.tasks ?? listTasks.length);
-                            }}
-                            title="Elimina"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        </AccordionTrigger>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-4">
+                      <div className="flex shrink-0 items-center gap-1 self-end sm:self-auto">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setDefaultListIdForNewTask(l.id);
+                            setShowCreateTask(true);
+                          }}
+                        >
+                          <Plus className="mr-2 h-4 w-4" />
+                          Add task
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => {
+                            setRenameListId(l.id);
+                            setRenameValue(l.name);
+                          }}
+                          aria-label={`Rinomina categoria ${l.name}`}
+                          title="Rinomina"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => deleteList(l.id, l.name, l._count?.tasks ?? listTasks.length)}
+                          aria-label={`Elimina categoria ${l.name}`}
+                          title="Elimina"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                    <AccordionContent className="px-4 pt-1">
                       {!isOpen ? null : listTasks.length === 0 ? (
                         <div className="text-sm text-muted-foreground py-3">Nessuna task in questa categoria.</div>
                       ) : (
@@ -1040,7 +1034,7 @@ export function ProjectTaskLists(props: {
                                   <div
                                     role="button"
                                     tabIndex={0}
-                                    className="w-full text-left border rounded-lg p-3 hover:bg-muted/30 transition-colors group"
+                                    className="group w-full rounded-xl border p-4 text-left transition-colors hover:bg-muted/30"
                                     onClick={() => {
                                       if (disableRowOpen) return;
                                       setSelectedTaskId(t.id);
@@ -1090,9 +1084,9 @@ export function ProjectTaskLists(props: {
                                           </div>
                                         ) : (
                                           <>
-                                            <div className="font-medium truncate">{t.title}</div>
+                                            <div className="truncate text-base font-semibold">{t.title}</div>
                                             {t.description ? (
-                                              <div className="text-xs text-muted-foreground line-clamp-2 mt-1">{t.description}</div>
+                                              <div className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{t.description}</div>
                                             ) : null}
                                           </>
                                         )}
@@ -1133,7 +1127,7 @@ export function ProjectTaskLists(props: {
                                           <Badge variant="outline">{new Date(t.dueDate).toLocaleDateString()}</Badge>
                                         ) : null}
 
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center gap-1 opacity-100 transition-opacity">
                                           <Button
                                             size="icon"
                                             variant="ghost"
@@ -1253,4 +1247,3 @@ export function ProjectTaskLists(props: {
     </div>
   );
 }
-

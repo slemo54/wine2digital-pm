@@ -461,15 +461,17 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
   const updateTaskMeta = async (
     patch: Record<string, any>,
     opts?: { successMessage?: string; silent?: boolean }
-  ) => {
+  ): Promise<boolean> => {
     try {
       await updateTaskMutation.mutateAsync(patch);
       if (!opts?.silent && opts?.successMessage) {
         toast.success(opts.successMessage);
       }
       onUpdate?.();
+      return true;
     } catch (e) {
       // Error is already handled by the mutation
+      return false;
     }
   };
 
@@ -485,8 +487,8 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
     }
     setSavingTaskTitle(true);
     try {
-      await updateTaskMeta({ title: nextTitle }, { successMessage: "Titolo aggiornato" });
-      setIsEditingTaskTitle(false);
+      const saved = await updateTaskMeta({ title: nextTitle }, { successMessage: "Titolo aggiornato" });
+      if (saved) setIsEditingTaskTitle(false);
     } finally {
       setSavingTaskTitle(false);
     }
@@ -501,11 +503,11 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
 
     setSavingTaskDescription(true);
     try {
-      await updateTaskMeta(
+      const saved = await updateTaskMeta(
         { description: nextDescription || null },
         { successMessage: "Descrizione aggiornata" }
       );
-      setIsEditingTaskDescription(false);
+      if (saved) setIsEditingTaskDescription(false);
     } finally {
       setSavingTaskDescription(false);
     }

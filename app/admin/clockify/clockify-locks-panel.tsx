@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,13 +9,59 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type LockPeriod = { id: string; startDate: string; endDate: string; scopeType: "all" | "department" | "user"; department: string | null; targetUserId: string | null; unlockedAt: string | null };
-async function request<T>(url: string, init?: RequestInit): Promise<T> { const response = await fetch(url, { cache: "no-store", ...init, headers: { "Content-Type": "application/json", ...(init?.headers || {}) } }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "Operazione non riuscita"); return data; }
+type UserOption = { id: string; name: string | null; email: string; department: string | null };
+async function request<T>(url: string, init?: RequestInit): Promise<T> { const response = await fetch(url, { cache: "no-store", ...init, headers: { ...(init?.body ? { "Content-Type": "application/json" } : {}), ...(init?.headers || {}) } }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || "Operazione non riuscita"); return data; }
 
 export function ClockifyLocksPanel(): JSX.Element {
-  const [periods, setPeriods] = useState<LockPeriod[]>([]); const [scopeType, setScopeType] = useState<LockPeriod["scopeType"]>("all"); const [startDate, setStartDate] = useState(""); const [endDate, setEndDate] = useState(""); const [department, setDepartment] = useState(""); const [targetUserId, setTargetUserId] = useState("");
-  const load = useCallback(async () => { try { setPeriods((await request<{ lockPeriods: LockPeriod[] }>("/api/clockify/v2/lock-periods")).lockPeriods); } catch (error) { toast.error(error instanceof Error ? error.message : "Errore di caricamento"); } }, []);
+  const [periods, setPeriods] = useState<LockPeriod[]>([]);
+  const [departments, setDepartments] = useState<string[]>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
+  const [scopeType, setScopeType] = useState<LockPeriod["scopeType"]>("all");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [department, setDepartment] = useState("");
+  const [targetUserId, setTargetUserId] = useState("");
+  const userNames = useMemo(() => new Map(users.map((user) => [user.id, user.name || user.email])), [users]);
+  const load = useCallback(async () => {
+    try {
+      const [lockData, catalog] = await Promise.all([
+        request<{ lockPeriods: LockPeriod[] }>("/api/clockify/v2/lock-periods"),
+        request<{ departments: string[]; users: UserOption[] }>("/api/clockify/v2/reports/catalog"),
+      ]);
+      setPeriods(lockData.lockPeriods);
+      setDepartments(catalog.departments);
+      setUsers(catalog.users);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Errore di caricamento"); }
+  }, []);
   useEffect(() => { void load(); }, [load]);
-  async function create(): Promise<void> { try { await request("/api/clockify/v2/lock-periods", { method: "POST", body: JSON.stringify({ startDate, endDate, scopeType, department: scopeType === "department" ? department : undefined, targetUserId: scopeType === "user" ? targetUserId : undefined }) }); toast.success("Periodo bloccato"); await load(); } catch (error) { toast.error(error instanceof Error ? error.message : "Operazione non riuscita"); } }
-  async function unlock(id: string): Promise<void> { try { await request(`/api/clockify/v2/lock-periods/${id}/unlock`, { method: "POST" }); toast.success("Periodo sbloccato"); await load(); } catch (error) { toast.error(error instanceof Error ? error.message : "Operazione non riuscita"); } }
-  return <Card><CardHeader><CardTitle>Blocchi rendicontazione</CardTitle></CardHeader><CardContent className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><div><Label htmlFor="lock-start">Dal</Label><Input id="lock-start" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></div><div><Label htmlFor="lock-end">Al</Label><Input id="lock-end" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></div><div><Label>Ambito</Label><Select value={scopeType} onValueChange={(value) => setScopeType(value as LockPeriod["scopeType"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Tutti</SelectItem><SelectItem value="department">Reparto</SelectItem><SelectItem value="user">Utente</SelectItem></SelectContent></Select></div>{scopeType === "department" && <div><Label htmlFor="lock-department">Reparto</Label><Input id="lock-department" value={department} onChange={(event) => setDepartment(event.target.value)} /></div>}{scopeType === "user" && <div><Label htmlFor="lock-user">ID utente</Label><Input id="lock-user" value={targetUserId} onChange={(event) => setTargetUserId(event.target.value)} /></div>}<div className="flex items-end"><Button onClick={() => void create()} disabled={!startDate || !endDate || (scopeType === "department" && !department) || (scopeType === "user" && !targetUserId)}>Blocca</Button></div></div><div className="space-y-2">{periods.map((period) => <div key={period.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm"><span>{period.startDate.slice(0, 10)}–{period.endDate.slice(0, 10)} · {period.scopeType === "department" ? period.department : period.scopeType === "user" ? period.targetUserId : "tutti"}{period.unlockedAt ? " · sbloccato" : ""}</span>{!period.unlockedAt && <Button size="sm" variant="outline" onClick={() => void unlock(period.id)}>Sblocca</Button>}</div>)}{periods.length === 0 && <p className="text-sm text-muted-foreground">Nessun blocco periodo.</p>}</div></CardContent></Card>;
+  async function create(): Promise<void> {
+    try {
+      await request("/api/clockify/v2/lock-periods", { method: "POST", body: JSON.stringify({ startDate, endDate, scopeType, department: scopeType === "department" ? department : undefined, targetUserId: scopeType === "user" ? targetUserId : undefined }) });
+      toast.success("Periodo bloccato");
+      await load();
+    } catch (error) { toast.error(error instanceof Error ? error.message : "Operazione non riuscita"); }
+  }
+  async function unlock(id: string): Promise<void> {
+    try { await request(`/api/clockify/v2/lock-periods/${id}/unlock`, { method: "POST" }); toast.success("Periodo sbloccato"); await load(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "Operazione non riuscita"); }
+  }
+  return (
+    <Card>
+      <CardHeader><CardTitle>Blocchi rendicontazione</CardTitle></CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div><Label htmlFor="lock-start">Dal</Label><Input id="lock-start" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></div>
+          <div><Label htmlFor="lock-end">Al</Label><Input id="lock-end" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></div>
+          <div><Label>Ambito</Label><Select value={scopeType} onValueChange={(value) => setScopeType(value as LockPeriod["scopeType"])}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Tutta l’azienda</SelectItem><SelectItem value="department">Reparto</SelectItem><SelectItem value="user">Utente</SelectItem></SelectContent></Select></div>
+          {scopeType === "department" && <div><Label>Reparto</Label><Select value={department} onValueChange={setDepartment}><SelectTrigger><SelectValue placeholder="Scegli reparto" /></SelectTrigger><SelectContent>{departments.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>}
+          {scopeType === "user" && <div><Label>Utente</Label><Select value={targetUserId} onValueChange={setTargetUserId}><SelectTrigger><SelectValue placeholder="Scegli utente" /></SelectTrigger><SelectContent>{users.map((user) => <SelectItem key={user.id} value={user.id}>{user.name || user.email}{user.department ? ` · ${user.department}` : ""}</SelectItem>)}</SelectContent></Select></div>}
+          <div className="flex items-end"><Button onClick={() => void create()} disabled={!startDate || !endDate || (scopeType === "department" && !department) || (scopeType === "user" && !targetUserId)}>Blocca periodo</Button></div>
+        </div>
+        <div className="space-y-2">
+          {periods.map((period) => <div key={period.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm"><span>{period.startDate.slice(0, 10)} – {period.endDate.slice(0, 10)} · {period.scopeType === "department" ? period.department : period.scopeType === "user" ? userNames.get(period.targetUserId || "") || "Utente non disponibile" : "Tutta l’azienda"}{period.unlockedAt ? " · sbloccato" : ""}</span>{!period.unlockedAt && <Button size="sm" variant="outline" onClick={() => void unlock(period.id)}>Sblocca</Button>}</div>)}
+          {periods.length === 0 && <p className="text-sm text-muted-foreground">Nessun blocco periodo.</p>}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }

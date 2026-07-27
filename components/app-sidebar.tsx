@@ -41,9 +41,9 @@ const NAV: NavItem[] = [
   { href: "/calendar", label: "Assenze & Ferie", icon: CalendarOff, isActive: (p) => p.startsWith("/calendar") },
   { href: "/overtime", label: "Straordinari", icon: Clock, isActive: (p) => p.startsWith("/overtime") },
   ...(isClockifyEnabled()
-    ? [{ href: "/clockify", label: "Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify") }]
+    ? [{ href: "/clockify", label: "Clockify", icon: Timer, isActive: (p: string) => p === "/clockify" }]
     : []),
-  ...(isClockifyV2Enabled() ? [{ href: "/clockify/reports", label: "Report Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify/reports") }] : []),
+  ...(isClockifyV2Enabled() ? [{ href: "/clockify/reports", label: "Report Clockify", icon: Timer, isActive: (p: string) => p.startsWith("/clockify/reports") || p.startsWith("/clockify/audit") }] : []),
   { href: "/notifications", label: "Notifiche", icon: Bell, isActive: (p) => p.startsWith("/notifications"), hasBadge: true },
   { href: "/files", label: "File", icon: FileText, isActive: (p) => p.startsWith("/files") },
   { href: "/profile", label: "Profilo", icon: User, isActive: (p) => p.startsWith("/profile") },

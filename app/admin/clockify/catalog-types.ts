@@ -11,4 +11,7 @@ export type ClockifyProject = {
   managerId: string | null;
   manager: ClockifyManager | null;
   origin: string;
+  createdBy?: { id: string; name: string | null; email: string } | null;
+  archivedAt?: string | null;
+  _count?: { tasks: number };
 };
