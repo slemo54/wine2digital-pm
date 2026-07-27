@@ -141,3 +141,80 @@ test("entry dialog exposes save and action controls while preserving the control
   assert.equal(saves, 1);
   assert.equal(screen.getByRole("dialog", { name: "Nuova attività" }).getAttribute("data-state"), "open");
 });
+
+test("confirming entry deletion releases the modal layer before the editor closes", async () => {
+  const { ClockifyV2EntryEditor } = await import("./clockify-v2-entry-editor");
+  let backgroundClicks = 0;
+  const entry: any = {
+    id: "e1",
+    userId: "u1",
+    projectId: "p1",
+    taskId: null,
+    description: "Mappa interattiva",
+    tags: [],
+    billable: false,
+    workDate: "2026-07-21T22:00:00.000Z",
+    startAt: "2026-07-22T07:00:00.000Z",
+    endAt: "2026-07-22T09:00:00.000Z",
+    durationMin: 120,
+    effectiveLocked: false,
+    project: { id: "p1", name: "Italian Wine Podcast", client: "wine2digital", color: "#F04423" },
+    user: { id: "u1", name: "Anselmo", email: "a@example.test", department: "Grafica" },
+  };
+  const form = {
+    projectId: "p1",
+    taskId: "",
+    description: entry.description,
+    tags: "",
+    billable: false,
+    date: "2026-07-22",
+    startTime: "09:00",
+    endAt: "11:00",
+    durationMin: "120",
+    mode: "end" as const,
+  };
+  function Harness(): JSX.Element {
+    const [open, setOpen] = React.useState(true);
+    return React.createElement(
+      React.Fragment,
+      null,
+      React.createElement("button", { onClick: () => { backgroundClicks += 1; } }, "Azione pagina"),
+      React.createElement("button", { onClick: () => setOpen(true) }, "Riapri editor"),
+      React.createElement(ClockifyV2EntryEditor, {
+        open,
+        mode: "edit",
+        form,
+        entry,
+        projects: [{ id: "p1", name: "Italian Wine Podcast", client: "wine2digital", clientId: "c1", color: "#F04423", tasks: [] }],
+        tagSuggestions: [],
+        warnings: [],
+        saving: false,
+        isAdmin: false,
+        onOpenChange: setOpen,
+        onChange: () => undefined,
+        onSave: async () => undefined,
+        onDuplicate: () => undefined,
+        onSplit: () => undefined,
+        onDelete: async () => { setOpen(false); },
+        onLockChange: async () => undefined,
+      }),
+    );
+  }
+  render(React.createElement(Harness));
+  const user = userEvent.setup({ document: globalThis.document });
+  await user.click(screen.getByRole("button", { name: "Azioni attività" }));
+  await user.click(screen.getByRole("menuitem", { name: "Elimina" }));
+  assert.equal(screen.getByRole("alertdialog", { name: "Eliminare questa attività?" }).getAttribute("data-state"), "open");
+  assert.equal(globalThis.document.activeElement?.textContent, "Annulla");
+  await user.keyboard("{Escape}");
+  assert.equal(screen.getByRole("dialog", { name: "Modifica attività" }).getAttribute("data-state"), "open");
+  await user.click(screen.getByRole("button", { name: "Azioni attività" }));
+  await user.click(screen.getByRole("menuitem", { name: "Elimina" }));
+  await user.click(screen.getByRole("button", { name: "Elimina" }));
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  assert.notEqual(globalThis.document.body.style.pointerEvents, "none");
+  await user.click(screen.getByRole("button", { name: "Azione pagina" }));
+  assert.equal(backgroundClicks, 1);
+  await user.click(screen.getByRole("button", { name: "Riapri editor" }));
+  assert.equal(screen.getByRole("dialog", { name: "Modifica attività" }).getAttribute("data-state"), "open");
+});

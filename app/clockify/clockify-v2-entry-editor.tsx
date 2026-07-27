@@ -1,10 +1,9 @@
 "use client";
 
-import React, { FormEvent, useMemo, useState } from "react";
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CalendarDays, Copy, Lock, LockOpen, MoreVertical, Scissors, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -61,6 +60,7 @@ export function ClockifyV2EntryEditor({
   onLockChange,
 }: Props): JSX.Element {
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteCancelRef = useRef<HTMLButtonElement>(null);
   const selectedProject = projects.find((project) => project.id === form.projectId);
   const selectedDate = clockifyDateInputToDate(form.date);
   const readonly = mode === "readonly";
@@ -79,11 +79,43 @@ export function ClockifyV2EntryEditor({
     event.preventDefault();
     if (!readonly) void onSave();
   };
+  const handleOpenChange = (nextOpen: boolean): void => {
+    if (!nextOpen) setDeleteOpen(false);
+    onOpenChange(nextOpen);
+  };
+  useEffect(() => {
+    if (!open) setDeleteOpen(false);
+  }, [open]);
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[94vh] max-w-2xl flex-col overflow-hidden p-0">
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        {deleteOpen ? (
+          <DialogContent
+            key="delete-confirmation"
+            role="alertdialog"
+            className="max-w-lg [&>button]:hidden"
+            onOpenAutoFocus={(event) => {
+              event.preventDefault();
+              deleteCancelRef.current?.focus();
+            }}
+            onEscapeKeyDown={(event) => {
+              event.preventDefault();
+              setDeleteOpen(false);
+            }}
+            onPointerDownOutside={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
+          >
+            <DialogHeader>
+              <DialogTitle>Eliminare questa attività?</DialogTitle>
+              <DialogDescription>L’attività non comparirà più nel timesheet. L’operazione resta registrata nell’audit.</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button ref={deleteCancelRef} type="button" variant="outline" onClick={() => setDeleteOpen(false)}>Annulla</Button>
+              <Button type="button" variant="destructive" onClick={() => entry && void onDelete(entry)}>Elimina</Button>
+            </DialogFooter>
+          </DialogContent>
+        ) : (
+        <DialogContent key="entry-editor" className="flex max-h-[94vh] max-w-2xl flex-col overflow-hidden p-0">
           <DialogHeader className="border-b px-5 py-5 pr-12 sm:px-7">
             <div className="flex items-center justify-between gap-3">
               <div>
@@ -210,19 +242,7 @@ export function ClockifyV2EntryEditor({
             </DialogFooter>
           </form>
         </DialogContent>
+        )}
       </Dialog>
-      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Eliminare questa attività?</AlertDialogTitle>
-            <AlertDialogDescription>L’attività non comparirà più nel timesheet. L’operazione resta registrata nell’audit.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annulla</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" onClick={() => entry && void onDelete(entry)}>Elimina</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
   );
 }
