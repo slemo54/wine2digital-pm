@@ -65,12 +65,6 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         </noscript>
         {/* End Google Tag Manager (noscript) */}
 
-        {/* Elfsight AI Chatbot | pm.wine2digital */}
-        <Script src="https://elfsightcdn.com/platform.js" strategy="lazyOnload" />
-        <div
-          className="elfsight-app-57b93af2-30e0-4b47-ab37-53e380b55c5a"
-          data-elfsight-app-lazy="true"
-        />
         <Providers>
           <AppShell>{children}</AppShell>
           <Toaster position="top-right" />

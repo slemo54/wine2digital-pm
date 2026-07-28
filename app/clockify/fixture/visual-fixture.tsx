@@ -153,7 +153,6 @@ export default function ClockifyVisualFixture(): JSX.Element {
   return (
     <main className="clockify-visual-fixture min-h-screen bg-secondary text-foreground">
       <style jsx global>{`
-        body:has(.clockify-visual-fixture) .elfsight-app-57b93af2-30e0-4b47-ab37-53e380b55c5a,
         body:has(.clockify-visual-fixture) .tsqd-parent-container,
         body:has(.clockify-visual-fixture) #__EAAPS_PORTAL {
           display: none !important;
