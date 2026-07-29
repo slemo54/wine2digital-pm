@@ -43,6 +43,12 @@ export async function GET(
           select: {
             id: true,
             name: true,
+            taskLists: {
+              select: { id: true, name: true }
+            },
+            tags: {
+              select: { id: true, name: true, color: true }
+            },
             members: {
               select: {
                 userId: true,
