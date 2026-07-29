@@ -1,0 +1,3 @@
+## 2026-02-27 - [Unified Dashboard API]
+**Learning:** Consolidated multiple dashboard-related API calls (projects, tasks, subtasks, notifications, activity) into a single `/api/dashboard/summary` endpoint. This reduced network round-trips from 5 to 1, significantly improving the perceived performance of the dashboard initial load. Using `Promise.all` on the server allows the database queries to run in parallel, minimizing total response time.
+**Action:** Always look for patterns where a page makes multiple concurrent API calls to fetch its initial state. Consider creating a unified "summary" or "full" endpoint to fetch all required data in a single request, especially for high-traffic pages like dashboards or detail modals.
