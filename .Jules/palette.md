@@ -5,3 +5,7 @@
 ## 2026-02-28 - [AutosizeTextarea for Modal Descriptions]
 **Learning:** Using a single-line `Input` for description or notes fields in modals severely limits multi-line readability and editing. Replacing it with the existing `AutosizeTextarea` component provides a significantly better micro-UX editing experience without breaking modal layout constraints.
 **Action:** Prefer `AutosizeTextarea` over standard `Input` for any modal field likely to contain multiple lines of text, such as descriptions or notes.
+
+## 2026-03-29 - [Clear Button for Search Inputs]
+**Learning:** Adding a conditional "Clear" button to search inputs provides a standard and intuitive way for users to reset their search state. This is especially helpful in data-heavy views like project task lists or admin logs.
+**Action:** Implement a relative container with `Search` (left) and `X` (right) icons, ensuring the clear button is only visible when the search query is not empty.
