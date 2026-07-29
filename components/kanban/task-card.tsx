@@ -15,6 +15,8 @@ import { TaskDetailModal } from "../task-detail-modal";
 import { toast } from "react-hot-toast";
 import { useQueryClient } from '@tanstack/react-query';
 import { usePrefetchTaskFull } from "@/hooks/use-task";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getClientLocale, t } from "@/lib/i18n";
 
 interface Task {
   id: string;
@@ -47,6 +49,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const queryClient = useQueryClient();
   const prefetchTask = usePrefetchTaskFull();
+  const locale = getClientLocale();
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -149,15 +152,23 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
               <h4 className="font-semibold text-sm leading-tight text-foreground">{task?.title || "Untitled"}</h4>
             </div>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                      aria-label={t(locale, "common.moreOptions")}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{t(locale, "common.moreOptions")}</p>
+                </TooltipContent>
+              </Tooltip>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                   Edit
