@@ -5,11 +5,21 @@ import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Calendar, AlertCircle, Clock, MoreVertical, MessageCircle, Paperclip } from "lucide-react";
+import { Calendar, AlertCircle, Clock, MoreVertical, MessageCircle, Paperclip, Loader2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { EditTaskDialog } from "../edit-task-dialog";
 import { TaskDetailModal } from "../task-detail-modal";
 import { toast } from "react-hot-toast";
@@ -44,6 +54,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
 
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const queryClient = useQueryClient();
   const prefetchTask = usePrefetchTaskFull();
@@ -100,8 +111,6 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
   };
 
   const handleDelete = async () => {
-    if (!confirm("Are you sure you want to delete this task?")) return;
-
     setIsDeleting(true);
     try {
       const response = await fetch(`/api/tasks/${task?.id}`, {
@@ -115,6 +124,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
       toast.success("Task deleted successfully");
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['task-full'] });
+      setShowDeleteDialog(false);
     } catch (error) {
       toast.error("Failed to delete task");
     } finally {
@@ -153,6 +163,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label="Task options"
                   className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 >
                   <MoreVertical className="h-4 w-4" />
@@ -162,7 +173,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                 <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleDelete} disabled={isDeleting} className="text-destructive">
+                <DropdownMenuItem onClick={() => setShowDeleteDialog(true)} disabled={isDeleting} className="text-destructive">
                   Delete
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -216,12 +227,12 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
             </div>
             
             <div className="flex items-center gap-3 text-muted-foreground">
-              <div className="flex items-center gap-1 text-xs">
-                <Paperclip className="h-3 w-3" />
+              <div className="flex items-center gap-1 text-xs" aria-label="3 attachments">
+                <Paperclip className="h-3 w-3" aria-hidden="true" />
                 <span>3</span>
               </div>
-              <div className="flex items-center gap-1 text-xs">
-                <MessageCircle className="h-3 w-3" />
+              <div className="flex items-center gap-1 text-xs" aria-label="7 comments">
+                <MessageCircle className="h-3 w-3" aria-hidden="true" />
                 <span>7</span>
               </div>
             </div>
@@ -252,6 +263,38 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
           }}
         />
       )}
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the task
+              &quot;{task.title}&quot; and remove it from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Task"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
