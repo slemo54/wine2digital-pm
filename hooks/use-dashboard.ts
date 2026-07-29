@@ -1,6 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 
 /**
+ * Hook per ottenere il riepilogo della dashboard in una singola richiesta
+ * PERFORMANCE: Riduce il numero di richieste da 5 a 1
+ */
+export function useDashboardSummary() {
+  return useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: async () => {
+      const res = await fetch('/api/dashboard/summary');
+      if (!res.ok) throw new Error('Failed to fetch dashboard summary');
+      return res.json();
+    },
+    staleTime: 1000 * 30, // 30 secondi
+    refetchInterval: 1000 * 60, // Refetch ogni minuto per notifiche/attività
+  });
+}
+
+/**
  * Hook per ottenere i progetti dell'utente
  */
 
@@ -101,55 +118,38 @@ export function useDashboardActivity() {
 }
 
 /**
- * Hook aggregato che ottiene tutti i dati della dashboard in parallelo
- * Questo è il modo corretto per caricare dati multipli con React Query
- *
- * PERFORMANCE: Le query vengono eseguite in parallelo automaticamente
+ * Hook aggregato che ottiene tutti i dati della dashboard.
+ * PERFORMANCE: Ora usa un singolo endpoint consolidato per minimizzare le richieste HTTP.
+ * Ritorna le proprietà con la stessa struttura attesa dai componenti legacy.
  */
 export function useDashboardData() {
-  const projectsQuery = useDashboardProjects();
-  const tasksQuery = useDashboardMyTasks();
-  const subtasksQuery = useDashboardMySubtasks();
-  const notificationsQuery = useDashboardNotifications();
-  const activityQuery = useDashboardActivity();
+  const summaryQuery = useDashboardSummary();
 
   return {
-    // Data
-    projects: projectsQuery.data,
-    tasks: tasksQuery.data,
-    subtasks: subtasksQuery.data,
-    notifications: notificationsQuery.data,
-    activity: activityQuery.data,
+    // Data (mappati dalla risposta del summary alla struttura legacy)
+    projects: summaryQuery.data ? { projects: summaryQuery.data.projects } : undefined,
+    tasks: summaryQuery.data ? { tasks: summaryQuery.data.tasks } : undefined,
+    subtasks: summaryQuery.data ? { subtasks: summaryQuery.data.subtasks } : undefined,
+    notifications: summaryQuery.data ? {
+      notifications: summaryQuery.data.notifications,
+      unreadCount: summaryQuery.data.unreadCount
+    } : undefined,
+    activity: summaryQuery.data ? { events: summaryQuery.data.activity } : undefined,
 
     // Loading states
-    isLoading:
-      projectsQuery.isLoading ||
-      tasksQuery.isLoading ||
-      subtasksQuery.isLoading ||
-      notificationsQuery.isLoading ||
-      activityQuery.isLoading,
-
-    isLoadingProjects: projectsQuery.isLoading,
-    isLoadingTasks: tasksQuery.isLoading,
-    isLoadingSubtasks: subtasksQuery.isLoading,
-    isLoadingNotifications: notificationsQuery.isLoading,
-    isLoadingActivity: activityQuery.isLoading,
+    isLoading: summaryQuery.isLoading,
+    isLoadingProjects: summaryQuery.isLoading,
+    isLoadingTasks: summaryQuery.isLoading,
+    isLoadingSubtasks: summaryQuery.isLoading,
+    isLoadingNotifications: summaryQuery.isLoading,
+    isLoadingActivity: summaryQuery.isLoading,
 
     // Error states
-    error:
-      projectsQuery.error ||
-      tasksQuery.error ||
-      subtasksQuery.error ||
-      notificationsQuery.error ||
-      activityQuery.error,
+    error: summaryQuery.error,
 
     // Refetch functions
     refetch: () => {
-      projectsQuery.refetch();
-      tasksQuery.refetch();
-      subtasksQuery.refetch();
-      notificationsQuery.refetch();
-      activityQuery.refetch();
+      summaryQuery.refetch();
     },
   };
 }
