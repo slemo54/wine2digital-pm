@@ -10,6 +10,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useState } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { getClientLocale, t } from "@/lib/i18n";
 import { EditTaskDialog } from "../edit-task-dialog";
 import { TaskDetailModal } from "../task-detail-modal";
 import { toast } from "react-hot-toast";
@@ -122,6 +124,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
     }
   };
 
+  const locale = getClientLocale();
+
   return (
     <>
       <Card
@@ -129,8 +133,15 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         style={style}
         {...attributes}
         {...listeners}
-        className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary"
+        tabIndex={0}
+        className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
         onMouseEnter={() => prefetchTask(task.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && e.target === e.currentTarget) {
+            e.preventDefault();
+            setShowDetailModal(true);
+          }
+        }}
       >
         <CardContent 
           className="p-4 space-y-3"
@@ -149,15 +160,21 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
               <h4 className="font-semibold text-sm leading-tight text-foreground">{task?.title || "Untitled"}</h4>
             </div>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                      aria-label={t(locale, "common.moreActions")}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="top">{t(locale, "common.moreActions")}</TooltipContent>
+              </Tooltip>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
                   Edit

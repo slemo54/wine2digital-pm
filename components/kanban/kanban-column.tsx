@@ -6,6 +6,7 @@ import { TaskCard } from "./task-card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Loader2, ListTodo, Plus } from "lucide-react";
 import { useState } from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { CreateTaskDialog } from "../create-task-dialog";
 import { getKanbanEmptyState } from "./kanban-empty-state";
 import { getClientLocale, t } from "@/lib/i18n";
@@ -63,14 +64,20 @@ export function KanbanColumn({ id, title, color, tasks, projectId, members, onTa
             {tasks?.length || 0}
           </span>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 w-7 p-0 hover:bg-white"
-          onClick={() => setShowCreateDialog(true)}
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 hover:bg-white"
+              onClick={() => setShowCreateDialog(true)}
+              aria-label={t(locale, "kanban.addTask")}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="top">{t(locale, "kanban.addTask")}</TooltipContent>
+        </Tooltip>
       </div>
 
       <SortableContext items={tasks?.map(t => t?.id) || []} strategy={verticalListSortingStrategy}>
