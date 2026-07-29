@@ -308,6 +308,8 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
                 size="icon"
                 onClick={() => void deleteChecklist(c.id)}
                 disabled={disabled || loading}
+                aria-label="Elimina checklist"
+                title="Elimina checklist"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -332,6 +334,8 @@ export function SubtaskChecklists({ taskId, subtaskId, open, disabled }: Props) 
                     size="icon"
                     onClick={() => void deleteItem(c.id, i.id)}
                     disabled={disabled || loading}
+                    aria-label="Elimina elemento"
+                    title="Elimina elemento"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
