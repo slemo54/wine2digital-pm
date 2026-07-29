@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AutosizeTextarea } from "@/components/ui/autosize-textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { toast } from "react-hot-toast";
 
@@ -143,18 +144,21 @@ export function EditProjectDialog(props: {
 
             <div className="space-y-2">
               <Label htmlFor="status">Stato</Label>
-              <select
-                id="status"
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              <Select
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                onValueChange={(value) => setFormData({ ...formData, status: value })}
                 disabled={disabled}
               >
-                <option value="running">Running</option>
-                <option value="completed">Completed</option>
-                <option value="draft">Draft</option>
-                <option value="archived">Archived</option>
-              </select>
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Seleziona stato" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="running">Running</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
