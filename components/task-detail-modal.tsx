@@ -1484,6 +1484,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                                 setIsEditingTaskTitle(true);
                               }}
                               aria-label="Modifica titolo task"
+                              title="Modifica titolo task"
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -1496,6 +1497,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               className="h-9 w-9"
                               onClick={() => void toggleArchiveTask()}
                               aria-label={task.status === "archived" ? "Ripristina task" : "Archivia task"}
+                              title={task.status === "archived" ? "Ripristina task" : "Archivia task"}
                             >
                               <Archive className="h-4 w-4" />
                             </Button>
@@ -1509,6 +1511,7 @@ export function TaskDetailModal({ open, onClose, taskId, projectId, onUpdate, in
                               onClick={() => void deleteThisTask()}
                               disabled={isDeletingTask}
                               aria-label="Elimina task"
+                              title="Elimina task"
                             >
                               {isDeletingTask ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
                             </Button>

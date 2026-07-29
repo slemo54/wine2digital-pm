@@ -68,6 +68,8 @@ export function KanbanColumn({ id, title, color, tasks, projectId, members, onTa
           variant="ghost"
           className="h-7 w-7 p-0 hover:bg-white"
           onClick={() => setShowCreateDialog(true)}
+          aria-label="Aggiungi task"
+          title="Aggiungi task"
         >
           <Plus className="h-4 w-4" />
         </Button>

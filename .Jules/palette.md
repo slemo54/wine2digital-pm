@@ -5,3 +5,7 @@
 ## 2026-02-28 - [AutosizeTextarea for Modal Descriptions]
 **Learning:** Using a single-line `Input` for description or notes fields in modals severely limits multi-line readability and editing. Replacing it with the existing `AutosizeTextarea` component provides a significantly better micro-UX editing experience without breaking modal layout constraints.
 **Action:** Prefer `AutosizeTextarea` over standard `Input` for any modal field likely to contain multiple lines of text, such as descriptions or notes.
+
+## 2026-03-01 - [Keyboard Accessibility for Interactive Cards]
+**Learning:** When making container elements (like TaskCards) interactive via keyboard, simply adding an `onClick` or `onKeyDown` handler is not enough. Explicitly adding `tabIndex={0}` and visual focus indicators (e.g., `focus-visible:ring-2`) is essential for keyboard-only users to discover and interact with the element. Furthermore, using `e.target === e.currentTarget` in the handler prevents accidental activation when interacting with nested buttons or menus.
+**Action:** Always include `tabIndex={0}`, focus styles, and target validation when adding keyboard support to container-style interactive components.

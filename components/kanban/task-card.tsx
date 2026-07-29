@@ -129,8 +129,14 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         style={style}
         {...attributes}
         {...listeners}
-        className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary"
+        tabIndex={0}
+        className="group cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 border-l-transparent hover:border-l-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         onMouseEnter={() => prefetchTask(task.id)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && e.target === e.currentTarget) {
+            setShowDetailModal(true);
+          }
+        }}
       >
         <CardContent 
           className="p-4 space-y-3"
@@ -154,6 +160,8 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                   variant="ghost"
                   size="sm"
                   className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  aria-label="Azioni task"
+                  title="Azioni task"
                 >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
@@ -216,11 +224,11 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
             </div>
             
             <div className="flex items-center gap-3 text-muted-foreground">
-              <div className="flex items-center gap-1 text-xs">
+              <div className="flex items-center gap-1 text-xs" title="Allegati" aria-label="3 allegati">
                 <Paperclip className="h-3 w-3" />
                 <span>3</span>
               </div>
-              <div className="flex items-center gap-1 text-xs">
+              <div className="flex items-center gap-1 text-xs" title="Commenti" aria-label="7 commenti">
                 <MessageCircle className="h-3 w-3" />
                 <span>7</span>
               </div>
