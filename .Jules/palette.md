@@ -5,3 +5,7 @@
 ## 2026-02-28 - [AutosizeTextarea for Modal Descriptions]
 **Learning:** Using a single-line `Input` for description or notes fields in modals severely limits multi-line readability and editing. Replacing it with the existing `AutosizeTextarea` component provides a significantly better micro-UX editing experience without breaking modal layout constraints.
 **Action:** Prefer `AutosizeTextarea` over standard `Input` for any modal field likely to contain multiple lines of text, such as descriptions or notes.
+
+## 2026-03-03 - [Unified Design System Select]
+**Learning:** Using native `<select>` elements instead of the project's custom `<Select>` component (based on Radix UI) leads to visual inconsistency and misses out on built-in accessible styling and behaviors provided by the design system.
+**Action:** Always audit for and replace native `<select>` elements with the `@/components/ui/select` components to ensure a unified UX and better keyboard/screen-reader accessibility.

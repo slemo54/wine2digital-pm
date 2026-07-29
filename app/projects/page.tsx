@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { EditProjectDialog } from "@/components/edit-project-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { buildDelimitedText, buildXlsHtml, downloadCsvFile, downloadXlsFile, isoDate } from "@/lib/export";
 import { useProjectsList } from "@/hooks/use-projects-list";
 
@@ -706,17 +707,21 @@ export default function ProjectsPage() {
               </div>
               
               <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                <select
-                  className="h-10 rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  value={statusFilter}
-                  onChange={(e) => updateQuery({ status: e.target.value })}
+                <Select
+                  value={statusFilter || "all"}
+                  onValueChange={(v) => updateQuery({ status: v === "all" ? "" : v })}
                 >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="w-[160px] h-10 bg-background/50 border-border/50">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value || "all"}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 
                 <div className="flex items-center gap-2">
                   <Input
