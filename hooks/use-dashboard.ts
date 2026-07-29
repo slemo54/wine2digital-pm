@@ -1,7 +1,53 @@
 import { useQuery } from '@tanstack/react-query';
 
 /**
- * Hook per ottenere i progetti dell'utente
+ * Hook aggregato che ottiene tutti i dati della dashboard in un'unica chiamata
+ *
+ * PERFORMANCE: Riduce le chiamate da 5 a 1 singola richiesta unificata,
+ * ottimizzando il caricamento iniziale della dashboard.
+ */
+export function useDashboardData() {
+  const query = useQuery({
+    queryKey: ['dashboard', 'summary'],
+    queryFn: async () => {
+      const res = await fetch('/api/dashboard/summary');
+      if (!res.ok) throw new Error('Failed to fetch dashboard summary');
+      return res.json();
+    },
+    staleTime: 1000 * 30, // 30 secondi
+    refetchInterval: 1000 * 60, // Refetch automatico ogni minuto per aggiornare notifiche
+  });
+
+  const data = query.data || {};
+
+  return {
+    // Data - Wrapped in objects to match the legacy nested structure expected by DashboardPage
+    projects: { projects: data.projects || [] },
+    tasks: { tasks: data.tasks || [] },
+    subtasks: { subtasks: data.subtasks || [] },
+    notifications: { notifications: data.notifications || [], unreadCount: data.unreadCount || 0 },
+    activity: { events: data.events || [] },
+
+    // Loading states
+    isLoading: query.isLoading,
+
+    // Manteniamo questi per compatibilità retroattiva con DashboardPage
+    isLoadingProjects: query.isLoading,
+    isLoadingTasks: query.isLoading,
+    isLoadingSubtasks: query.isLoading,
+    isLoadingNotifications: query.isLoading,
+    isLoadingActivity: query.isLoading,
+
+    // Error states
+    error: query.error,
+
+    // Refetch functions
+    refetch: query.refetch,
+  };
+}
+
+/**
+ * Hook per ottenere i progetti dell'utente (mantenuto per compatibilità se usato altrove)
  */
 
 /**
@@ -40,7 +86,7 @@ export function useDashboardProjects() {
 }
 
 /**
- * Hook per ottenere i task assegnati all'utente
+ * Hook per ottenere i task assegnati all'utente (mantenuto per compatibilità se usato altrove)
  */
 export function useDashboardMyTasks() {
   return useQuery({
@@ -55,7 +101,7 @@ export function useDashboardMyTasks() {
 }
 
 /**
- * Hook per ottenere i subtask dell'utente
+ * Hook per ottenere i subtask dell'utente (mantenuto per compatibilità se usato altrove)
  */
 export function useDashboardMySubtasks() {
   return useQuery({
@@ -70,7 +116,7 @@ export function useDashboardMySubtasks() {
 }
 
 /**
- * Hook per ottenere le notifiche
+ * Hook per ottenere le notifiche (mantenuto per compatibilità se usato altrove)
  */
 export function useDashboardNotifications() {
   return useQuery({
@@ -86,7 +132,7 @@ export function useDashboardNotifications() {
 }
 
 /**
- * Hook per ottenere l'activity log
+ * Hook per ottenere l'activity log (mantenuto per compatibilità se usato altrove)
  */
 export function useDashboardActivity() {
   return useQuery({
@@ -98,58 +144,4 @@ export function useDashboardActivity() {
     },
     staleTime: 1000 * 60 * 5, // 5 minuti
   });
-}
-
-/**
- * Hook aggregato che ottiene tutti i dati della dashboard in parallelo
- * Questo è il modo corretto per caricare dati multipli con React Query
- *
- * PERFORMANCE: Le query vengono eseguite in parallelo automaticamente
- */
-export function useDashboardData() {
-  const projectsQuery = useDashboardProjects();
-  const tasksQuery = useDashboardMyTasks();
-  const subtasksQuery = useDashboardMySubtasks();
-  const notificationsQuery = useDashboardNotifications();
-  const activityQuery = useDashboardActivity();
-
-  return {
-    // Data
-    projects: projectsQuery.data,
-    tasks: tasksQuery.data,
-    subtasks: subtasksQuery.data,
-    notifications: notificationsQuery.data,
-    activity: activityQuery.data,
-
-    // Loading states
-    isLoading:
-      projectsQuery.isLoading ||
-      tasksQuery.isLoading ||
-      subtasksQuery.isLoading ||
-      notificationsQuery.isLoading ||
-      activityQuery.isLoading,
-
-    isLoadingProjects: projectsQuery.isLoading,
-    isLoadingTasks: tasksQuery.isLoading,
-    isLoadingSubtasks: subtasksQuery.isLoading,
-    isLoadingNotifications: notificationsQuery.isLoading,
-    isLoadingActivity: activityQuery.isLoading,
-
-    // Error states
-    error:
-      projectsQuery.error ||
-      tasksQuery.error ||
-      subtasksQuery.error ||
-      notificationsQuery.error ||
-      activityQuery.error,
-
-    // Refetch functions
-    refetch: () => {
-      projectsQuery.refetch();
-      tasksQuery.refetch();
-      subtasksQuery.refetch();
-      notificationsQuery.refetch();
-      activityQuery.refetch();
-    },
-  };
 }
