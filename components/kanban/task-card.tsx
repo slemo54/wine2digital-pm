@@ -133,11 +133,19 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
         onMouseEnter={() => prefetchTask(task.id)}
       >
         <CardContent 
-          className="p-4 space-y-3"
+          className="p-4 space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-lg"
+          role="button"
+          tabIndex={0}
+          aria-label={`Task: ${task?.title || "Untitled"}`}
           onClick={(e) => {
             // Don't open modal if clicking on dropdown or dragging
             if (e.defaultPrevented || isDragging || isSortableDragging) return;
             setShowDetailModal(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && e.target === e.currentTarget && !isDragging && !isSortableDragging) {
+              setShowDetailModal(true);
+            }
           }}
         >
           <div className="flex items-start justify-between gap-2">
@@ -153,6 +161,7 @@ export function TaskCard({ task, isDragging, projectId }: TaskCardProps) {
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label="Opzioni task"
                   className="h-7 w-7 p-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 >
                   <MoreVertical className="h-4 w-4" />
