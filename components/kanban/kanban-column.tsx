@@ -9,6 +9,7 @@ import { useState } from "react";
 import { CreateTaskDialog } from "../create-task-dialog";
 import { getKanbanEmptyState } from "./kanban-empty-state";
 import { getClientLocale, t } from "@/lib/i18n";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface Task {
   id: string;
@@ -63,14 +64,22 @@ export function KanbanColumn({ id, title, color, tasks, projectId, members, onTa
             {tasks?.length || 0}
           </span>
         </div>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 w-7 p-0 hover:bg-white"
-          onClick={() => setShowCreateDialog(true)}
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 hover:bg-white"
+              onClick={() => setShowCreateDialog(true)}
+              aria-label={t(locale, "kanban.empty.cta")}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {t(locale, "kanban.empty.cta")}
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       <SortableContext items={tasks?.map(t => t?.id) || []} strategy={verticalListSortingStrategy}>
