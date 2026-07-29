@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './card'
 import { Badge } from './badge'
 import { Checkbox } from './checkbox'
 import { Button } from './button'
+import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip'
 import { Pencil, Trash2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 
@@ -46,12 +47,22 @@ export function TaskCard({
             </CardTitle>
           </div>
           <div className="flex space-x-2">
-            <Button variant="ghost" size="icon" onClick={() => onEdit(id)} aria-label="Modifica task" title="Modifica task">
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => onDelete(id)} aria-label="Elimina task" title="Elimina task">
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => onEdit(id)} aria-label="Modifica task">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Modifica task</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" onClick={() => onDelete(id)} aria-label="Elimina task">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Elimina task</TooltipContent>
+            </Tooltip>
           </div>
         </CardHeader>
         <CardContent>
